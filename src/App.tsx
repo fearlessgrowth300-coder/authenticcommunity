@@ -17,6 +17,8 @@ import CommunitiesFeed from "./pages/CommunitiesFeed";
 import CommunityDetail from "./pages/CommunityDetail";
 import MessagesList from "./pages/MessagesList";
 import DirectMessage from "./pages/DirectMessage";
+import EventsFeed from "./pages/EventsFeed";
+import EventDetail from "./pages/EventDetail";
 import Profile from "./pages/Profile";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -42,6 +44,8 @@ const App = () => (
             <Route path="/communities/:id" element={<ProtectedRoute><CommunityDetail /></ProtectedRoute>} />
             <Route path="/messages" element={<ProtectedRoute><MessagesList /></ProtectedRoute>} />
             <Route path="/messages/:id" element={<ProtectedRoute><DirectMessage /></ProtectedRoute>} />
+            <Route path="/events" element={<ProtectedRoute><EventsFeed /></ProtectedRoute>} />
+            <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
