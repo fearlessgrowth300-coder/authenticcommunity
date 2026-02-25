@@ -74,7 +74,7 @@ const Dashboard = () => {
             <button className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
               <Search className="h-4 w-4 text-muted-foreground" />
             </button>
-            <button className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors relative">
+            <button onClick={() => navigate("/notifications")} className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors relative">
               <Bell className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
