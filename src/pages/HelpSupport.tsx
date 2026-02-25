@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, MessageSquare, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +41,7 @@ const faqs = [
 
 const HelpSupport = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -54,13 +57,20 @@ const HelpSupport = () => {
     if (message.length > 2000) return toast.error("Message is too long (max 2000 chars)");
 
     setSending(true);
-    // Simulate sending — replace with edge function when ready
-    await new Promise((r) => setTimeout(r, 1000));
-    setSending(false);
-    toast.success("Message sent! We'll get back to you soon.");
-    setName("");
-    setEmail("");
-    setMessage("");
+    try {
+      const { data, error } = await supabase.functions.invoke("contact-form", {
+        body: { name: name.trim(), email: email.trim(), message: message.trim(), userId: user?.id },
+      });
+      if (error) throw error;
+      toast.success("Message sent! We'll get back to you soon.");
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send message. Please try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
