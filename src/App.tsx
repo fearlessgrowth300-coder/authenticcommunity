@@ -24,6 +24,7 @@ import EditProfile from "./pages/EditProfile";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
+import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+            <Route path="/install" element={<Install />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <BottomNav />
