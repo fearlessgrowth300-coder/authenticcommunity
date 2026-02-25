@@ -1,6 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/constants";
 
 interface LocationMapProps {
@@ -12,8 +10,9 @@ interface LocationMapProps {
 
 export function LocationMap({ onLocationSelect, initialLat = 37.7749, initialLng = -122.4194, className }: LocationMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const marker = useRef<mapboxgl.Marker | null>(null);
+  const map = useRef<any>(null);
+  const marker = useRef<any>(null);
+  const [loading, setLoading] = useState(true);
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     try {
@@ -36,38 +35,59 @@ export function LocationMap({ onLocationSelect, initialLat = 37.7749, initialLng
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    mapboxgl.accessToken = MAPBOX_PUBLIC_TOKEN;
+    let cancelled = false;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [initialLng, initialLat],
-      zoom: 10,
-    });
+    (async () => {
+      const [mapboxgl] = await Promise.all([
+        import("mapbox-gl").then(m => m.default),
+        import("mapbox-gl/dist/mapbox-gl.css"),
+      ]);
 
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+      if (cancelled || !mapContainer.current) return;
 
-    marker.current = new mapboxgl.Marker({ color: "#6366f1", draggable: true })
-      .setLngLat([initialLng, initialLat])
-      .addTo(map.current);
+      mapboxgl.accessToken = MAPBOX_PUBLIC_TOKEN;
 
-    marker.current.on("dragend", () => {
-      const lngLat = marker.current!.getLngLat();
-      reverseGeocode(lngLat.lat, lngLat.lng);
-    });
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [initialLng, initialLat],
+        zoom: 10,
+      });
 
-    map.current.on("click", (e) => {
-      marker.current!.setLngLat(e.lngLat);
-      reverseGeocode(e.lngLat.lat, e.lngLat.lng);
-    });
+      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+
+      marker.current = new mapboxgl.Marker({ color: "#6366f1", draggable: true })
+        .setLngLat([initialLng, initialLat])
+        .addTo(map.current);
+
+      marker.current.on("dragend", () => {
+        const lngLat = marker.current!.getLngLat();
+        reverseGeocode(lngLat.lat, lngLat.lng);
+      });
+
+      map.current.on("click", (e: any) => {
+        marker.current!.setLngLat(e.lngLat);
+        reverseGeocode(e.lngLat.lat, e.lngLat.lng);
+      });
+
+      setLoading(false);
+    })();
 
     return () => {
+      cancelled = true;
       map.current?.remove();
       map.current = null;
     };
   }, []);
 
   return (
-    <div ref={mapContainer} className={className || "w-full h-48 rounded-xl overflow-hidden border border-border"} />
+    <div className={`relative ${className || "w-full h-48 rounded-xl overflow-hidden border border-border"}`}>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
+          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      <div ref={mapContainer} className="w-full h-full" />
+    </div>
   );
 }
