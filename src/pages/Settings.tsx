@@ -8,21 +8,21 @@ const sections = [
   {
     title: "Account",
     items: [
-      { icon: User, label: "Account Settings", desc: "Email, password, 2FA" },
-      { icon: CreditCard, label: "Subscription", desc: "Free plan" },
+      { icon: User, label: "Account Settings", desc: "Email, password, 2FA", path: "/settings/account" },
+      { icon: CreditCard, label: "Subscription", desc: "Free plan", path: null },
     ],
   },
   {
     title: "Preferences",
     items: [
-      { icon: Shield, label: "Privacy & Safety", desc: "Privacy, blocked users" },
-      { icon: Bell, label: "Notifications", desc: "Push, email, in-app" },
+      { icon: Shield, label: "Privacy & Safety", desc: "Privacy, blocked users", path: "/settings/privacy" },
+      { icon: Bell, label: "Notifications", desc: "Push, email, in-app", path: "/settings/notifications" },
     ],
   },
   {
     title: "Support",
     items: [
-      { icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us" },
+      { icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us", path: null },
     ],
   },
 ];
@@ -57,7 +57,7 @@ const SettingsPage = () => {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">{section.title}</p>
             <div className="bg-card rounded-xl shadow-card border border-border/50 divide-y divide-border">
               {section.items.map((item) => (
-                <button key={item.label} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
+                <button key={item.label} onClick={() => item.path ? navigate(item.path) : null} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <item.icon className="h-4 w-4 text-primary" />
                   </div>
