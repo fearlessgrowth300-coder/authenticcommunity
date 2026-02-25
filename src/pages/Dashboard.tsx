@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Profile {
   first_name: string | null;
@@ -21,18 +22,20 @@ const Dashboard = () => {
   const [communities, setCommunities] = useState<any[]>([]);
   const [stats, setStats] = useState({ matches: 0, communities: 0, events: 0 });
   const [loading, setLoading] = useState(true);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   useEffect(() => {
     if (!user) return;
 
     const load = async () => {
-      const [profileRes, eventsRes, communitiesRes, matchesRes, memberRes, attendeeRes] = await Promise.all([
+      const [profileRes, eventsRes, communitiesRes, matchesRes, memberRes, attendeeRes, notifsRes] = await Promise.all([
         supabase.from("profiles").select("first_name, last_name, location_city, location_state").eq("user_id", user.id).maybeSingle(),
         supabase.from("events").select("*").eq("is_active", true).order("event_date", { ascending: true }).limit(3),
         supabase.from("communities").select("*").eq("is_active", true).order("member_count", { ascending: false }).limit(3),
         supabase.from("matches").select("id").or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
         supabase.from("community_members").select("id").eq("user_id", user.id),
         supabase.from("event_attendees").select("id").eq("user_id", user.id),
+        supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("is_read", false),
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
@@ -43,6 +46,7 @@ const Dashboard = () => {
         communities: memberRes.data?.length || 0,
         events: attendeeRes.data?.length || 0,
       });
+      setUnreadNotifs(notifsRes.count || 0);
       setLoading(false);
     };
 
@@ -76,6 +80,11 @@ const Dashboard = () => {
             </button>
             <button onClick={() => navigate("/notifications")} className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors relative">
               <Bell className="h-4 w-4 text-muted-foreground" />
+              {unreadNotifs > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full gradient-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1">
+                  {unreadNotifs > 99 ? "99+" : unreadNotifs}
+                </span>
+              )}
             </button>
           </div>
         </div>
