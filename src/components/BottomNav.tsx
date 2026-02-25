@@ -1,11 +1,11 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Compass, MessageCircle, User, Users } from "lucide-react";
+import { Home, Compass, CalendarDays, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Home" },
   { to: "/matches", icon: Compass, label: "Discover" },
-  { to: "/communities", icon: Users, label: "Groups" },
+  { to: "/events", icon: CalendarDays, label: "Events" },
   { to: "/messages", icon: MessageCircle, label: "Messages" },
   { to: "/profile", icon: User, label: "Profile" },
 ];
