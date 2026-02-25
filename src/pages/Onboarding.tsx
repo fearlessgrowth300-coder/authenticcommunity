@@ -4,18 +4,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, MapPin, Camera, Check } from "lucide-react";
+import { ArrowLeft, MapPin, Camera, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { interestCategories, valueOptions } from "@/lib/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const steps = ["Location", "Interests", "Values", "Photo & Bio"];
 
 const Onboarding = () => {
   const navigate = useNavigate();
   const { step } = useParams();
+  const { user } = useAuth();
   const currentStep = parseInt(step || "1");
+
+  // Step 1: Location
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [country, setCountry] = useState("");
+
+  // Step 2: Interests
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+
+  // Step 3: Values
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
+
+  // Step 4: Bio
+  const [bio, setBio] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const toggleInterest = (interest: string) => {
     setSelectedInterests((prev) =>
@@ -29,9 +46,69 @@ const Onboarding = () => {
     );
   };
 
+  const saveProfile = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      // Update profile with location and bio
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          location_city: city || null,
+          location_state: state || null,
+          location_country: country || null,
+          bio: bio || null,
+          onboarding_completed: true,
+        })
+        .eq("user_id", user.id);
+
+      if (profileError) throw profileError;
+
+      // Save interests (delete old, insert new)
+      await supabase.from("user_interests").delete().eq("user_id", user.id);
+      if (selectedInterests.length > 0) {
+        const interestRows = selectedInterests.map((name) => {
+          const cat = interestCategories.find((c) => c.interests.includes(name));
+          return {
+            user_id: user.id,
+            interest_name: name,
+            interest_category: cat?.name || null,
+          };
+        });
+        const { error: interestsError } = await supabase
+          .from("user_interests")
+          .insert(interestRows);
+        if (interestsError) throw interestsError;
+      }
+
+      // Save values (delete old, insert new)
+      await supabase.from("user_values").delete().eq("user_id", user.id);
+      if (selectedValues.length > 0) {
+        const valueRows = selectedValues.map((name) => ({
+          user_id: user.id,
+          value_name: name,
+        }));
+        const { error: valuesError } = await supabase
+          .from("user_values")
+          .insert(valueRows);
+        if (valuesError) throw valuesError;
+      }
+
+      toast.success("Profile complete! Let's find your community.");
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const nextStep = () => {
-    if (currentStep < 4) navigate(`/onboarding/${currentStep + 1}`);
-    else navigate("/dashboard");
+    if (currentStep < 4) {
+      navigate(`/onboarding/${currentStep + 1}`);
+    } else {
+      saveProfile();
+    }
   };
 
   const prevStep = () => {
@@ -68,20 +145,19 @@ const Onboarding = () => {
                 <Label>City</Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="San Francisco" className="pl-10" />
+                  <Input placeholder="San Francisco" className="pl-10" value={city} onChange={(e) => setCity(e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>State</Label>
-                  <Input placeholder="California" />
+                  <Input placeholder="California" value={state} onChange={(e) => setState(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Country</Label>
-                  <Input placeholder="United States" />
+                  <Input placeholder="United States" value={country} onChange={(e) => setCountry(e.target.value)} />
                 </div>
               </div>
-              {/* Placeholder map */}
               <div className="w-full h-48 bg-muted rounded-xl flex items-center justify-center border border-border">
                 <div className="text-center">
                   <MapPin className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -160,7 +236,12 @@ const Onboarding = () => {
               </div>
               <div className="space-y-2">
                 <Label>Bio</Label>
-                <Textarea placeholder="Tell people what makes you, you..." className="min-h-[120px] resize-none" />
+                <Textarea
+                  placeholder="Tell people what makes you, you..."
+                  className="min-h-[120px] resize-none"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                />
               </div>
             </div>
           </>
@@ -168,8 +249,10 @@ const Onboarding = () => {
       </div>
 
       <div className="py-6">
-        <Button variant="gradient" size="lg" className="w-full" onClick={nextStep}>
-          {currentStep === 4 ? "Complete Profile" : "Continue"}
+        <Button variant="gradient" size="lg" className="w-full" onClick={nextStep} disabled={saving}>
+          {saving ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</>
+          ) : currentStep === 4 ? "Complete Profile" : "Continue"}
         </Button>
       </div>
     </div>
