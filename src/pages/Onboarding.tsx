@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,9 +30,19 @@ const Onboarding = () => {
   // Step 3: Values
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
 
-  // Step 4: Bio
+  // Step 4: Bio & Photo
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
   const toggleInterest = (interest: string) => {
     setSelectedInterests((prev) =>
@@ -50,16 +60,32 @@ const Onboarding = () => {
     if (!user) return;
     setSaving(true);
     try {
-      // Update profile with location and bio
+      // Upload avatar if selected
+      let avatarUrl: string | null = null;
+      if (avatarFile) {
+        const ext = avatarFile.name.split(".").pop();
+        const path = `${user.id}/avatar.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(path, avatarFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+        avatarUrl = urlData.publicUrl + `?t=${Date.now()}`;
+      }
+
+      // Update profile with location, bio, and avatar
+      const updateData: any = {
+        location_city: city || null,
+        location_state: state || null,
+        location_country: country || null,
+        bio: bio || null,
+        onboarding_completed: true,
+      };
+      if (avatarUrl) updateData.profile_image_url = avatarUrl;
+
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({
-          location_city: city || null,
-          location_state: state || null,
-          location_country: country || null,
-          bio: bio || null,
-          onboarding_completed: true,
-        })
+        .update(updateData)
         .eq("user_id", user.id);
 
       if (profileError) throw profileError;
@@ -229,9 +255,25 @@ const Onboarding = () => {
             <p className="text-muted-foreground text-sm mb-6">Add a photo and tell people about yourself.</p>
             <div className="space-y-5">
               <div className="flex justify-center">
-                <button className="w-28 h-28 rounded-full bg-muted border-2 border-dashed border-border flex flex-col items-center justify-center hover:border-primary/40 transition-colors">
-                  <Camera className="h-6 w-6 text-muted-foreground mb-1" />
-                  <span className="text-xs text-muted-foreground">Add Photo</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarSelect}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-28 h-28 rounded-full bg-muted border-2 border-dashed border-border flex flex-col items-center justify-center hover:border-primary/40 transition-colors overflow-hidden"
+                >
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      <Camera className="h-6 w-6 text-muted-foreground mb-1" />
+                      <span className="text-xs text-muted-foreground">Add Photo</span>
+                    </>
+                  )}
                 </button>
               </div>
               <div className="space-y-2">
