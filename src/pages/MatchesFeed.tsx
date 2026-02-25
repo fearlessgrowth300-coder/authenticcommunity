@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
-import { Heart, X, MapPin, SlidersHorizontal, Loader2 } from "lucide-react";
+import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProfileCard {
@@ -159,12 +159,18 @@ const MatchesFeed = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-6 mt-6">
+            <div className="flex items-center justify-center gap-5 mt-6">
               <button
                 onClick={() => handleAction("pass")}
                 className="h-14 w-14 rounded-full bg-card shadow-card border border-border flex items-center justify-center hover:bg-destructive/10 hover:border-destructive/30 transition-colors active:scale-95"
               >
                 <X className="h-6 w-6 text-destructive" />
+              </button>
+              <button
+                onClick={() => navigate(`/messages/${currentProfile.user_id}`)}
+                className="h-12 w-12 rounded-full bg-card shadow-card border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-colors active:scale-95"
+              >
+                <MessageCircle className="h-5 w-5 text-primary" />
               </button>
               <button
                 onClick={() => handleAction("like")}
