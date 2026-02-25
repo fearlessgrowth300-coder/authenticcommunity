@@ -9,7 +9,7 @@ const sections = [
     title: "Account",
     items: [
       { icon: User, label: "Account Settings", desc: "Email, password, 2FA", path: "/settings/account" },
-      { icon: CreditCard, label: "Subscription", desc: "Free plan", path: null },
+      { icon: CreditCard, label: "Subscription", desc: "Free plan", path: "/settings/subscription" },
     ],
   },
   {
@@ -22,7 +22,7 @@ const sections = [
   {
     title: "Support",
     items: [
-      { icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us", path: null },
+      { icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us", path: "/settings/help" },
     ],
   },
 ];
