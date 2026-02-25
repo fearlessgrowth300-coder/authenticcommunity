@@ -4,14 +4,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { lovable } from "@/integrations/lovable";
+import { toast } from "sonner";
 
 const Signup = () => {
   const navigate = useNavigate();
+  const { signUp } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/onboarding/1");
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      await signUp(email, password, firstName, lastName);
+      toast.success("Account created!");
+      navigate("/onboarding/1");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create account");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin + "/onboarding/1",
+      });
+      if (result.error) {
+        toast.error("Google sign-up failed");
+      }
+    } catch {
+      toast.error("Google sign-up failed");
+    }
   };
 
   return (
@@ -31,12 +66,12 @@ const Signup = () => {
             <Label htmlFor="first">First name</Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input id="first" placeholder="First" className="pl-10" required />
+              <Input id="first" placeholder="First" className="pl-10" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
             </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="last">Last name</Label>
-            <Input id="last" placeholder="Last" required />
+            <Input id="last" placeholder="Last" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
           </div>
         </div>
 
@@ -44,7 +79,7 @@ const Signup = () => {
           <Label htmlFor="email">Email</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input id="email" type="email" placeholder="you@example.com" className="pl-10" required />
+            <Input id="email" type="email" placeholder="you@example.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
         </div>
 
@@ -52,14 +87,16 @@ const Signup = () => {
           <Label htmlFor="password">Password</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input id="password" type={showPassword ? "text" : "password"} placeholder="Min. 8 characters" className="pl-10 pr-10" required />
+            <Input id="password" type={showPassword ? "text" : "password"} placeholder="Min. 8 characters" className="pl-10 pr-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
 
-        <Button variant="gradient" size="lg" className="w-full mt-2" type="submit">Create Account</Button>
+        <Button variant="gradient" size="lg" className="w-full mt-2" type="submit" disabled={loading}>
+          {loading ? "Creating account..." : "Create Account"}
+        </Button>
       </form>
 
       <div className="flex items-center gap-4 my-6">
@@ -69,8 +106,7 @@ const Signup = () => {
       </div>
 
       <div className="flex gap-3">
-        <Button variant="outline" className="flex-1" type="button">Google</Button>
-        <Button variant="outline" className="flex-1" type="button">GitHub</Button>
+        <Button variant="outline" className="flex-1" type="button" onClick={handleGoogleSignup}>Google</Button>
       </div>
 
       <p className="text-center text-sm text-muted-foreground mt-8 mb-4">

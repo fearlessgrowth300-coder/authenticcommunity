@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Shield, Bell, HelpCircle, LogOut, ChevronRight, CreditCard } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const sections = [
@@ -27,6 +29,16 @@ const sections = [
 
 const SettingsPage = () => {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate("/");
+    } catch {
+      toast.error("Failed to log out");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background safe-bottom">
@@ -61,7 +73,7 @@ const SettingsPage = () => {
         ))}
 
         <button
-          onClick={() => navigate("/")}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3.5 bg-card rounded-xl shadow-card border border-border/50 hover:bg-destructive/5 transition-colors"
         >
           <div className="h-8 w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
