@@ -343,6 +343,51 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_settings: {
+        Row: {
+          created_at: string
+          email_notifications: boolean | null
+          id: string
+          notify_communities: boolean | null
+          notify_digest: boolean | null
+          notify_events: boolean | null
+          notify_matches: boolean | null
+          notify_messages: boolean | null
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_notifications?: boolean | null
+          id?: string
+          notify_communities?: boolean | null
+          notify_digest?: boolean | null
+          notify_events?: boolean | null
+          notify_matches?: boolean | null
+          notify_messages?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_notifications?: boolean | null
+          id?: string
+          notify_communities?: boolean | null
+          notify_digest?: boolean | null
+          notify_events?: boolean | null
+          notify_matches?: boolean | null
+          notify_messages?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -379,6 +424,8 @@ export type Database = {
       profiles: {
         Row: {
           age: number | null
+          allow_invitations: boolean | null
+          allow_messages: boolean | null
           bio: string | null
           created_at: string
           first_name: string | null
@@ -393,11 +440,15 @@ export type Database = {
           longitude: number | null
           onboarding_completed: boolean | null
           profile_image_url: string | null
+          show_in_search: boolean | null
+          show_location: boolean | null
           updated_at: string
           user_id: string
         }
         Insert: {
           age?: number | null
+          allow_invitations?: boolean | null
+          allow_messages?: boolean | null
           bio?: string | null
           created_at?: string
           first_name?: string | null
@@ -412,11 +463,15 @@ export type Database = {
           longitude?: number | null
           onboarding_completed?: boolean | null
           profile_image_url?: string | null
+          show_in_search?: boolean | null
+          show_location?: boolean | null
           updated_at?: string
           user_id: string
         }
         Update: {
           age?: number | null
+          allow_invitations?: boolean | null
+          allow_messages?: boolean | null
           bio?: string | null
           created_at?: string
           first_name?: string | null
@@ -431,6 +486,8 @@ export type Database = {
           longitude?: number | null
           onboarding_completed?: boolean | null
           profile_image_url?: string | null
+          show_in_search?: boolean | null
+          show_location?: boolean | null
           updated_at?: string
           user_id?: string
         }
