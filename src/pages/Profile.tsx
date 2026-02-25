@@ -102,7 +102,7 @@ const Profile = () => {
               </span>
             </div>
           )}
-          <Button variant="outline" size="sm" className="mt-3">
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/profile/edit")}>
             <Edit className="h-3.5 w-3.5 mr-1" /> Edit Profile
           </Button>
         </div>

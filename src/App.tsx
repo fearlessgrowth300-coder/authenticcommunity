@@ -20,6 +20,7 @@ import DirectMessage from "./pages/DirectMessage";
 import EventsFeed from "./pages/EventsFeed";
 import EventDetail from "./pages/EventDetail";
 import Profile from "./pages/Profile";
+import EditProfile from "./pages/EditProfile";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/events" element={<ProtectedRoute><EventsFeed /></ProtectedRoute>} />
             <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
