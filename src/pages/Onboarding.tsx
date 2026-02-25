@@ -10,6 +10,7 @@ import { interestCategories, valueOptions } from "@/lib/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { LocationMap } from "@/components/LocationMap";
 
 const steps = ["Location", "Interests", "Values", "Photo & Bio"];
 
@@ -184,12 +185,15 @@ const Onboarding = () => {
                   <Input placeholder="United States" value={country} onChange={(e) => setCountry(e.target.value)} />
                 </div>
               </div>
-              <div className="w-full h-48 bg-muted rounded-xl flex items-center justify-center border border-border">
-                <div className="text-center">
-                  <MapPin className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Map will appear here</p>
-                </div>
-              </div>
+              <LocationMap
+                onLocationSelect={(_lat, _lng, c, s, co) => {
+                  if (c) setCity(c);
+                  if (s) setState(s);
+                  if (co) setCountry(co);
+                }}
+                className="w-full h-48 rounded-xl overflow-hidden border border-border"
+              />
+              <p className="text-xs text-muted-foreground">Tap the map or drag the pin to set your location</p>
             </div>
           </>
         )}

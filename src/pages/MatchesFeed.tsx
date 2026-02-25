@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
-import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface ProfileCard {
   user_id: string;
@@ -26,6 +28,8 @@ const MatchesFeed = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+  const [loadingAi, setLoadingAi] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -86,6 +90,20 @@ const MatchesFeed = () => {
     }, 300);
   };
 
+  const fetchAiSuggestions = async () => {
+    if (!user) return;
+    setLoadingAi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("match-suggestions");
+      if (error) throw error;
+      setAiSuggestions(data?.suggestions || []);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to get AI suggestions");
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -99,11 +117,54 @@ const MatchesFeed = () => {
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <h1 className="text-lg font-bold text-foreground">Discover</h1>
-          <button className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
-            <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-          </button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchAiSuggestions}
+              disabled={loadingAi}
+              className="text-xs"
+            >
+              {loadingAi ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+              AI Match
+            </Button>
+            <button className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* AI Suggestions */}
+      {aiSuggestions.length > 0 && (
+        <div className="px-5 pt-4 max-w-lg mx-auto">
+          <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-primary" /> AI-Powered Matches
+          </h2>
+          <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar">
+            {aiSuggestions.map((s) => (
+              <button
+                key={s.user_id}
+                onClick={() => navigate(`/matches/${s.user_id}`)}
+                className="flex-shrink-0 w-44 bg-card rounded-xl border border-border/50 p-3 text-left hover:shadow-card-hover transition-shadow"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                  <span className="text-[10px] font-bold text-primary">{s.score}%</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">{s.reason}</p>
+                {s.interests?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {s.interests.slice(0, 2).map((i: string) => (
+                      <Badge key={i} variant="outline" className="text-[9px] px-1.5 py-0">{i}</Badge>
+                    ))}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <main className="px-5 py-5 max-w-lg mx-auto">
         {profiles.length === 0 ? (

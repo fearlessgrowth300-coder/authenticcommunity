@@ -10,10 +10,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, MapPin, Users, Plus, Loader2, Clock } from "lucide-react";
+import { CalendarIcon, MapPin, Users, Plus, Loader2, Clock, Map, List } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { EventsMap } from "@/components/EventsMap";
 
 interface EventRow {
   id: string;
@@ -28,6 +29,8 @@ interface EventRow {
   attendee_count: number | null;
   max_attendees: number | null;
   organizer_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
@@ -49,6 +52,7 @@ const EventsFeed = () => {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [createOpen, setCreateOpen] = useState(false);
 
   // Create form state
@@ -118,7 +122,23 @@ const EventsFeed = () => {
     <div className="min-h-screen bg-background pb-24">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-bold text-foreground">Events</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-foreground">Events</h1>
+            <div className="flex bg-muted rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn("p-1.5 rounded-md transition-colors", viewMode === "list" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground")}
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={cn("p-1.5 rounded-md transition-colors", viewMode === "map" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground")}
+              >
+                <Map className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button variant="gradient" size="sm">
@@ -209,7 +229,7 @@ const EventsFeed = () => {
         </div>
       </div>
 
-      {/* Events list */}
+      {/* Events content */}
       <main className="px-5 max-w-lg mx-auto space-y-4">
         {loading ? (
           <div className="flex justify-center py-12">
@@ -217,6 +237,8 @@ const EventsFeed = () => {
           </div>
         ) : events.length === 0 ? (
           <p className="text-center text-muted-foreground text-sm py-12">No events found. Create one!</p>
+        ) : viewMode === "map" ? (
+          <EventsMap events={events} onEventClick={(id) => navigate(`/events/${id}`)} />
         ) : (
           events.map((event) => (
             <button
