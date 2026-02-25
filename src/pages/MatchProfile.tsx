@@ -74,7 +74,7 @@ const MatchProfile = () => {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="gradient" size="lg" className="flex-1" onClick={() => navigate("/messages/1")}>
+            <Button variant="gradient" size="lg" className="flex-1" onClick={() => navigate(`/messages/${id}`)}>
               <MessageCircle className="h-4 w-4 mr-2" /> Message
             </Button>
             <Button variant="accent" size="lg">
