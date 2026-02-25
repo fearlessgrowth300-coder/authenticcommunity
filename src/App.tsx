@@ -27,6 +27,8 @@ const SettingsPage = lazy(() => import("./pages/Settings"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
 const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
+const HelpSupport = lazy(() => import("./pages/HelpSupport"));
+const Subscription = lazy(() => import("./pages/Subscription"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Install = lazy(() => import("./pages/Install"));
@@ -67,6 +69,8 @@ const App = () => (
               <Route path="/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
               <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
               <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+              <Route path="/settings/help" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
+              <Route path="/settings/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
               <Route path="/install" element={<Install />} />
               <Route path="*" element={<NotFound />} />
