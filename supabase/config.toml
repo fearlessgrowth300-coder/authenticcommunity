@@ -1,4 +1,7 @@
 project_id = "wehndfvwxymhtijwqnqn"
 
-[functions.match-suggestions]
-verify_jwt = false
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.match-suggestions]
+    verify_jwt = false
