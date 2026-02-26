@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface ProfileData {
   user_id: string;
@@ -75,6 +76,20 @@ const MatchProfile = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         <button onClick={() => navigate(-1)} className="absolute top-4 left-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center">
           <ArrowLeft className="h-4 w-4 text-foreground" />
+        </button>
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/profile/${id}`;
+            if (navigator.share) {
+              navigator.share({ title: displayName, url }).catch(() => {});
+            } else {
+              navigator.clipboard.writeText(url);
+              toast.success("Link copied!");
+            }
+          }}
+          className="absolute top-4 right-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center"
+        >
+          <Share2 className="h-4 w-4 text-foreground" />
         </button>
       </div>
 

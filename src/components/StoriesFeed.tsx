@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getActiveStories } from "@/lib/stories";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -12,32 +13,58 @@ interface StoryGroup {
   stories: any[];
 }
 
+function groupStories(stories: any[], currentUserId?: string): StoryGroup[] {
+  const map = new Map<string, StoryGroup>();
+  for (const s of stories) {
+    if (!map.has(s.user_id)) {
+      map.set(s.user_id, { user_id: s.user_id, profile: s.profile, stories: [] });
+    }
+    map.get(s.user_id)!.stories.push(s);
+  }
+  const arr = Array.from(map.values());
+  const myIdx = arr.findIndex((g) => g.user_id === currentUserId);
+  if (myIdx > 0) {
+    const [mine] = arr.splice(myIdx, 1);
+    arr.unshift(mine);
+  }
+  return arr;
+}
+
 export function StoriesFeed() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [groups, setGroups] = useState<StoryGroup[]>([]);
+  const [allStories, setAllStories] = useState<any[]>([]);
 
+  // Initial fetch
   useEffect(() => {
     getActiveStories().then((stories) => {
-      const map = new Map<string, StoryGroup>();
-      for (const s of stories) {
-        if (!map.has(s.user_id)) {
-          map.set(s.user_id, { user_id: s.user_id, profile: s.profile, stories: [] });
-        }
-        map.get(s.user_id)!.stories.push(s);
-      }
-      // Put current user first
-      const arr = Array.from(map.values());
-      const myIdx = arr.findIndex((g) => g.user_id === user?.id);
-      if (myIdx > 0) {
-        const [mine] = arr.splice(myIdx, 1);
-        arr.unshift(mine);
-      }
-      setGroups(arr);
+      setAllStories(stories);
+      setGroups(groupStories(stories, user?.id));
     });
   }, [user]);
 
-  const hasMyStory = groups.some((g) => g.user_id === user?.id);
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("stories-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stories" },
+        () => {
+          // Refetch on any change
+          getActiveStories().then((stories) => {
+            setAllStories(stories);
+            setGroups(groupStories(stories, user?.id));
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   return (
     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
