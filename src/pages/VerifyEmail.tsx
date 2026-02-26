@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Mail, Loader2 } from "lucide-react";
@@ -35,6 +35,7 @@ const VerifyEmail = () => {
   const [expirySeconds, setExpirySeconds] = useState(CODE_EXPIRY_SECONDS);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verifyCooldown, setVerifyCooldown] = useState(0);
+  const lastAttemptRef = useRef<{ code: string; at: number } | null>(null);
 
   useEffect(() => {
     if (email) {
@@ -66,25 +67,55 @@ const VerifyEmail = () => {
     const sanitizedCode = normalizeCode(code);
     if (loading || !email || sanitizedCode.length < 6 || verifyCooldown > 0) return;
 
+    const now = Date.now();
+    if (
+      lastAttemptRef.current?.code === sanitizedCode &&
+      now - lastAttemptRef.current.at < 3500
+    ) {
+      toast.error("Please wait a few seconds before trying that code again.");
+      return;
+    }
+    lastAttemptRef.current = { code: sanitizedCode, at: now };
+
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: sanitizedCode,
-        type: "signup",
-      });
+      const otpTypes: Array<"signup" | "email"> = ["signup", "email"];
+      let lastError: Error | null = null;
+      let verified = false;
 
-      if (error) {
-        const errorMessage = (error.message || "").toLowerCase();
-        if (errorMessage.includes("rate limit")) {
-          setVerifyCooldown(10);
-          throw new Error("Request rate limit reached. Please wait 10 seconds.");
+      for (const otpType of otpTypes) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email,
+          token: sanitizedCode,
+          type: otpType,
+        });
+
+        if (!error && (data?.user || data?.session)) {
+          verified = true;
+          break;
         }
-        throw error;
+
+        if (error) {
+          const errorMessage = (error.message || "").toLowerCase();
+          if (errorMessage.includes("rate limit")) {
+            setVerifyCooldown(20);
+            throw new Error("Request rate limit reached. Please wait 20 seconds.");
+          }
+
+          const canTryFallbackType =
+            otpType === "signup" &&
+            (errorMessage.includes("invalid") ||
+              errorMessage.includes("expired") ||
+              errorMessage.includes("token") ||
+              errorMessage.includes("otp"));
+
+          if (!canTryFallbackType) throw error;
+          lastError = error;
+        }
       }
 
-      if (!data?.user && !data?.session) {
-        throw new Error("Verification could not be confirmed. Please request a new code.");
+      if (!verified) {
+        throw lastError || new Error("Verification could not be confirmed. Please request a new code.");
       }
 
       // Save signup metadata (country, DOB) to profile
@@ -108,13 +139,16 @@ const VerifyEmail = () => {
 
         await supabase
           .from("profiles")
-          .update({
-            location_country: countryName,
-            location_state: stateProv,
-            date_of_birth: dob,
-            age,
-          })
-          .eq("user_id", user.id);
+          .upsert(
+            {
+              user_id: user.id,
+              location_country: countryName,
+              location_state: stateProv,
+              date_of_birth: dob,
+              age,
+            },
+            { onConflict: "user_id" },
+          );
       }
 
       sessionStorage.removeItem("pending_signup_email");
@@ -126,6 +160,7 @@ const VerifyEmail = () => {
       if (message.includes("rate limit")) {
         toast.error("Too many attempts. Please wait and try again.");
       } else if (message.includes("expired") || message.includes("invalid")) {
+        setVerifyCooldown(3);
         toast.error("This code is invalid or expired. Please resend and use the newest code.");
       } else {
         toast.error(err?.message || "Verification failed");
@@ -150,6 +185,7 @@ const VerifyEmail = () => {
       setResendCooldown(RESEND_COOLDOWN);
       setExpirySeconds(CODE_EXPIRY_SECONDS);
       setVerifyCooldown(0);
+      lastAttemptRef.current = null;
       setCode("");
     } catch (err: any) {
       toast.error(err.message || "Failed to resend code");

@@ -161,8 +161,9 @@ const Onboarding = () => {
         avatarUrl = urlData.publicUrl + `?t=${Date.now()}`;
       }
 
-      // Update profile
-      const updateData: Record<string, any> = {
+      // Upsert profile to guarantee row exists for OAuth and email signups
+      const profilePayload = {
+        user_id: user.id,
         location_city: city || null,
         location_state: state || null,
         location_country: country || null,
@@ -177,10 +178,12 @@ const Onboarding = () => {
         max_distance_km: maxDistance,
         onboarding_completed: true,
         onboarding_step: 6,
+        ...(avatarUrl ? { profile_image_url: avatarUrl } : {}),
       };
-      if (avatarUrl) updateData.profile_image_url = avatarUrl;
 
-      const { error: profileError } = await supabase.from("profiles").update(updateData).eq("user_id", user.id);
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert(profilePayload, { onConflict: "user_id" });
       if (profileError) throw profileError;
 
       // Save interests
@@ -215,7 +218,7 @@ const Onboarding = () => {
         });
       }
 
-      refreshOnboarding();
+      await refreshOnboarding();
       navigate("/onboarding/complete");
     } catch (err: any) {
       toast.error(err.message || "Failed to save profile");
@@ -260,7 +263,7 @@ const Onboarding = () => {
               </div>
             ))}
           </div>
-          <Button variant="gradient" size="lg" className="w-full" onClick={() => { refreshOnboarding(); navigate("/dashboard"); }}>
+          <Button variant="gradient" size="lg" className="w-full" onClick={async () => { await refreshOnboarding(); navigate("/dashboard"); }}>
             <Sparkles className="h-4 w-4 mr-2" /> Go to Home
           </Button>
         </div>
