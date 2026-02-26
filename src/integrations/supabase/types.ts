@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          admin_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
       blocked_users: {
         Row: {
           blocked_id: string
@@ -450,6 +480,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_status: string | null
           age: number | null
           allow_invitations: boolean | null
           allow_messages: boolean | null
@@ -469,10 +500,13 @@ export type Database = {
           profile_image_url: string | null
           show_in_search: boolean | null
           show_location: boolean | null
+          suspended_until: string | null
+          suspension_reason: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          account_status?: string | null
           age?: number | null
           allow_invitations?: boolean | null
           allow_messages?: boolean | null
@@ -492,10 +526,13 @@ export type Database = {
           profile_image_url?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
+          suspended_until?: string | null
+          suspension_reason?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          account_status?: string | null
           age?: number | null
           allow_invitations?: boolean | null
           allow_messages?: boolean | null
@@ -515,6 +552,8 @@ export type Database = {
           profile_image_url?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
+          suspended_until?: string | null
+          suspension_reason?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -525,31 +564,76 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          investigation_notes: string | null
           reason: string
           report_type: string
           reported_user_id: string | null
           reporter_id: string
+          resolution: string | null
+          resolved_at: string | null
+          severity: string | null
           status: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
+          investigation_notes?: string | null
           reason: string
           report_type: string
           reported_user_id?: string | null
           reporter_id: string
+          resolution?: string | null
+          resolved_at?: string | null
+          severity?: string | null
           status?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
+          investigation_notes?: string | null
           reason?: string
           report_type?: string
           reported_user_id?: string | null
           reporter_id?: string
+          resolution?: string | null
+          resolved_at?: string | null
+          severity?: string | null
           status?: string | null
+        }
+        Relationships: []
+      }
+      system_alerts: {
+        Row: {
+          alert_type: string | null
+          created_at: string
+          id: string
+          is_resolved: boolean | null
+          message: string | null
+          resolved_at: string | null
+          severity: string | null
+          title: string
+        }
+        Insert: {
+          alert_type?: string | null
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          resolved_at?: string | null
+          severity?: string | null
+          title: string
+        }
+        Update: {
+          alert_type?: string | null
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          resolved_at?: string | null
+          severity?: string | null
+          title?: string
         }
         Relationships: []
       }
