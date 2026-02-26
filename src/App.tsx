@@ -36,6 +36,10 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const CreateStory = lazy(() => import("./pages/CreateStory"));
+const StoryViewer = lazy(() => import("./pages/StoryViewer"));
+const StoryReplies = lazy(() => import("./pages/StoryReplies"));
+const StoryViewers = lazy(() => import("./pages/StoryViewers"));
 
 const queryClient = new QueryClient();
 
@@ -79,6 +83,10 @@ const App = () => (
               <Route path="/settings/help" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
               <Route path="/settings/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+              <Route path="/stories/create" element={<ProtectedRoute><CreateStory /></ProtectedRoute>} />
+              <Route path="/stories/:id" element={<ProtectedRoute><StoryViewer /></ProtectedRoute>} />
+              <Route path="/stories/:id/replies" element={<ProtectedRoute><StoryReplies /></ProtectedRoute>} />
+              <Route path="/stories/:id/viewers" element={<ProtectedRoute><StoryViewers /></ProtectedRoute>} />
               <Route path="/install" element={<Install />} />
               <Route path="/admin/*" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />

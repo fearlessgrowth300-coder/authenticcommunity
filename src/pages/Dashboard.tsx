@@ -4,15 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WelcomeGuide } from "@/components/WelcomeGuide";
+import { StoriesFeed } from "@/components/StoriesFeed";
 
 interface Profile {
   first_name: string | null;
   last_name: string | null;
   location_city: string | null;
   location_state: string | null;
+  profile_image_url: string | null;
 }
 
 const Dashboard = () => {
@@ -37,7 +40,7 @@ const Dashboard = () => {
 
     const load = async () => {
       const [profileRes, eventsRes, communitiesRes, matchesRes, memberRes, attendeeRes, notifsRes] = await Promise.all([
-        supabase.from("profiles").select("first_name, last_name, location_city, location_state").eq("user_id", user.id).maybeSingle(),
+        supabase.from("profiles").select("first_name, last_name, location_city, location_state, profile_image_url").eq("user_id", user.id).maybeSingle(),
         supabase.from("events").select("*").eq("is_active", true).order("event_date", { ascending: true }).limit(3),
         supabase.from("communities").select("*").eq("is_active", true).order("member_count", { ascending: false }).limit(3),
         supabase.from("matches").select("id").or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
@@ -62,6 +65,7 @@ const Dashboard = () => {
   }, [user]);
 
   const firstName = profile?.first_name || "there";
+  const initials = `${profile?.first_name?.[0] || ""}${profile?.last_name?.[0] || ""}`;
 
   if (loading) {
     return (
@@ -76,11 +80,17 @@ const Dashboard = () => {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Hey, {firstName}! 👋</h1>
-            {profile?.location_city && (
-              <p className="text-xs text-muted-foreground">{profile.location_city}{profile.location_state ? `, ${profile.location_state}` : ""}</p>
-            )}
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10 border-2 border-primary">
+              <AvatarImage src={profile?.profile_image_url || undefined} />
+              <AvatarFallback className="text-xs font-semibold">{initials || "?"}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-lg font-bold text-foreground">Hey, {firstName}! 👋</h1>
+              {profile?.location_city && (
+                <p className="text-xs text-muted-foreground">{profile.location_city}{profile.location_state ? `, ${profile.location_state}` : ""}</p>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             <button className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
@@ -99,12 +109,17 @@ const Dashboard = () => {
       </header>
 
       <main className="px-5 py-5 max-w-lg mx-auto space-y-7">
+        {/* Stories */}
+        <section>
+          <StoriesFeed />
+        </section>
+
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 animate-fade-in">
           {[
             { label: "Matches", value: stats.matches.toString(), color: "text-primary" },
             { label: "Communities", value: stats.communities.toString(), color: "text-secondary" },
-            { label: "Events", value: stats.events.toString(), color: "text-accent-foreground" },
+            { label: "Events", value: stats.events.toString(), color: "text-tertiary" },
           ].map((s) => (
             <div key={s.label} className="bg-card rounded-xl p-3 text-center shadow-card border border-border/50">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
