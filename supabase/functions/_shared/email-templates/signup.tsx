@@ -4,7 +4,6 @@ import * as React from 'npm:react@18.3.1'
 
 import {
   Body,
-  Button,
   Container,
   Head,
   Heading,
@@ -21,23 +20,24 @@ interface SignupEmailProps {
   siteUrl: string
   recipient: string
   confirmationUrl: string
+  token?: string
 }
 
 export const SignupEmail = ({
   siteName,
   siteUrl,
   recipient,
-  confirmationUrl,
+  token,
 }: SignupEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Welcome to Authentic Community! Confirm your email to get started 🌟</Preview>
+    <Preview>Your verification code for Authentic Community 🌟</Preview>
     <Body style={main}>
       <Container style={container}>
         <Section style={header}>
           <Text style={logoText}>🌟 Authentic Community</Text>
         </Section>
-        <Heading style={h1}>Welcome aboard!</Heading>
+        <Heading style={h1}>Verify your email</Heading>
         <Text style={text}>
           Thanks for joining{' '}
           <Link href={siteUrl} style={link}>
@@ -46,16 +46,20 @@ export const SignupEmail = ({
           — we're excited to help you find genuine connections, meaningful friendships, and communities that feel like home.
         </Text>
         <Text style={text}>
-          Confirm your email (
-          <Link href={`mailto:${recipient}`} style={link}>
-            {recipient}
-          </Link>
-          ) to get started:
+          Use the code below to verify your email ({recipient}):
         </Text>
-        <Section style={buttonSection}>
-          <Button style={button} href={confirmationUrl}>
-            Get Started
-          </Button>
+        <Section style={codeSection}>
+          <Text style={codeLabel}>Your Verification Code</Text>
+          <Text style={codeStyle}>{token || '------'}</Text>
+          <Text style={codeHint}>⏱️ This code expires in 15 minutes</Text>
+        </Section>
+        <Text style={text}>
+          Enter this code in the verification screen to confirm your email address.
+        </Text>
+        <Section style={securityNote}>
+          <Text style={securityText}>
+            🔒 Never share this code with anyone. We'll never ask for it via email or message.
+          </Text>
         </Section>
         <Hr style={hr} />
         <Text style={footer}>
@@ -87,17 +91,31 @@ const text = {
   margin: '0 0 20px',
 }
 const link = { color: '#3b82f6', textDecoration: 'underline' }
-const buttonSection = { textAlign: 'center' as const, margin: '28px 0' }
-const button = {
-  background: 'linear-gradient(135deg, #3b82f6 0%, #ec4899 100%)',
-  backgroundColor: '#3b82f6',
-  color: '#ffffff',
-  fontSize: '15px',
-  fontWeight: '600' as const,
+const codeSection = {
+  backgroundColor: '#f3f4f6',
   borderRadius: '12px',
-  padding: '14px 32px',
-  textDecoration: 'none',
+  padding: '28px',
+  textAlign: 'center' as const,
+  margin: '24px 0',
 }
+const codeLabel = { fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }
+const codeStyle = {
+  fontFamily: "'Courier New', monospace",
+  fontSize: '42px',
+  fontWeight: 'bold' as const,
+  color: '#3b82f6',
+  letterSpacing: '8px',
+  margin: '0 0 12px',
+}
+const codeHint = { fontSize: '13px', color: '#ef4444', margin: '0' }
+const securityNote = {
+  backgroundColor: '#eff6ff',
+  borderLeft: '4px solid #3b82f6',
+  padding: '12px 16px',
+  borderRadius: '4px',
+  margin: '20px 0',
+}
+const securityText = { fontSize: '13px', color: '#1e40af', margin: '0' }
 const hr = { borderColor: '#e5e7eb', margin: '28px 0' }
 const footer = { fontSize: '13px', color: '#9ca3af', margin: '0 0 8px' }
 const footerBrand = { fontSize: '12px', color: '#9ca3af', textAlign: 'center' as const }
