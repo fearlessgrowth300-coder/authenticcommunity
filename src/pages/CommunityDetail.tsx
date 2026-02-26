@@ -90,7 +90,18 @@ const CommunityDetail = () => {
         <button onClick={() => navigate(-1)} className="absolute top-4 left-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center">
           <ArrowLeft className="h-4 w-4 text-foreground" />
         </button>
-        <button className="absolute top-4 right-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center">
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/communities/${id}`;
+            if (navigator.share) {
+              navigator.share({ title: community?.community_name || "Community", url }).catch(() => {});
+            } else {
+              navigator.clipboard.writeText(url);
+              toast.success("Link copied!");
+            }
+          }}
+          className="absolute top-4 right-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center"
+        >
           <Share2 className="h-4 w-4 text-foreground" />
         </button>
       </div>

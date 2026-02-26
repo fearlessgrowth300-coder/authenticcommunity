@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X, Share2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -136,6 +136,20 @@ const EventDetail = () => {
           className="absolute top-4 left-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center"
         >
           <ArrowLeft className="h-4 w-4 text-foreground" />
+        </button>
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/events/${id}`;
+            if (navigator.share) {
+              navigator.share({ title: event?.name || "Event", url }).catch(() => {});
+            } else {
+              navigator.clipboard.writeText(url);
+              toast.success("Link copied!");
+            }
+          }}
+          className="absolute top-4 right-4 h-9 w-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center"
+        >
+          <Share2 className="h-4 w-4 text-foreground" />
         </button>
       </div>
 
