@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2 } from "lucide-react";
+import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
 
 interface ProfileData {
   first_name: string | null;
@@ -24,18 +24,20 @@ const Profile = () => {
   const [values, setValues] = useState<string[]>([]);
   const [stats, setStats] = useState({ connections: 0, communities: 0, events: 0 });
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
     const load = async () => {
-      const [profileRes, interestsRes, valuesRes, connectionsRes, membersRes, attendeesRes] = await Promise.all([
+      const [profileRes, interestsRes, valuesRes, connectionsRes, membersRes, attendeesRes, roleRes] = await Promise.all([
         supabase.from("profiles").select("first_name, last_name, age, bio, profile_image_url, location_city, location_state").eq("user_id", user.id).maybeSingle(),
         supabase.from("user_interests").select("interest_name").eq("user_id", user.id),
         supabase.from("user_values").select("value_name").eq("user_id", user.id),
         supabase.from("connections").select("id").or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
         supabase.from("community_members").select("id").eq("user_id", user.id),
         supabase.from("event_attendees").select("id").eq("user_id", user.id),
+        supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle(),
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
@@ -46,6 +48,7 @@ const Profile = () => {
         communities: membersRes.data?.length || 0,
         events: attendeesRes.data?.length || 0,
       });
+      setIsAdmin(!!roleRes.data);
       setLoading(false);
     };
 
@@ -94,6 +97,12 @@ const Profile = () => {
           <h2 className="text-xl font-bold text-foreground mt-3">
             {displayName}{profile?.age ? `, ${profile.age}` : ""}
           </h2>
+          {isAdmin && (
+            <Badge className="mt-1.5 bg-primary/10 text-primary border-primary/30 hover:bg-primary/20">
+              <ShieldCheck className="h-3 w-3 mr-1" />
+              Admin
+            </Badge>
+          )}
           {(profile?.location_city || profile?.location_state) && (
             <div className="flex items-center justify-center gap-1 text-muted-foreground mt-0.5">
               <MapPin className="h-3.5 w-3.5" />

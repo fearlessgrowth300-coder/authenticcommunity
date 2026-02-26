@@ -17,7 +17,7 @@ const steps = ["Location", "Interests", "Values", "Photo & Bio"];
 const Onboarding = () => {
   const navigate = useNavigate();
   const { step } = useParams();
-  const { user } = useAuth();
+  const { user, refreshOnboarding } = useAuth();
   const currentStep = parseInt(step || "1");
 
   // Step 1: Location
@@ -121,6 +121,7 @@ const Onboarding = () => {
         if (valuesError) throw valuesError;
       }
 
+      refreshOnboarding();
       toast.success("Profile complete! Let's find your community.");
       navigate("/dashboard");
     } catch (err: any) {
