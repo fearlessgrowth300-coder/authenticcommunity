@@ -28,13 +28,15 @@ export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [genderFilter, setGenderFilter] = useState<string>("all");
+  const [ageFilter, setAgeFilter] = useState<string>("all");
   const [suspendDialog, setSuspendDialog] = useState<{ open: boolean; userId?: string; name?: string }>({ open: false });
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendDuration, setSuspendDuration] = useState("7days");
   const [detailUser, setDetailUser] = useState<any>(null);
 
   const { data: users, isLoading } = useQuery({
-    queryKey: ["admin-users", search, statusFilter],
+    queryKey: ["admin-users", search, statusFilter, genderFilter, ageFilter],
     queryFn: async () => {
       let query = supabase
         .from("profiles")
@@ -46,6 +48,16 @@ export default function AdminUsers() {
       }
       if (statusFilter !== "all") {
         query = query.eq("account_status", statusFilter);
+      }
+      if (genderFilter !== "all") {
+        query = query.eq("gender", genderFilter);
+      }
+      if (ageFilter !== "all") {
+        if (ageFilter === "under18") query = query.lt("age", 18);
+        else if (ageFilter === "18-25") query = query.gte("age", 18).lte("age", 25);
+        else if (ageFilter === "26-35") query = query.gte("age", 26).lte("age", 35);
+        else if (ageFilter === "36-50") query = query.gte("age", 36).lte("age", 50);
+        else if (ageFilter === "50+") query = query.gt("age", 50);
       }
 
       const { data, error } = await query;
@@ -128,8 +140,8 @@ export default function AdminUsers() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by name..."
@@ -142,10 +154,35 @@ export default function AdminUsers() {
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-popover z-50">
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={genderFilter} onValueChange={setGenderFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Gender" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover z-50">
+            <SelectItem value="all">All Genders</SelectItem>
+            <SelectItem value="Male">Male</SelectItem>
+            <SelectItem value="Female">Female</SelectItem>
+            <SelectItem value="Non-binary">Non-binary</SelectItem>
+            <SelectItem value="Prefer not to say">Not specified</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={ageFilter} onValueChange={setAgeFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Age" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover z-50">
+            <SelectItem value="all">All Ages</SelectItem>
+            <SelectItem value="under18">Under 18</SelectItem>
+            <SelectItem value="18-25">18–25</SelectItem>
+            <SelectItem value="26-35">26–35</SelectItem>
+            <SelectItem value="36-50">36–50</SelectItem>
+            <SelectItem value="50+">50+</SelectItem>
           </SelectContent>
         </Select>
       </div>
