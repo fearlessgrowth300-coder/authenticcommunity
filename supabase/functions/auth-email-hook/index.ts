@@ -237,6 +237,20 @@ function firstNonEmptyString(...values: unknown[]): string {
   return "";
 }
 
+function pickVerificationToken(entries: Array<[string, unknown]>): { value: string; source: string } {
+  const resolved = entries
+    .map(([source, value]) => ({ source, value: firstNonEmptyString(value) }))
+    .filter((entry) => entry.value.length > 0);
+
+  const sixDigitOtp = resolved.find((entry) => /^\d{6}$/.test(entry.value));
+  if (sixDigitOtp) return sixDigitOtp;
+
+  const shortCode = resolved.find((entry) => /^[A-Za-z0-9]{6,8}$/.test(entry.value));
+  if (shortCode) return shortCode;
+
+  return resolved[0] ?? { value: "", source: "" };
+}
+
 function tokenFromUrl(value: string): string {
   if (!value) return "";
 
@@ -329,19 +343,27 @@ Deno.serve(async (req) => {
       emailData.url,
     );
 
-    const token = firstNonEmptyString(
-      payload.token,
-      payload.otp,
-      payload.code,
-      data.token,
-      data.otp,
-      data.code,
-      emailData.token,
-      emailData.otp,
-      emailData.code,
-      tokenFromUrl(url),
-      tokenFromUrl(firstNonEmptyString(payload.action_link, data.action_link, emailData.action_link)),
+    const actionLink = firstNonEmptyString(
+      payload.action_link,
+      data.action_link,
+      emailData.action_link,
     );
+
+    const pickedToken = pickVerificationToken([
+      ["email_data.otp", emailData.otp],
+      ["email_data.code", emailData.code],
+      ["email_data.token", emailData.token],
+      ["data.otp", data.otp],
+      ["data.code", data.code],
+      ["data.token", data.token],
+      ["payload.otp", payload.otp],
+      ["payload.code", payload.code],
+      ["payload.token", payload.token],
+      ["url.token", tokenFromUrl(url)],
+      ["action_link.token", tokenFromUrl(actionLink)],
+    ]);
+
+    const token = pickedToken.value;
 
     const newEmail = firstNonEmptyString(
       payload.new_email,
@@ -384,6 +406,7 @@ Deno.serve(async (req) => {
       emailType,
       email,
       tokenLength: token.length,
+      tokenSource: pickedToken.source,
       urlPresent: Boolean(url),
       hasProvidedHtml: Boolean(providedHtml),
       hasProvidedText: Boolean(providedText),
