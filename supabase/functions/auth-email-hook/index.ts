@@ -1,305 +1,297 @@
-import * as React from 'npm:react@18.3.1'
-import { renderAsync } from 'npm:@react-email/components@0.0.22'
-import { sendLovableEmail, parseEmailWebhookPayload } from 'npm:@lovable.dev/email-js'
-import { WebhookError, verifyWebhookRequest } from 'npm:@lovable.dev/webhooks-js'
-import { SignupEmail } from '../_shared/email-templates/signup.tsx'
-import { InviteEmail } from '../_shared/email-templates/invite.tsx'
-import { MagicLinkEmail } from '../_shared/email-templates/magic-link.tsx'
-import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
-import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
-import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, x-lovable-signature, x-lovable-timestamp, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const SITE_NAME = "Authentic Community";
+const SITE_URL = "https://authenticcommunity.lovable.app";
+const FROM_EMAIL = "Authentic Community <noreply@authenticcommunity.fun>";
 
 const EMAIL_SUBJECTS: Record<string, string> = {
-  signup: 'Your verification code',
-  invite: "You've been invited",
-  magiclink: 'Your login link',
-  recovery: 'Reset your password',
-  email_change: 'Confirm your new email',
-  reauthentication: 'Your verification code',
+  signup: "Your verification code for Authentic Community",
+  recovery: "Reset your password — Authentic Community",
+  magiclink: "Your login link — Authentic Community",
+  invite: "You've been invited to Authentic Community",
+  email_change: "Confirm your new email — Authentic Community",
+  reauthentication: "Your verification code",
+};
+
+function buildSignupHtml(token: string, email: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">Verify your email</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Thanks for joining <a href="${SITE_URL}" style="color:hsl(217,91%,60%);text-decoration:underline;"><strong>Authentic Community</strong></a>
+    — we're excited to help you find genuine connections, meaningful friendships, and communities that feel like home.
+  </p>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Use the code below to verify your email (${email}):
+  </p>
+  <div style="background:#f3f4f6;border-radius:12px;padding:28px;text-align:center;margin:24px 0;">
+    <p style="font-size:13px;color:hsl(220,10%,46%);margin:0 0 12px;">Your Verification Code</p>
+    <p style="font-family:'Courier New',monospace;font-size:42px;font-weight:bold;color:hsl(217,91%,60%);letter-spacing:8px;margin:0 0 12px;">${token || "------"}</p>
+    <p style="font-size:13px;color:#ef4444;margin:0;">⏱️ This code expires in 15 minutes</p>
+  </div>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Enter this code in the verification screen to confirm your email address.
+  </p>
+  <div style="background:hsl(217,91%,95%);border-left:4px solid hsl(217,91%,60%);padding:12px 16px;border-radius:4px;margin:20px 0;">
+    <p style="font-size:13px;color:hsl(217,91%,35%);margin:0;">🔒 Never share this code with anyone. We'll never ask for it via email or message.</p>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:13px;color:#9ca3af;margin:0 0 8px;">If you didn't create an account, you can safely ignore this email.</p>
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
 }
 
-// Template mapping
-const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
-  signup: SignupEmail,
-  invite: InviteEmail,
-  magiclink: MagicLinkEmail,
-  recovery: RecoveryEmail,
-  email_change: EmailChangeEmail,
-  reauthentication: ReauthenticationEmail,
+function buildRecoveryHtml(url: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">Reset your password</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    We received a request to reset your password. Click the button below to choose a new one.
+  </p>
+  <div style="text-align:center;margin:32px 0;">
+    <a href="${url}" style="display:inline-block;background:hsl(217,91%,60%);color:#ffffff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Reset Password</a>
+  </div>
+  <p style="font-size:13px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Or copy and paste this link into your browser:<br/>
+    <a href="${url}" style="color:hsl(217,91%,60%);word-break:break-all;">${url}</a>
+  </p>
+  <div style="background:hsl(217,91%,95%);border-left:4px solid hsl(217,91%,60%);padding:12px 16px;border-radius:4px;margin:20px 0;">
+    <p style="font-size:13px;color:hsl(217,91%,35%);margin:0;">🔒 This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
 }
 
-// Configuration
-const SITE_NAME = "authenticcommunity"
-const SENDER_DOMAIN = "authenticcommunity.ordersstan.store"
-const ROOT_DOMAIN = "ordersstan.store"
-const FROM_DOMAIN = "authenticcommunity.ordersstan.store" // Domain shown in From address (may be root or sender subdomain)
-
-// Sample data for preview mode ONLY (not used in actual email sending).
-// URLs are baked in at scaffold time from the project's real data.
-// The sample email uses a fixed placeholder (RFC 6761 .test TLD) so the Go backend
-// can always find-and-replace it with the actual recipient when sending test emails,
-// even if the project's domain has changed since the template was scaffolded.
-const SAMPLE_PROJECT_URL = "https://authenticcommunity.lovable.app"
-const SAMPLE_EMAIL = "user@example.test"
-const SAMPLE_DATA: Record<string, object> = {
-  signup: {
-    siteName: SITE_NAME,
-    siteUrl: SAMPLE_PROJECT_URL,
-    recipient: SAMPLE_EMAIL,
-    confirmationUrl: SAMPLE_PROJECT_URL,
-    token: '123456',
-  },
-  magiclink: {
-    siteName: SITE_NAME,
-    confirmationUrl: SAMPLE_PROJECT_URL,
-  },
-  recovery: {
-    siteName: SITE_NAME,
-    confirmationUrl: SAMPLE_PROJECT_URL,
-  },
-  invite: {
-    siteName: SITE_NAME,
-    siteUrl: SAMPLE_PROJECT_URL,
-    confirmationUrl: SAMPLE_PROJECT_URL,
-  },
-  email_change: {
-    siteName: SITE_NAME,
-    email: SAMPLE_EMAIL,
-    newEmail: SAMPLE_EMAIL,
-    confirmationUrl: SAMPLE_PROJECT_URL,
-  },
-  reauthentication: {
-    token: '123456',
-  },
+function buildMagicLinkHtml(url: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">Your login link</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Click the button below to sign in to Authentic Community.
+  </p>
+  <div style="text-align:center;margin:32px 0;">
+    <a href="${url}" style="display:inline-block;background:hsl(217,91%,60%);color:#ffffff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Sign In</a>
+  </div>
+  <p style="font-size:13px;color:hsl(220,10%,46%);">This link expires in 1 hour.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
 }
 
-// Preview endpoint handler - returns rendered HTML without sending email
-async function handlePreview(req: Request): Promise<Response> {
-  const previewCorsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
-  }
-
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: previewCorsHeaders })
-  }
-
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
-  const authHeader = req.headers.get('Authorization')
-
-  if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  let type: string
-  try {
-    const body = await req.json()
-    type = body.type
-  } catch (error) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
-      status: 400,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const EmailTemplate = EMAIL_TEMPLATES[type]
-
-  if (!EmailTemplate) {
-    return new Response(JSON.stringify({ error: `Unknown email type: ${type}` }), {
-      status: 400,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const sampleData = SAMPLE_DATA[type] || {}
-  const html = await renderAsync(React.createElement(EmailTemplate, sampleData))
-
-  return new Response(html, {
-    status: 200,
-    headers: { ...previewCorsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
-  })
+function buildInviteHtml(url: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">You've been invited!</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Someone invited you to join Authentic Community — a place for genuine connections and meaningful friendships.
+  </p>
+  <div style="text-align:center;margin:32px 0;">
+    <a href="${url}" style="display:inline-block;background:hsl(217,91%,60%);color:#ffffff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Accept Invitation</a>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
 }
 
-// Webhook handler - verifies signature and sends email
-async function handleWebhook(req: Request): Promise<Response> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
+function buildEmailChangeHtml(url: string, newEmail: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">Confirm your new email</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Click the button below to confirm changing your email to <strong>${newEmail}</strong>.
+  </p>
+  <div style="text-align:center;margin:32px 0;">
+    <a href="${url}" style="display:inline-block;background:hsl(217,91%,60%);color:#ffffff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Confirm Email Change</a>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
+}
 
-  if (!apiKey) {
-    console.error('LOVABLE_API_KEY not configured')
-    return new Response(
-      JSON.stringify({ error: 'Server configuration error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+function buildReauthHtml(token: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px;">
+  <div style="text-align:center;margin-bottom:24px;">
+    <span style="font-size:20px;font-weight:bold;color:hsl(217,91%,60%);">🌟 Authentic Community</span>
+  </div>
+  <h1 style="font-size:24px;font-weight:bold;color:hsl(222,20%,10%);margin:0 0 16px;">Verification code</h1>
+  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Use this code to verify your identity:
+  </p>
+  <div style="background:#f3f4f6;border-radius:12px;padding:28px;text-align:center;margin:24px 0;">
+    <p style="font-family:'Courier New',monospace;font-size:42px;font-weight:bold;color:hsl(217,91%,60%);letter-spacing:8px;margin:0;">${token}</p>
+  </div>
+  <p style="font-size:13px;color:hsl(220,10%,46%);">This code expires in 15 minutes.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+  <p style="font-size:12px;color:#9ca3af;text-align:center;">© Authentic Community</p>
+</div>
+</body>
+</html>`;
+}
+
+// Build HTML based on email type
+function buildEmailHtml(type: string, data: Record<string, any>): string {
+  switch (type) {
+    case "signup":
+      return buildSignupHtml(data.token || "", data.email || "");
+    case "recovery":
+      return buildRecoveryHtml(data.confirmation_url || data.url || SITE_URL);
+    case "magiclink":
+      return buildMagicLinkHtml(data.confirmation_url || data.url || SITE_URL);
+    case "invite":
+      return buildInviteHtml(data.confirmation_url || data.url || SITE_URL);
+    case "email_change":
+      return buildEmailChangeHtml(data.confirmation_url || data.url || SITE_URL, data.new_email || "");
+    case "reauthentication":
+      return buildReauthHtml(data.token || "");
+    default:
+      return buildSignupHtml(data.token || "", data.email || "");
+  }
+}
+
+// Plain text version
+function buildPlainText(type: string, data: Record<string, any>): string {
+  switch (type) {
+    case "signup":
+      return `Authentic Community — Verify your email\n\nYour verification code: ${data.token || "------"}\n\nThis code expires in 15 minutes.\n\nIf you didn't create an account, ignore this email.`;
+    case "recovery":
+      return `Authentic Community — Reset your password\n\nClick this link to reset your password:\n${data.confirmation_url || data.url || SITE_URL}\n\nThis link expires in 1 hour.`;
+    case "magiclink":
+      return `Authentic Community — Your login link\n\nClick this link to sign in:\n${data.confirmation_url || data.url || SITE_URL}\n\nThis link expires in 1 hour.`;
+    case "invite":
+      return `You've been invited to Authentic Community!\n\nAccept your invitation:\n${data.confirmation_url || data.url || SITE_URL}`;
+    case "email_change":
+      return `Authentic Community — Confirm your new email\n\nConfirm changing to ${data.new_email}:\n${data.confirmation_url || data.url || SITE_URL}`;
+    case "reauthentication":
+      return `Authentic Community — Your verification code: ${data.token || ""}`;
+    default:
+      return `Authentic Community notification`;
+  }
+}
+
+async function sendViaResend(to: string, subject: string, html: string, text: string): Promise<{ id?: string }> {
+  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
   }
 
-  // Verify signature + timestamp, then parse payload.
-  let payload: any
-  let run_id = ''
-  try {
-    const verified = await verifyWebhookRequest({
-      req,
-      secret: apiKey,
-      parser: parseEmailWebhookPayload,
-    })
-    payload = verified.payload
-    run_id = payload.run_id
-  } catch (error) {
-    if (error instanceof WebhookError) {
-      switch (error.code) {
-        case 'invalid_signature':
-        case 'missing_timestamp':
-        case 'invalid_timestamp':
-        case 'stale_timestamp':
-          console.error('Invalid webhook signature', { error: error.message })
-          return new Response(JSON.stringify({ error: 'Invalid signature' }), {
-            status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          })
-        case 'invalid_payload':
-        case 'invalid_json':
-          console.error('Invalid webhook payload', { error: error.message })
-          return new Response(
-            JSON.stringify({ error: 'Invalid webhook payload' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-      }
-    }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to: [to],
+      subject,
+      html,
+      text,
+    }),
+  });
 
-    console.error('Webhook verification failed', { error })
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+  const body = await res.json();
+
+  if (!res.ok) {
+    console.error("Resend API error", { status: res.status, body });
+    throw new Error(`Resend error [${res.status}]: ${JSON.stringify(body)}`);
   }
 
-  if (!run_id) {
-    console.error('Webhook payload missing run_id')
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
-  }
-
-  if (payload.version !== '1') {
-    console.error('Unsupported payload version', { version: payload.version, run_id })
-    return new Response(
-      JSON.stringify({ error: `Unsupported payload version: ${payload.version}` }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
-  }
-
-  // The email action type is in payload.data.action_type (e.g., "signup", "recovery")
-  // payload.type is the hook event type ("auth")
-  const emailType = payload.data.action_type
-  console.log('Received auth event', { emailType, email: payload.data.email, run_id })
-
-  const EmailTemplate = EMAIL_TEMPLATES[emailType]
-  if (!EmailTemplate) {
-    console.error('Unknown email type', { emailType, run_id })
-    return new Response(
-      JSON.stringify({ error: `Unknown email type: ${emailType}` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-  }
-
-  // Build template props from payload.data (HookData structure)
-  const templateProps = {
-    siteName: SITE_NAME,
-    siteUrl: `https://${ROOT_DOMAIN}`,
-    recipient: payload.data.email,
-    confirmationUrl: payload.data.url,
-    token: payload.data.token,
-    email: payload.data.email,
-    newEmail: payload.data.new_email,
-  }
-
-  // Render React Email to HTML and plain text
-  const html = await renderAsync(React.createElement(EmailTemplate, templateProps))
-  const text = await renderAsync(React.createElement(EmailTemplate, templateProps), {
-    plainText: true,
-  })
-
-  // Send email via Lovable Email API
-  // The callback URL is provided in the payload by Lovable, ensuring correct routing
-  // for both production and local development
-  const callbackUrl = payload.data.callback_url
-  if (!callbackUrl) {
-    console.error('No callback_url in payload', { run_id })
-    return new Response(JSON.stringify({ error: 'Missing callback_url in payload' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  let result: { message_id?: string }
-  try {
-    result = await sendLovableEmail(
-      {
-        run_id,
-        to: payload.data.email,
-        from: `${SITE_NAME} <noreply@${FROM_DOMAIN}>`,
-        sender_domain: SENDER_DOMAIN,
-        subject: EMAIL_SUBJECTS[emailType] || 'Notification',
-        html,
-        text,
-        purpose: 'transactional',
-      },
-      { apiKey, sendUrl: callbackUrl }
-    )
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send email'
-    console.error('Email API error', { error: message, run_id })
-    return new Response(JSON.stringify({ error: 'Failed to send email' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  console.log('Email sent successfully', { message_id: result.message_id, run_id })
-
-  return new Response(
-    JSON.stringify({ success: true, message_id: result.message_id }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
+  return body;
 }
 
 Deno.serve(async (req) => {
-  const url = new URL(req.url)
-
-  // Handle CORS preflight for main endpoint
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
-  // Route to preview handler for /preview path
-  if (url.pathname.endsWith('/preview')) {
-    return handlePreview(req)
-  }
-
-  // Main webhook handler
   try {
-    return await handleWebhook(req)
+    const payload = await req.json();
+    
+    // Support both direct calls and webhook-style payloads
+    const emailType = payload.type || payload.data?.action_type || "signup";
+    const email = payload.email || payload.data?.email || "";
+    const token = payload.token || payload.data?.token || "";
+    const url = payload.confirmation_url || payload.url || payload.data?.url || "";
+    const newEmail = payload.new_email || payload.data?.new_email || "";
+
+    console.log("Processing auth email", { emailType, email });
+
+    if (!email) {
+      return new Response(JSON.stringify({ error: "Missing email" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const data = { email, token, confirmation_url: url, url, new_email: newEmail };
+    const subject = EMAIL_SUBJECTS[emailType] || "Authentic Community Notification";
+    const html = buildEmailHtml(emailType, data);
+    const text = buildPlainText(emailType, data);
+
+    const result = await sendViaResend(email, subject, html, text);
+    console.log("Email sent successfully via Resend", { id: result.id, emailType, email });
+
+    return new Response(JSON.stringify({ success: true, id: result.id }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error('Webhook handler error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error("Auth email hook error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
-})
+});
