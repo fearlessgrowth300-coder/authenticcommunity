@@ -27,8 +27,8 @@ const Signup = () => {
     setLoading(true);
     try {
       await signUp(email, password, firstName, lastName);
-      toast.success("Account created!");
-      navigate("/onboarding/1");
+      toast.success("Verification code sent to your email!");
+      navigate("/verify-email", { state: { email } });
     } catch (err: any) {
       toast.error(err.message || "Failed to create account");
     } finally {

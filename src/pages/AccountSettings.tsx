@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Mail, Lock, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Lock, ShieldCheck, Trash2, Loader2, QrCode, Copy, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,6 +21,90 @@ const AccountSettings = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+
+  // 2FA state
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [enrolling, setEnrolling] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [totpSecret, setTotpSecret] = useState<string | null>(null);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [secretCopied, setSecretCopied] = useState(false);
+
+  useEffect(() => {
+    loadMfaFactors();
+  }, []);
+
+  const loadMfaFactors = async () => {
+    const { data } = await supabase.auth.mfa.listFactors();
+    if (data) {
+      setMfaFactors(data.totp || []);
+    }
+  };
+
+  const handleEnrollMfa = async () => {
+    setEnrolling(true);
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      if (error) throw error;
+      setQrCode(data.totp.qr_code);
+      setTotpSecret(data.totp.secret);
+      setFactorId(data.id);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start 2FA setup");
+    } finally {
+      setEnrolling(false);
+    }
+  };
+
+  const handleVerifyMfa = async () => {
+    if (!factorId || verifyCode.length < 6) return;
+    setLoading("mfa");
+    try {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
+      if (challengeError) throw challengeError;
+
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code: verifyCode,
+      });
+      if (verifyError) throw verifyError;
+
+      toast.success("Two-factor authentication enabled!");
+      setQrCode(null);
+      setTotpSecret(null);
+      setFactorId(null);
+      setVerifyCode("");
+      loadMfaFactors();
+    } catch (err: any) {
+      toast.error(err.message || "Invalid code. Try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleUnenrollMfa = async (id: string) => {
+    setLoading("mfa-remove");
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+      if (error) throw error;
+      toast.success("Two-factor authentication disabled");
+      loadMfaFactors();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disable 2FA");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const copySecret = () => {
+    if (totpSecret) {
+      navigator.clipboard.writeText(totpSecret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    }
+  };
 
   const handleChangeEmail = async () => {
     if (!newEmail) return toast.error("Please enter a new email");
@@ -119,6 +203,69 @@ const AccountSettings = () => {
           <Button onClick={handleChangePassword} disabled={loading === "password"} size="sm" className="w-full">
             {loading === "password" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Password"}
           </Button>
+        </section>
+
+        {/* 2FA */}
+        <section className="bg-card rounded-xl shadow-card border border-border/50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Two-Factor Authentication</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">Add an extra layer of security using an authenticator app.</p>
+
+          {mfaFactors.filter(f => f.status === "verified").length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg">
+                <Check className="h-4 w-4 text-green-500" />
+                <span className="text-xs font-medium text-green-600">2FA is enabled</span>
+              </div>
+              {mfaFactors.filter(f => f.status === "verified").map((factor) => (
+                <Button
+                  key={factor.id}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive"
+                  onClick={() => handleUnenrollMfa(factor.id)}
+                  disabled={loading === "mfa-remove"}
+                >
+                  {loading === "mfa-remove" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disable 2FA"}
+                </Button>
+              ))}
+            </div>
+          ) : qrCode ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</p>
+              <div className="flex justify-center p-4 bg-white rounded-lg">
+                <img src={qrCode} alt="2FA QR Code" className="w-48 h-48" />
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-muted p-2 rounded font-mono break-all">{totpSecret}</code>
+                <Button variant="ghost" size="sm" onClick={copySecret} className="shrink-0">
+                  {secretCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Enter the 6-digit code from your authenticator app:</p>
+              <Input
+                placeholder="000000"
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="text-center tracking-widest font-mono text-lg"
+                maxLength={6}
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => { setQrCode(null); setTotpSecret(null); setFactorId(null); setVerifyCode(""); }}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="flex-1" onClick={handleVerifyMfa} disabled={loading === "mfa" || verifyCode.length < 6}>
+                  {loading === "mfa" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & Enable"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="w-full" onClick={handleEnrollMfa} disabled={enrolling}>
+              {enrolling ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Setting up...</> : "Enable 2FA"}
+            </Button>
+          )}
         </section>
 
         {/* Delete Account */}
