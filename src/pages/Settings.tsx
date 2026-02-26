@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Shield, Bell, HelpCircle, LogOut, ChevronRight, CreditCard } from "lucide-react";
+import { ArrowLeft, User, Shield, Bell, HelpCircle, LogOut, ChevronRight, CreditCard, Settings2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +31,19 @@ const sections = [
 
 const SettingsPage = () => {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle()
+      .then(({ data }) => setIsAdmin(!!data));
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -71,6 +85,22 @@ const SettingsPage = () => {
             </div>
           </div>
         ))}
+
+        {isAdmin && (
+          <button
+            onClick={() => navigate("/admin")}
+            className="w-full flex items-center gap-3 px-4 py-3.5 bg-card rounded-xl shadow-card border border-primary/30 hover:bg-primary/5 transition-colors"
+          >
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Settings2 className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium text-foreground">Admin Dashboard</p>
+              <p className="text-xs text-muted-foreground">Manage platform settings</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
 
         <button
           onClick={handleLogout}
