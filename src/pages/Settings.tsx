@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Shield, Bell, HelpCircle, LogOut, ChevronRight, CreditCard, Settings2 } from "lucide-react";
+import { ArrowLeft, User, Shield, Bell, HelpCircle, LogOut, ChevronRight, CreditCard, Settings2, BookOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { WelcomeGuide } from "@/components/WelcomeGuide";
 
 const sections = [
   {
     title: "Account",
     items: [
-      { icon: User, label: "Account Settings", desc: "Email, password, 2FA", path: "/settings/account" },
+      { icon: User, label: "Account Settings", desc: "Email, password", path: "/settings/account" },
       { icon: CreditCard, label: "Subscription", desc: "Free plan", path: "/settings/subscription" },
     ],
   },
@@ -25,6 +26,7 @@ const sections = [
     title: "Support",
     items: [
       { icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us", path: "/settings/help" },
+      { icon: BookOpen, label: "App Guide", desc: "Learn how the app works", action: "guide" },
     ],
   },
 ];
@@ -33,6 +35,7 @@ const SettingsPage = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -71,7 +74,10 @@ const SettingsPage = () => {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">{section.title}</p>
             <div className="bg-card rounded-xl shadow-card border border-border/50 divide-y divide-border">
               {section.items.map((item) => (
-                <button key={item.label} onClick={() => item.path ? navigate(item.path) : null} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
+                <button key={item.label} onClick={() => {
+                  if ((item as any).action === "guide") setShowGuide(true);
+                  else if ((item as any).path) navigate((item as any).path);
+                }} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <item.icon className="h-4 w-4 text-primary" />
                   </div>
@@ -114,6 +120,7 @@ const SettingsPage = () => {
 
         <p className="text-center text-xs text-muted-foreground pt-4">Authentic Community Connection v1.0</p>
       </main>
+      <WelcomeGuide open={showGuide} onClose={() => setShowGuide(false)} />
     </div>
   );
 };
