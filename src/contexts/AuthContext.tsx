@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  onboardingCompleted: boolean | null;
+  refreshOnboarding: () => void;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -18,17 +19,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+
+  const fetchOnboarding = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("onboarding_completed")
+      .eq("user_id", userId)
+      .maybeSingle();
+    setOnboardingCompleted(data?.onboarding_completed ?? false);
+  };
+
+  const refreshOnboarding = () => {
+    if (user) fetchOnboarding(user.id);
+  };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchOnboarding(session.user.id);
+      } else {
+        setOnboardingCompleted(null);
+      }
       setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchOnboarding(session.user.id);
+      } else {
+        setOnboardingCompleted(null);
+      }
       setLoading(false);
     });
 
@@ -58,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, onboardingCompleted, refreshOnboarding, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
