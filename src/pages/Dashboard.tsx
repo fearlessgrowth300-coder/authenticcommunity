@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { WelcomeGuide } from "@/components/WelcomeGuide";
 
 interface Profile {
   first_name: string | null;
@@ -23,7 +24,14 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ matches: 0, communities: 0, events: 0 });
   const [loading, setLoading] = useState(true);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [showGuide, setShowGuide] = useState(() => {
+    return !localStorage.getItem("welcome_guide_seen");
+  });
 
+  const closeGuide = () => {
+    setShowGuide(false);
+    localStorage.setItem("welcome_guide_seen", "true");
+  };
   useEffect(() => {
     if (!user) return;
 
@@ -180,6 +188,7 @@ const Dashboard = () => {
           )}
         </section>
       </main>
+      <WelcomeGuide open={showGuide} onClose={closeGuide} />
     </div>
   );
 };

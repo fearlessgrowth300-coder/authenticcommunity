@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationMap } from "@/components/LocationMap";
+import { MAPBOX_PUBLIC_TOKEN } from "@/lib/constants";
 
 const steps = ["Location", "Interests", "Values", "Photo & Bio"];
 
@@ -27,6 +28,44 @@ const Onboarding = () => {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [country, setCountry] = useState("");
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(false);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 37.7749, lng: -122.4194 });
+
+  const detectLocation = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setMapCenter({ lat: latitude, lng: longitude });
+        try {
+          const res = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${MAPBOX_PUBLIC_TOKEN}&types=place,region,country`
+          );
+          const data = await res.json();
+          for (const feat of data.features || []) {
+            if (feat.place_type?.includes("place")) setCity(feat.text);
+            if (feat.place_type?.includes("region")) setState(feat.text);
+            if (feat.place_type?.includes("country")) setCountry(feat.text);
+          }
+          setLocationDetected(true);
+          toast.success("Location detected!");
+        } catch {
+          toast.error("Could not determine your city");
+        }
+        setDetectingLocation(false);
+      },
+      () => {
+        toast.error("Permission denied. Please enter your location manually.");
+        setDetectingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   // Step 2: Interests
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -176,6 +215,25 @@ const Onboarding = () => {
             <h2 className="text-xl font-bold text-foreground mb-1">Where are you located?</h2>
             <p className="text-muted-foreground text-sm mb-6">We'll find communities and connections near you.</p>
             <div className="space-y-4">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={detectLocation}
+                disabled={detectingLocation}
+              >
+                {detectingLocation ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Detecting location...</>
+                ) : locationDetected ? (
+                  <><Check className="h-4 w-4 text-green-500" /> Location detected</>
+                ) : (
+                  <><MapPin className="h-4 w-4" /> Use my current location</>
+                )}
+              </Button>
+              <div className="relative flex items-center gap-2">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or enter manually</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
               <div className="space-y-2">
                 <Label>City</Label>
                 <div className="relative">
@@ -199,6 +257,8 @@ const Onboarding = () => {
                   if (s) setState(s);
                   if (co) setCountry(co);
                 }}
+                initialLat={mapCenter.lat}
+                initialLng={mapCenter.lng}
                 className="w-full h-48 rounded-xl overflow-hidden border border-border"
               />
               <p className="text-xs text-muted-foreground">Tap the map or drag the pin to set your location</p>
