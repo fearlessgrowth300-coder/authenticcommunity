@@ -19,10 +19,10 @@ export function BottomNav() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  const hideOn = ["/", "/login", "/signup", "/onboarding"];
+  const hideOn = ["/", "/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"];
   const shouldHide = hideOn.some(
-    (path) => location.pathname === path || location.pathname.startsWith("/onboarding")
-  ) || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
+    (path) => location.pathname === path
+  ) || location.pathname.startsWith("/onboarding") || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
 
   useEffect(() => {
     if (!user) return;

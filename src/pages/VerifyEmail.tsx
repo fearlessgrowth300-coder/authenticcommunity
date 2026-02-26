@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Mail, Loader2 } from "lucide-react";
@@ -6,16 +6,37 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+const CODE_EXPIRY_SECONDS = 15 * 60; // 15 minutes
+const RESEND_COOLDOWN = 60; // 60 seconds
+
 const VerifyEmail = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const email = (location.state as any)?.email || "";
+  const locState = location.state as any;
+  const email = locState?.email || "";
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [expirySeconds, setExpirySeconds] = useState(CODE_EXPIRY_SECONDS);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
-  const handleVerify = async () => {
-    if (code.length < 6) return toast.error("Please enter the 6-digit code");
+  // Countdown timers
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setExpirySeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const handleVerify = useCallback(async () => {
+    if (code.length < 6) return;
     setLoading(true);
     try {
       const { error } = await supabase.auth.verifyOtp({
@@ -24,6 +45,30 @@ const VerifyEmail = () => {
         type: "signup",
       });
       if (error) throw error;
+
+      // Save signup metadata (country, DOB) to profile
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && locState) {
+        const countryName = locState.country || null;
+        const stateProv = locState.stateProv || null;
+        const dob = locState.dateOfBirth || null;
+        let age: number | null = null;
+        if (dob) {
+          const birth = new Date(dob);
+          const today = new Date();
+          age = today.getFullYear() - birth.getFullYear();
+          const m = today.getMonth() - birth.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        }
+
+        await supabase.from("profiles").update({
+          location_country: countryName,
+          location_state: stateProv,
+          date_of_birth: dob,
+          age,
+        }).eq("user_id", user.id);
+      }
+
       toast.success("Email verified! Welcome aboard.");
       navigate("/onboarding/1");
     } catch (err: any) {
@@ -31,9 +76,17 @@ const VerifyEmail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [code, email, locState, navigate]);
+
+  // Auto-submit when 6 digits entered
+  useEffect(() => {
+    if (code.length === 6) {
+      handleVerify();
+    }
+  }, [code, handleVerify]);
 
   const handleResend = async () => {
+    if (resendCooldown > 0) return;
     setResending(true);
     try {
       const { error } = await supabase.auth.resend({
@@ -42,6 +95,9 @@ const VerifyEmail = () => {
       });
       if (error) throw error;
       toast.success("New code sent to your email");
+      setResendCooldown(RESEND_COOLDOWN);
+      setExpirySeconds(CODE_EXPIRY_SECONDS);
+      setCode("");
     } catch (err: any) {
       toast.error(err.message || "Failed to resend code");
     } finally {
@@ -63,7 +119,12 @@ const VerifyEmail = () => {
         <p className="text-muted-foreground text-sm mb-2">
           We sent a 6-digit verification code to
         </p>
-        <p className="text-foreground font-medium mb-8">{email}</p>
+        <p className="text-foreground font-medium mb-2">{email}</p>
+        
+        {/* Expiry countdown */}
+        <p className={`text-xs mb-6 ${expirySeconds < 120 ? "text-destructive" : "text-muted-foreground"}`}>
+          ⏱️ Code expires in {formatTime(expirySeconds)}
+        </p>
 
         <div className="mb-6">
           <InputOTP maxLength={6} value={code} onChange={setCode}>
@@ -82,12 +143,24 @@ const VerifyEmail = () => {
           {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Verifying...</> : "Verify Email"}
         </Button>
 
-        <p className="text-sm text-muted-foreground mt-6">
-          Didn't receive the code?{" "}
-          <button onClick={handleResend} disabled={resending} className="text-primary font-medium hover:underline">
-            {resending ? "Sending..." : "Resend code"}
+        <div className="mt-6 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Didn't receive the code?{" "}
+            <button
+              onClick={handleResend}
+              disabled={resending || resendCooldown > 0}
+              className="text-primary font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {resending ? "Sending..." : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+            </button>
+          </p>
+          <button
+            onClick={() => navigate("/signup")}
+            className="text-sm text-muted-foreground hover:text-foreground underline"
+          >
+            Change email address
           </button>
-        </p>
+        </div>
       </div>
     </div>
   );

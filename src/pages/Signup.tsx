@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Mail, Lock, User, Eye, EyeOff, Loader2, Calendar, Globe } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { countries, statesByCountry, detectCountryFromIP } from "@/lib/countries";
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -16,7 +20,35 @@ const Signup = () => {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedState, setSelectedState] = useState("");
   const [loading, setLoading] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(true);
+
+  useEffect(() => {
+    detectCountryFromIP().then((loc) => {
+      if (loc) {
+        const matched = countries.find(
+          (c) => c.code === loc.countryCode || c.name === loc.country
+        );
+        if (matched) setSelectedCountry(matched.code);
+        if (loc.state) setSelectedState(loc.state);
+      }
+      setDetectingLocation(false);
+    });
+  }, []);
+
+  const availableStates = statesByCountry[selectedCountry] || [];
+
+  const getAge = (dob: string) => {
+    const birth = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +56,29 @@ const Signup = () => {
       toast.error("Password must be at least 8 characters");
       return;
     }
+    if (dateOfBirth) {
+      const age = getAge(dateOfBirth);
+      if (age < 18) {
+        toast.error("You must be at least 18 years old to sign up");
+        return;
+      }
+    }
+    if (!selectedCountry) {
+      toast.error("Please select your country");
+      return;
+    }
     setLoading(true);
     try {
       await signUp(email, password, firstName, lastName);
       toast.success("Verification code sent to your email!");
-      navigate("/verify-email", { state: { email } });
+      navigate("/verify-email", {
+        state: {
+          email,
+          dateOfBirth,
+          country: selectedCountry,
+          stateProv: selectedState,
+        },
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to create account");
     } finally {
@@ -51,13 +101,13 @@ const Signup = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col px-6 pt-4 max-w-lg mx-auto">
-      <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground transition-colors self-start mb-8">
+      <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground transition-colors self-start mb-6">
         <ArrowLeft className="h-5 w-5" />
       </button>
 
       <div className="animate-fade-in">
         <h1 className="text-2xl font-bold text-foreground mb-1">Create your account</h1>
-        <p className="text-muted-foreground mb-8">Start building authentic connections</p>
+        <p className="text-muted-foreground mb-6">Start building authentic connections</p>
       </div>
 
       <form onSubmit={handleSignup} className="space-y-4 animate-slide-up">
@@ -94,8 +144,54 @@ const Signup = () => {
           </div>
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="dob">Date of birth</Label>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="dob"
+              type="date"
+              className="pl-10"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split("T")[0]}
+              required
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">You must be 18 or older</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label>Country</Label>
+            <Select value={selectedCountry} onValueChange={(v) => { setSelectedCountry(v); setSelectedState(""); }}>
+              <SelectTrigger>
+                <SelectValue placeholder={detectingLocation ? "Detecting..." : "Select country"} />
+              </SelectTrigger>
+              <SelectContent>
+                {countries.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>State / Province</Label>
+            <Select value={selectedState} onValueChange={setSelectedState} disabled={availableStates.length === 0}>
+              <SelectTrigger>
+                <SelectValue placeholder={availableStates.length ? "Select" : "N/A"} />
+              </SelectTrigger>
+              <SelectContent>
+                {availableStates.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <Button variant="gradient" size="lg" className="w-full mt-2" type="submit" disabled={loading}>
-          {loading ? "Creating account..." : "Create Account"}
+          {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating account...</> : "Create Account"}
         </Button>
       </form>
 
