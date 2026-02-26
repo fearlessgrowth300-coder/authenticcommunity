@@ -17,6 +17,7 @@ const EMAIL_SUBJECTS: Record<string, string> = {
   invite: "You've been invited to Authentic Community",
   email_change: "Confirm your new email — Authentic Community",
   reauthentication: "Your verification code",
+  auth: "Your verification code for Authentic Community",
 };
 
 function buildSignupHtml(token: string, email: string): string {
@@ -236,6 +237,21 @@ function firstNonEmptyString(...values: unknown[]): string {
   return "";
 }
 
+function tokenFromUrl(value: string): string {
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    return firstNonEmptyString(
+      parsed.searchParams.get("token"),
+      parsed.searchParams.get("otp"),
+      parsed.searchParams.get("code"),
+    );
+  } catch {
+    return "";
+  }
+}
+
 async function sendViaResend(to: string, subject: string, html: string, text: string): Promise<{ id?: string }> {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) {
@@ -301,21 +317,30 @@ Deno.serve(async (req) => {
       data.to,
     );
 
-    const token = firstNonEmptyString(
-      payload.token,
-      data.token,
-      emailData.token,
-      emailData.otp,
-    );
-
     const url = firstNonEmptyString(
       payload.confirmation_url,
       payload.url,
+      payload.action_link,
       data.confirmation_url,
       data.url,
+      data.action_link,
       emailData.confirmation_url,
       emailData.action_link,
       emailData.url,
+    );
+
+    const token = firstNonEmptyString(
+      payload.token,
+      payload.otp,
+      payload.code,
+      data.token,
+      data.otp,
+      data.code,
+      emailData.token,
+      emailData.otp,
+      emailData.code,
+      tokenFromUrl(url),
+      tokenFromUrl(firstNonEmptyString(payload.action_link, data.action_link, emailData.action_link)),
     );
 
     const newEmail = firstNonEmptyString(
@@ -325,7 +350,44 @@ Deno.serve(async (req) => {
       emailData.new_email,
     );
 
-    console.log("Processing auth email", { emailType, email });
+    const providedSubject = firstNonEmptyString(
+      payload.subject,
+      data.subject,
+      emailData.subject,
+    );
+
+    const providedHtml = firstNonEmptyString(
+      payload.html,
+      payload.body_html,
+      payload.bodyHtml,
+      data.html,
+      data.body_html,
+      data.bodyHtml,
+      emailData.html,
+      emailData.body_html,
+      emailData.bodyHtml,
+    );
+
+    const providedText = firstNonEmptyString(
+      payload.text,
+      payload.body_text,
+      payload.bodyText,
+      data.text,
+      data.body_text,
+      data.bodyText,
+      emailData.text,
+      emailData.body_text,
+      emailData.bodyText,
+    );
+
+    console.log("Processing auth email", {
+      emailType,
+      email,
+      tokenLength: token.length,
+      urlPresent: Boolean(url),
+      hasProvidedHtml: Boolean(providedHtml),
+      hasProvidedText: Boolean(providedText),
+    });
 
     if (!email) {
       console.error("Auth email payload missing recipient", {
@@ -342,10 +404,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    const templateType = emailType === "auth" ? "signup" : emailType;
     const emailTemplateData = { email, token, confirmation_url: url, url, new_email: newEmail };
-    const subject = EMAIL_SUBJECTS[emailType] || "Authentic Community Notification";
-    const html = buildEmailHtml(emailType, emailTemplateData);
-    const text = buildPlainText(emailType, emailTemplateData);
+    const subject = providedSubject || EMAIL_SUBJECTS[emailType] || "Authentic Community Notification";
+    const html = providedHtml || buildEmailHtml(templateType, emailTemplateData);
+    const text = providedText || buildPlainText(templateType, emailTemplateData);
 
     const result = await sendViaResend(email, subject, html, text);
     console.log("Email sent successfully via Resend", { id: result.id, emailType, email });
