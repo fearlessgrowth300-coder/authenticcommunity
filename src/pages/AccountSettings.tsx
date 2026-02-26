@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Mail, Lock, ShieldCheck, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Lock, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -118,18 +118,6 @@ const AccountSettings = () => {
           </div>
           <Button onClick={handleChangePassword} disabled={loading === "password"} size="sm" className="w-full">
             {loading === "password" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Password"}
-          </Button>
-        </section>
-
-        {/* 2FA */}
-        <section className="bg-card rounded-xl shadow-card border border-border/50 p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Two-Factor Authentication</h2>
-          </div>
-          <p className="text-xs text-muted-foreground">Add an extra layer of security to your account.</p>
-          <Button variant="outline" size="sm" className="w-full" onClick={() => toast.info("2FA setup coming soon")}>
-            Enable 2FA (Coming Soon)
           </Button>
         </section>
 
