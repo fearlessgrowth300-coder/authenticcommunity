@@ -15,9 +15,11 @@ type VerifyLocationState = {
 
 const CODE_EXPIRY_SECONDS = 15 * 60; // 15 minutes
 const RESEND_COOLDOWN = 60; // 60 seconds
+const CODE_MIN_LENGTH = 6;
+const CODE_MAX_LENGTH = 8;
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
-const normalizeCode = (value: string) => value.replace(/\D/g, "").slice(0, 6);
+const normalizeCode = (value: string) => value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, CODE_MAX_LENGTH);
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
@@ -65,7 +67,7 @@ const VerifyEmail = () => {
 
   const handleVerify = useCallback(async () => {
     const sanitizedCode = normalizeCode(code);
-    if (loading || !email || sanitizedCode.length < 6 || verifyCooldown > 0) return;
+    if (loading || !email || sanitizedCode.length < CODE_MIN_LENGTH || verifyCooldown > 0) return;
 
     const now = Date.now();
     if (
@@ -205,7 +207,7 @@ const VerifyEmail = () => {
           <Mail className="h-8 w-8 text-primary-foreground" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
-        <p className="text-muted-foreground text-sm mb-2">We sent a 6-digit verification code to</p>
+        <p className="text-muted-foreground text-sm mb-2">We sent a verification code to</p>
         <p className="text-foreground font-medium mb-2">{email}</p>
 
         {/* Expiry countdown */}
@@ -215,8 +217,8 @@ const VerifyEmail = () => {
 
         <div className="mb-6">
           <InputOTP
-            maxLength={6}
-            inputMode="numeric"
+            maxLength={CODE_MAX_LENGTH}
+            inputMode="text"
             value={code}
             onChange={(value) => setCode(normalizeCode(value))}
           >
@@ -227,6 +229,8 @@ const VerifyEmail = () => {
               <InputOTPSlot index={3} />
               <InputOTPSlot index={4} />
               <InputOTPSlot index={5} />
+              <InputOTPSlot index={6} />
+              <InputOTPSlot index={7} />
             </InputOTPGroup>
           </InputOTP>
         </div>
@@ -236,7 +240,7 @@ const VerifyEmail = () => {
           size="lg"
           className="w-full max-w-xs"
           onClick={handleVerify}
-          disabled={loading || verifyCooldown > 0 || normalizeCode(code).length < 6}
+          disabled={loading || verifyCooldown > 0 || normalizeCode(code).length < CODE_MIN_LENGTH}
         >
           {loading ? (
             <>
