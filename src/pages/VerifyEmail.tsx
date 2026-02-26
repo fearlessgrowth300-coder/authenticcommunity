@@ -34,6 +34,7 @@ const VerifyEmail = () => {
   const [resending, setResending] = useState(false);
   const [expirySeconds, setExpirySeconds] = useState(CODE_EXPIRY_SECONDS);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [verifyCooldown, setVerifyCooldown] = useState(0);
 
   useEffect(() => {
     if (email) {
@@ -50,6 +51,7 @@ const VerifyEmail = () => {
     const timer = setInterval(() => {
       setExpirySeconds((prev) => (prev > 0 ? prev - 1 : 0));
       setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      setVerifyCooldown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -62,34 +64,28 @@ const VerifyEmail = () => {
 
   const handleVerify = useCallback(async () => {
     const sanitizedCode = normalizeCode(code);
-    if (loading || !email || sanitizedCode.length < 6) return;
+    if (loading || !email || sanitizedCode.length < 6 || verifyCooldown > 0) return;
 
     setLoading(true);
     try {
-      const otpTypes: Array<"email" | "signup"> = ["email", "signup"];
-      let verifyError: Error | null = null;
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: sanitizedCode,
+        type: "signup",
+      });
 
-      for (const otpType of otpTypes) {
-        const { error } = await supabase.auth.verifyOtp({
-          email,
-          token: sanitizedCode,
-          type: otpType,
-        });
-
-        if (!error) {
-          verifyError = null;
-          break;
+      if (error) {
+        const errorMessage = (error.message || "").toLowerCase();
+        if (errorMessage.includes("rate limit")) {
+          setVerifyCooldown(10);
+          throw new Error("Request rate limit reached. Please wait 10 seconds.");
         }
-
-        verifyError = error;
-        const msg = (error.message || "").toLowerCase();
-        const isRetryable =
-          msg.includes("invalid") || msg.includes("expired") || msg.includes("otp") || msg.includes("token");
-
-        if (!isRetryable) break;
+        throw error;
       }
 
-      if (verifyError) throw verifyError;
+      if (!data?.user && !data?.session) {
+        throw new Error("Verification could not be confirmed. Please request a new code.");
+      }
 
       // Save signup metadata (country, DOB) to profile
       const {
@@ -125,21 +121,22 @@ const VerifyEmail = () => {
       toast.success("Email verified! Welcome aboard.");
       navigate("/onboarding/1");
     } catch (err: any) {
-      toast.error(err.message || "Invalid or expired code");
+      const message = (err?.message || "").toLowerCase();
+
+      if (message.includes("rate limit")) {
+        toast.error("Too many attempts. Please wait and try again.");
+      } else if (message.includes("expired") || message.includes("invalid")) {
+        toast.error("This code is invalid or expired. Please resend and use the newest code.");
+      } else {
+        toast.error(err?.message || "Verification failed");
+      }
     } finally {
       setLoading(false);
     }
-  }, [code, email, loading, locState, navigate]);
-
-  // Auto-submit when 6 digits entered
-  useEffect(() => {
-    if (normalizeCode(code).length === 6) {
-      handleVerify();
-    }
-  }, [code, handleVerify]);
+  }, [code, email, loading, locState, navigate, verifyCooldown]);
 
   const handleResend = async () => {
-    if (resendCooldown > 0 || !email) return;
+    if (resendCooldown > 0 || !email || resending) return;
 
     setResending(true);
     try {
@@ -152,6 +149,7 @@ const VerifyEmail = () => {
       toast.success("New code sent to your email");
       setResendCooldown(RESEND_COOLDOWN);
       setExpirySeconds(CODE_EXPIRY_SECONDS);
+      setVerifyCooldown(0);
       setCode("");
     } catch (err: any) {
       toast.error(err.message || "Failed to resend code");
@@ -197,15 +195,27 @@ const VerifyEmail = () => {
           </InputOTP>
         </div>
 
-        <Button variant="gradient" size="lg" className="w-full max-w-xs" onClick={handleVerify} disabled={loading || normalizeCode(code).length < 6}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="w-full max-w-xs"
+          onClick={handleVerify}
+          disabled={loading || verifyCooldown > 0 || normalizeCode(code).length < 6}
+        >
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" /> Verifying...
             </>
+          ) : verifyCooldown > 0 ? (
+            `Try again in ${verifyCooldown}s`
           ) : (
             "Verify Email"
           )}
         </Button>
+
+        {verifyCooldown > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">Too many attempts detected. Please wait before trying again.</p>
+        )}
 
         <div className="mt-6 space-y-2">
           <p className="text-sm text-muted-foreground">
