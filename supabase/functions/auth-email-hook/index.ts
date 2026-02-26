@@ -219,6 +219,23 @@ function buildPlainText(type: string, data: Record<string, any>): string {
   }
 }
 
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+      const first = value[0];
+      if (typeof first === "string" && first.trim().length > 0) {
+        return first.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
 async function sendViaResend(to: string, subject: string, html: string, text: string): Promise<{ id?: string }> {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) {
@@ -256,28 +273,79 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload = await req.json();
+    const payload = await req.json() as Record<string, any>;
+    const data = (payload.data ?? {}) as Record<string, any>;
+    const emailData = (payload.email_data ?? data.email_data ?? {}) as Record<string, any>;
+    const user = (payload.user ?? data.user ?? {}) as Record<string, any>;
     
-    // Support both direct calls and webhook-style payloads
-    const emailType = payload.type || payload.data?.action_type || "signup";
-    const email = payload.email || payload.data?.email || "";
-    const token = payload.token || payload.data?.token || "";
-    const url = payload.confirmation_url || payload.url || payload.data?.url || "";
-    const newEmail = payload.new_email || payload.data?.new_email || "";
+    // Support direct calls, webhook payloads, and auth hook payloads
+    const emailType = firstNonEmptyString(
+      payload.type,
+      payload.action_type,
+      data.action_type,
+      payload.email_action_type,
+      emailData.email_action_type,
+      emailData.action_type,
+      "signup",
+    );
+
+    const email = firstNonEmptyString(
+      payload.email,
+      data.email,
+      user.email,
+      payload.recipient,
+      data.recipient,
+      emailData.email,
+      emailData.recipient,
+      payload.to,
+      data.to,
+    );
+
+    const token = firstNonEmptyString(
+      payload.token,
+      data.token,
+      emailData.token,
+      emailData.otp,
+    );
+
+    const url = firstNonEmptyString(
+      payload.confirmation_url,
+      payload.url,
+      data.confirmation_url,
+      data.url,
+      emailData.confirmation_url,
+      emailData.action_link,
+      emailData.url,
+    );
+
+    const newEmail = firstNonEmptyString(
+      payload.new_email,
+      data.new_email,
+      user.new_email,
+      emailData.new_email,
+    );
 
     console.log("Processing auth email", { emailType, email });
 
     if (!email) {
+      console.error("Auth email payload missing recipient", {
+        emailType,
+        payloadKeys: Object.keys(payload ?? {}),
+        dataKeys: Object.keys(data ?? {}),
+        userKeys: Object.keys(user ?? {}),
+        emailDataKeys: Object.keys(emailData ?? {}),
+      });
+
       return new Response(JSON.stringify({ error: "Missing email" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = { email, token, confirmation_url: url, url, new_email: newEmail };
+    const emailTemplateData = { email, token, confirmation_url: url, url, new_email: newEmail };
     const subject = EMAIL_SUBJECTS[emailType] || "Authentic Community Notification";
-    const html = buildEmailHtml(emailType, data);
-    const text = buildPlainText(emailType, data);
+    const html = buildEmailHtml(emailType, emailTemplateData);
+    const text = buildPlainText(emailType, emailTemplateData);
 
     const result = await sendViaResend(email, subject, html, text);
     console.log("Email sent successfully via Resend", { id: result.id, emailType, email });
