@@ -162,8 +162,10 @@ export default function AdminUsers() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                     <TableHead>Name</TableHead>
                     <TableHead className="hidden md:table-cell">Location</TableHead>
+                    <TableHead className="hidden lg:table-cell">Gender</TableHead>
+                    <TableHead className="hidden lg:table-cell">Age</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Joined</TableHead>
                     <TableHead className="w-[60px]">Actions</TableHead>
@@ -181,7 +183,13 @@ export default function AdminUsers() {
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                        {u.location_city || "—"}
+                        {[u.location_city, u.location_state, u.location_country].filter(Boolean).join(", ") || "—"}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {u.gender || "—"}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {u.age || "—"}
                       </TableCell>
                       <TableCell>{getStatusBadge(u.account_status)}</TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
@@ -219,7 +227,7 @@ export default function AdminUsers() {
                   ))}
                   {!users?.length && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No users found
                       </TableCell>
                     </TableRow>

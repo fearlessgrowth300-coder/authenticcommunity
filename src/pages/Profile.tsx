@@ -10,6 +10,7 @@ interface ProfileData {
   first_name: string | null;
   last_name: string | null;
   age: number | null;
+  gender: string | null;
   bio: string | null;
   profile_image_url: string | null;
   location_city: string | null;
@@ -31,7 +32,7 @@ const Profile = () => {
 
     const load = async () => {
       const [profileRes, interestsRes, valuesRes, connectionsRes, membersRes, attendeesRes, roleRes] = await Promise.all([
-        supabase.from("profiles").select("first_name, last_name, age, bio, profile_image_url, location_city, location_state").eq("user_id", user.id).maybeSingle(),
+        supabase.from("profiles").select("first_name, last_name, age, gender, bio, profile_image_url, location_city, location_state").eq("user_id", user.id).maybeSingle(),
         supabase.from("user_interests").select("interest_name").eq("user_id", user.id),
         supabase.from("user_values").select("value_name").eq("user_id", user.id),
         supabase.from("connections").select("id").or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
@@ -97,6 +98,9 @@ const Profile = () => {
           <h2 className="text-xl font-bold text-foreground mt-3">
             {displayName}{profile?.age ? `, ${profile.age}` : ""}
           </h2>
+          {profile?.gender && profile.gender !== "Prefer not to say" && (
+            <p className="text-sm text-muted-foreground">{profile.gender}</p>
+          )}
           {isAdmin && (
             <Badge className="mt-1.5 bg-primary/10 text-primary border-primary/30 hover:bg-primary/20">
               <ShieldCheck className="h-3 w-3 mr-1" />

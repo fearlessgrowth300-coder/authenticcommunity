@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Camera, Loader2, X } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { interestCategories, valueOptions } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -22,6 +26,7 @@ const EditProfile = () => {
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
+  const [gender, setGender] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
@@ -48,6 +53,7 @@ const EditProfile = () => {
         setCity(p.location_city || "");
         setState(p.location_state || "");
         setProfileImageUrl(p.profile_image_url);
+        setGender(p.gender || "");
       }
 
       setSelectedInterests(interestsRes.data?.map((i) => i.interest_name) || []);
@@ -110,6 +116,7 @@ const EditProfile = () => {
         last_name: lastName.trim() || null,
         age: age ? parseInt(age) : null,
         bio: bio.trim() || null,
+        gender: gender || null,
         location_city: city.trim() || null,
         location_state: state.trim() || null,
         profile_image_url: profileImageUrl,
@@ -195,7 +202,26 @@ const EditProfile = () => {
             <Input placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             <Input placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </div>
-          <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Age</Label>
+              <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Non-binary">Non-binary</SelectItem>
+                  <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
             <Input placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />

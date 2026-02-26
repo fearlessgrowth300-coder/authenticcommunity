@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, MapPin, Camera, Check, Loader2 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { interestCategories, valueOptions } from "@/lib/mockData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,8 +34,10 @@ const Onboarding = () => {
   // Step 3: Values
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
 
-  // Step 4: Bio & Photo
+  // Step 4: Bio, Photo, Gender & Age
   const [bio, setBio] = useState("");
+  const [gender, setGender] = useState("");
+  const [age, setAge] = useState("");
   const [saving, setSaving] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -80,6 +85,8 @@ const Onboarding = () => {
         location_state: state || null,
         location_country: country || null,
         bio: bio || null,
+        gender: gender || null,
+        age: age ? parseInt(age) : null,
         onboarding_completed: true,
       };
       if (avatarUrl) updateData.profile_image_url = avatarUrl;
@@ -280,6 +287,26 @@ const Onboarding = () => {
                     </>
                   )}
                 </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select value={gender} onValueChange={setGender}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Non-binary">Non-binary</SelectItem>
+                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Age</Label>
+                  <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Bio</Label>
