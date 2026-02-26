@@ -513,6 +513,7 @@ export type Database = {
           allow_messages: boolean | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           first_name: string | null
           gender: string | null
           id: string
@@ -523,12 +524,19 @@ export type Database = {
           location_country: string | null
           location_state: string | null
           longitude: number | null
+          looking_for: string | null
+          max_age: number | null
+          max_distance_km: number | null
+          min_age: number | null
+          occupation: string | null
           onboarding_completed: boolean | null
+          onboarding_step: number | null
           profile_image_url: string | null
           show_in_search: boolean | null
           show_location: boolean | null
           suspended_until: string | null
           suspension_reason: string | null
+          target_countries: string[] | null
           updated_at: string
           user_id: string
         }
@@ -539,6 +547,7 @@ export type Database = {
           allow_messages?: boolean | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           first_name?: string | null
           gender?: string | null
           id?: string
@@ -549,12 +558,19 @@ export type Database = {
           location_country?: string | null
           location_state?: string | null
           longitude?: number | null
+          looking_for?: string | null
+          max_age?: number | null
+          max_distance_km?: number | null
+          min_age?: number | null
+          occupation?: string | null
           onboarding_completed?: boolean | null
+          onboarding_step?: number | null
           profile_image_url?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
           suspended_until?: string | null
           suspension_reason?: string | null
+          target_countries?: string[] | null
           updated_at?: string
           user_id: string
         }
@@ -565,6 +581,7 @@ export type Database = {
           allow_messages?: boolean | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           first_name?: string | null
           gender?: string | null
           id?: string
@@ -575,12 +592,19 @@ export type Database = {
           location_country?: string | null
           location_state?: string | null
           longitude?: number | null
+          looking_for?: string | null
+          max_age?: number | null
+          max_distance_km?: number | null
+          min_age?: number | null
+          occupation?: string | null
           onboarding_completed?: boolean | null
+          onboarding_step?: number | null
           profile_image_url?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
           suspended_until?: string | null
           suspension_reason?: string | null
+          target_countries?: string[] | null
           updated_at?: string
           user_id?: string
         }

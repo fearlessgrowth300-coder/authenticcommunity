@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, MapPin, Camera, Check, Loader2 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft, MapPin, Camera, Check, Loader2, Plus, Sparkles, X, Image as ImageIcon } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -15,8 +17,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationMap } from "@/components/LocationMap";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/constants";
+import { countries, statesByCountry } from "@/lib/countries";
 
-const steps = ["Location", "Interests", "Values", "Photo & Bio"];
+const totalSteps = 6;
+const stepLabels = ["Profile", "Location", "Interests", "Values", "Preferences", "Photos"];
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -24,13 +28,50 @@ const Onboarding = () => {
   const { user, refreshOnboarding } = useAuth();
   const currentStep = parseInt(step || "1");
 
-  // Step 1: Location
+  // Step 1: Profile
+  const [bio, setBio] = useState("");
+  const [gender, setGender] = useState("");
+  const [age, setAge] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [lookingFor, setLookingFor] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Step 2: Location
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [country, setCountry] = useState("");
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [locationDetected, setLocationDetected] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 37.7749, lng: -122.4194 });
+
+  // Step 3: Interests
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+
+  // Step 4: Values
+  const [selectedValues, setSelectedValues] = useState<string[]>([]);
+
+  // Step 5: Preferences
+  const [targetCountries, setTargetCountries] = useState<string[]>([]);
+  const [ageRange, setAgeRange] = useState<[number, number]>([18, 80]);
+  const [maxDistance, setMaxDistance] = useState(100);
+  const [emailNotifs, setEmailNotifs] = useState(true);
+  const [matchNotifs, setMatchNotifs] = useState(true);
+
+  // Step 6: Photos
+  const [photos, setPhotos] = useState<(File | null)[]>([null, null, null, null, null]);
+  const [photoPreviews, setPhotoPreviews] = useState<(string | null)[]>([null, null, null, null, null]);
+  const photoRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const [saving, setSaving] = useState(false);
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
   const detectLocation = async () => {
     if (!navigator.geolocation) {
@@ -60,116 +101,122 @@ const Onboarding = () => {
         setDetectingLocation(false);
       },
       () => {
-        toast.error("Permission denied. Please enter your location manually.");
+        toast.error("Permission denied. Please enter manually.");
         setDetectingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
-  // Step 2: Interests
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-
-  // Step 3: Values
-  const [selectedValues, setSelectedValues] = useState<string[]>([]);
-
-  // Step 4: Bio, Photo, Gender & Age
-  const [bio, setBio] = useState("");
-  const [gender, setGender] = useState("");
-  const [age, setAge] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
-  };
-
   const toggleInterest = (interest: string) => {
     setSelectedInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
+      prev.includes(interest) ? prev.filter((i) => i !== interest) : prev.length < 5 ? [...prev, interest] : prev
     );
   };
 
   const toggleValue = (value: string) => {
     setSelectedValues((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+      prev.includes(value) ? prev.filter((v) => v !== value) : prev.length < 5 ? [...prev, value] : prev
     );
+  };
+
+  const toggleTargetCountry = (code: string) => {
+    setTargetCountries((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  };
+
+  const handlePhotoSelect = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const newPhotos = [...photos];
+    newPhotos[index] = file;
+    setPhotos(newPhotos);
+    const newPreviews = [...photoPreviews];
+    newPreviews[index] = URL.createObjectURL(file);
+    setPhotoPreviews(newPreviews);
+  };
+
+  const removePhoto = (index: number) => {
+    const newPhotos = [...photos];
+    newPhotos[index] = null;
+    setPhotos(newPhotos);
+    const newPreviews = [...photoPreviews];
+    newPreviews[index] = null;
+    setPhotoPreviews(newPreviews);
   };
 
   const saveProfile = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      // Upload avatar if selected
+      // Upload avatar
       let avatarUrl: string | null = null;
       if (avatarFile) {
         const ext = avatarFile.name.split(".").pop();
         const path = `${user.id}/avatar.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("avatars")
-          .upload(path, avatarFile, { upsert: true });
+        const { error: uploadError } = await supabase.storage.from("avatars").upload(path, avatarFile, { upsert: true });
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
         avatarUrl = urlData.publicUrl + `?t=${Date.now()}`;
       }
 
-      // Update profile with location, bio, and avatar
-      const updateData: any = {
+      // Update profile
+      const updateData: Record<string, any> = {
         location_city: city || null,
         location_state: state || null,
         location_country: country || null,
         bio: bio || null,
         gender: gender || null,
         age: age ? parseInt(age) : null,
+        occupation: occupation || null,
+        looking_for: lookingFor || null,
+        target_countries: targetCountries.length > 0 ? targetCountries : null,
+        min_age: ageRange[0],
+        max_age: ageRange[1],
+        max_distance_km: maxDistance,
         onboarding_completed: true,
+        onboarding_step: 6,
       };
       if (avatarUrl) updateData.profile_image_url = avatarUrl;
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update(updateData)
-        .eq("user_id", user.id);
-
+      const { error: profileError } = await supabase.from("profiles").update(updateData).eq("user_id", user.id);
       if (profileError) throw profileError;
 
-      // Save interests (delete old, insert new)
+      // Save interests
       await supabase.from("user_interests").delete().eq("user_id", user.id);
       if (selectedInterests.length > 0) {
         const interestRows = selectedInterests.map((name) => {
           const cat = interestCategories.find((c) => c.interests.includes(name));
-          return {
-            user_id: user.id,
-            interest_name: name,
-            interest_category: cat?.name || null,
-          };
+          return { user_id: user.id, interest_name: name, interest_category: cat?.name || null };
         });
-        const { error: interestsError } = await supabase
-          .from("user_interests")
-          .insert(interestRows);
-        if (interestsError) throw interestsError;
+        await supabase.from("user_interests").insert(interestRows);
       }
 
-      // Save values (delete old, insert new)
+      // Save values
       await supabase.from("user_values").delete().eq("user_id", user.id);
       if (selectedValues.length > 0) {
-        const valueRows = selectedValues.map((name) => ({
+        const valueRows = selectedValues.map((name) => ({ user_id: user.id, value_name: name }));
+        await supabase.from("user_values").insert(valueRows);
+      }
+
+      // Save notification settings
+      const { data: existingSettings } = await supabase.from("notification_settings").select("id").eq("user_id", user.id).maybeSingle();
+      if (existingSettings) {
+        await supabase.from("notification_settings").update({
+          email_notifications: emailNotifs,
+          notify_matches: matchNotifs,
+        }).eq("user_id", user.id);
+      } else {
+        await supabase.from("notification_settings").insert({
           user_id: user.id,
-          value_name: name,
-        }));
-        const { error: valuesError } = await supabase
-          .from("user_values")
-          .insert(valueRows);
-        if (valuesError) throw valuesError;
+          email_notifications: emailNotifs,
+          notify_matches: matchNotifs,
+        });
       }
 
       refreshOnboarding();
-      toast.success("Profile complete! Let's find your community.");
-      navigate("/dashboard");
+      navigate("/onboarding/complete");
     } catch (err: any) {
       toast.error(err.message || "Failed to save profile");
     } finally {
@@ -178,7 +225,7 @@ const Onboarding = () => {
   };
 
   const nextStep = () => {
-    if (currentStep < 4) {
+    if (currentStep < totalSteps) {
       navigate(`/onboarding/${currentStep + 1}`);
     } else {
       saveProfile();
@@ -190,39 +237,137 @@ const Onboarding = () => {
     else navigate("/signup");
   };
 
+  // Complete screen
+  if (step === "complete") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 max-w-lg mx-auto text-center">
+        <div className="animate-fade-in space-y-6">
+          <div className="text-6xl mb-4">🎉</div>
+          <h1 className="text-3xl font-bold text-foreground">You're all set!</h1>
+          <p className="text-muted-foreground">Welcome to Authentic Community</p>
+          <div className="space-y-3 text-left bg-card rounded-xl p-6 shadow-card border border-border/50">
+            {[
+              "AI-powered matching",
+              "Real communities near you",
+              "Authentic connections",
+              "Local events",
+            ].map((feat) => (
+              <div key={feat} className="flex items-center gap-3">
+                <div className="h-6 w-6 rounded-full gradient-primary flex items-center justify-center shrink-0">
+                  <Check className="h-3 w-3 text-primary-foreground" />
+                </div>
+                <span className="text-sm text-foreground">{feat}</span>
+              </div>
+            ))}
+          </div>
+          <Button variant="gradient" size="lg" className="w-full" onClick={() => { refreshOnboarding(); navigate("/dashboard"); }}>
+            <Sparkles className="h-4 w-4 mr-2" /> Go to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col px-6 pt-4 max-w-lg mx-auto">
       <div className="flex items-center justify-between mb-6">
         <button onClick={prevStep} className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <span className="text-sm text-muted-foreground">Step {currentStep} of 4</span>
-        {currentStep < 4 ? (
+        <span className="text-sm text-muted-foreground">Step {currentStep} of {totalSteps}</span>
+        {currentStep < totalSteps ? (
           <button onClick={nextStep} className="text-sm text-primary font-medium">Skip</button>
         ) : <div className="w-8" />}
       </div>
 
       {/* Progress */}
       <div className="flex gap-1.5 mb-8">
-        {steps.map((_, i) => (
+        {stepLabels.map((_, i) => (
           <div key={i} className={cn("h-1 rounded-full flex-1 transition-colors", i < currentStep ? "gradient-primary" : "bg-muted")} />
         ))}
       </div>
 
-      <div className="animate-fade-in flex-1">
+      <div className="animate-fade-in flex-1 overflow-y-auto pb-2">
+        {/* Step 1: Profile */}
         {currentStep === 1 && (
           <>
-            <h2 className="text-xl font-bold text-foreground mb-1">Where are you located?</h2>
-            <p className="text-muted-foreground text-sm mb-6">We'll find communities and connections near you.</p>
+            <h2 className="text-xl font-bold text-foreground mb-1">Complete your profile</h2>
+            <p className="text-muted-foreground text-sm mb-6">Tell us about yourself</p>
+            <div className="space-y-5">
+              <div className="flex justify-center">
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-28 h-28 rounded-full bg-muted border-2 border-dashed border-border flex flex-col items-center justify-center hover:border-primary/40 transition-colors overflow-hidden"
+                >
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      <Camera className="h-6 w-6 text-muted-foreground mb-1" />
+                      <span className="text-xs text-muted-foreground">Add Photo</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="space-y-2">
+                <Label>Bio <span className="text-muted-foreground text-xs">({bio.length}/500)</span></Label>
+                <Textarea
+                  placeholder="Tell people what makes you, you..."
+                  className="min-h-[100px] resize-none"
+                  value={bio}
+                  maxLength={500}
+                  onChange={(e) => setBio(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select value={gender} onValueChange={setGender}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Non-binary">Non-binary</SelectItem>
+                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Age</Label>
+                  <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Occupation</Label>
+                <Input placeholder="e.g. Software Engineer" value={occupation} onChange={(e) => setOccupation(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Looking for</Label>
+                <Select value={lookingFor} onValueChange={setLookingFor}>
+                  <SelectTrigger><SelectValue placeholder="What are you looking for?" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="friends">Friends</SelectItem>
+                    <SelectItem value="dating">Dating</SelectItem>
+                    <SelectItem value="community">Community</SelectItem>
+                    <SelectItem value="networking">Networking</SelectItem>
+                    <SelectItem value="all">Open to all</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Step 2: Location */}
+        {currentStep === 2 && (
+          <>
+            <h2 className="text-xl font-bold text-foreground mb-1">Set your location</h2>
+            <p className="text-muted-foreground text-sm mb-6">Help us find people near you</p>
             <div className="space-y-4">
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={detectLocation}
-                disabled={detectingLocation}
-              >
+              <Button variant="outline" className="w-full gap-2" onClick={detectLocation} disabled={detectingLocation}>
                 {detectingLocation ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Detecting location...</>
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Detecting...</>
                 ) : locationDetected ? (
                   <><Check className="h-4 w-4 text-green-500" /> Location detected</>
                 ) : (
@@ -261,15 +406,16 @@ const Onboarding = () => {
                 initialLng={mapCenter.lng}
                 className="w-full h-48 rounded-xl overflow-hidden border border-border"
               />
-              <p className="text-xs text-muted-foreground">Tap the map or drag the pin to set your location</p>
+              <p className="text-xs text-muted-foreground">Tap the map to set your location</p>
             </div>
           </>
         )}
 
-        {currentStep === 2 && (
+        {/* Step 3: Interests */}
+        {currentStep === 3 && (
           <>
             <h2 className="text-xl font-bold text-foreground mb-1">What are you into?</h2>
-            <p className="text-muted-foreground text-sm mb-6">Pick at least 3 interests so we can find your people.</p>
+            <p className="text-muted-foreground text-sm mb-6">Pick up to 5 interests ({selectedInterests.length}/5)</p>
             <div className="space-y-5">
               {interestCategories.map((cat) => (
                 <div key={cat.name}>
@@ -297,10 +443,11 @@ const Onboarding = () => {
           </>
         )}
 
-        {currentStep === 3 && (
+        {/* Step 4: Values */}
+        {currentStep === 4 && (
           <>
             <h2 className="text-xl font-bold text-foreground mb-1">What do you value most?</h2>
-            <p className="text-muted-foreground text-sm mb-6">Choose 3-5 values that define you.</p>
+            <p className="text-muted-foreground text-sm mb-6">Choose 3-5 values ({selectedValues.length}/5)</p>
             <div className="flex flex-wrap gap-2">
               {valueOptions.map((value) => (
                 <button
@@ -321,62 +468,113 @@ const Onboarding = () => {
           </>
         )}
 
-        {currentStep === 4 && (
+        {/* Step 5: Preferences */}
+        {currentStep === 5 && (
           <>
-            <h2 className="text-xl font-bold text-foreground mb-1">Almost there!</h2>
-            <p className="text-muted-foreground text-sm mb-6">Add a photo and tell people about yourself.</p>
-            <div className="space-y-5">
-              <div className="flex justify-center">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarSelect}
+            <h2 className="text-xl font-bold text-foreground mb-1">Set your preferences</h2>
+            <p className="text-muted-foreground text-sm mb-6">Customize your experience</p>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Show me people from</Label>
+                <p className="text-xs text-muted-foreground">Select countries (leave empty for your country only)</p>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                  {countries.map((c) => (
+                    <button
+                      key={c.code}
+                      onClick={() => toggleTargetCountry(c.code)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                        targetCountries.includes(c.code)
+                          ? "gradient-primary text-primary-foreground border-transparent"
+                          : "bg-card text-foreground border-border hover:border-primary/40"
+                      )}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Age range: {ageRange[0]} - {ageRange[1]}</Label>
+                <Slider
+                  min={18}
+                  max={80}
+                  step={1}
+                  value={ageRange}
+                  onValueChange={(v) => setAgeRange(v as [number, number])}
                 />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-28 h-28 rounded-full bg-muted border-2 border-dashed border-border flex flex-col items-center justify-center hover:border-primary/40 transition-colors overflow-hidden"
-                >
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <>
-                      <Camera className="h-6 w-6 text-muted-foreground mb-1" />
-                      <span className="text-xs text-muted-foreground">Add Photo</span>
-                    </>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Max distance: {maxDistance} km</Label>
+                <Slider
+                  min={1}
+                  max={500}
+                  step={5}
+                  value={[maxDistance]}
+                  onValueChange={(v) => setMaxDistance(v[0])}
+                />
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <Label>Email notifications</Label>
+                  <Switch checked={emailNotifs} onCheckedChange={setEmailNotifs} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Match notifications</Label>
+                  <Switch checked={matchNotifs} onCheckedChange={setMatchNotifs} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Step 6: Photos */}
+        {currentStep === 6 && (
+          <>
+            <h2 className="text-xl font-bold text-foreground mb-1">Add more photos</h2>
+            <p className="text-muted-foreground text-sm mb-6">Show your authentic self (optional)</p>
+            <div className="grid grid-cols-3 gap-3">
+              {photos.map((_, index) => (
+                <div key={index} className="relative">
+                  <input
+                    ref={(el) => { photoRefs.current[index] = el; }}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handlePhotoSelect(index, e)}
+                  />
+                  <button
+                    onClick={() => photoRefs.current[index]?.click()}
+                    className="w-full aspect-square rounded-xl bg-muted border-2 border-dashed border-border flex items-center justify-center hover:border-primary/40 transition-colors overflow-hidden"
+                  >
+                    {photoPreviews[index] ? (
+                      <img src={photoPreviews[index]!} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        {index === 0 && avatarPreview ? (
+                          <img src={avatarPreview} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                          <>
+                            <Plus className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground mt-1">Photo {index + 1}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                  {photoPreviews[index] && (
+                    <button
+                      onClick={() => removePhoto(index)}
+                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   )}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Gender</Label>
-                  <Select value={gender} onValueChange={setGender}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Non-binary">Non-binary</SelectItem>
-                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Age</Label>
-                  <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Bio</Label>
-                <Textarea
-                  placeholder="Tell people what makes you, you..."
-                  className="min-h-[120px] resize-none"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                />
-              </div>
+              ))}
             </div>
           </>
         )}
@@ -386,7 +584,7 @@ const Onboarding = () => {
         <Button variant="gradient" size="lg" className="w-full" onClick={nextStep} disabled={saving}>
           {saving ? (
             <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</>
-          ) : currentStep === 4 ? "Complete Profile" : "Continue"}
+          ) : currentStep === totalSteps ? "Complete Onboarding" : "Continue"}
         </Button>
       </div>
     </div>
