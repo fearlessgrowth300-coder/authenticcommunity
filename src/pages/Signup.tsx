@@ -52,6 +52,9 @@ const Signup = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const normalizedEmail = email.trim().toLowerCase();
+
     if (password.length < 8) {
       toast.error("Password must be at least 8 characters");
       return;
@@ -69,17 +72,19 @@ const Signup = () => {
     }
     setLoading(true);
     try {
-      await signUp(email, password, firstName, lastName);
+      await signUp(normalizedEmail, password, firstName, lastName);
+      sessionStorage.setItem("pending_signup_email", normalizedEmail);
       toast.success("Verification code sent to your email!");
       navigate("/verify-email", {
         state: {
-          email,
+          email: normalizedEmail,
           dateOfBirth,
           country: selectedCountry,
           stateProv: selectedState,
         },
       });
     } catch (err: any) {
+
       toast.error(err.message || "Failed to create account");
     } finally {
       setLoading(false);
