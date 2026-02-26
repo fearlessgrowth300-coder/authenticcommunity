@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   onboardingCompleted: boolean | null;
-  refreshOnboarding: () => void;
+  refreshOnboarding: () => Promise<boolean>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -21,17 +21,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
-  const fetchOnboarding = async (userId: string) => {
-    const { data } = await supabase
+  const fetchOnboarding = async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabase
       .from("profiles")
       .select("onboarding_completed")
       .eq("user_id", userId)
       .maybeSingle();
-    setOnboardingCompleted(data?.onboarding_completed ?? false);
+
+    if (error) {
+      setOnboardingCompleted(false);
+      return false;
+    }
+
+    if (!data) {
+      const { error: insertError } = await supabase.from("profiles").insert({ user_id: userId });
+      if (insertError) {
+        const msg = (insertError.message || "").toLowerCase();
+        const isRaceCondition = msg.includes("duplicate") || msg.includes("unique");
+        if (!isRaceCondition) {
+          setOnboardingCompleted(false);
+          return false;
+        }
+      }
+
+      const { data: createdProfile } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const completed = Boolean(createdProfile?.onboarding_completed);
+      setOnboardingCompleted(completed);
+      return completed;
+    }
+
+    const completed = Boolean(data.onboarding_completed);
+    setOnboardingCompleted(completed);
+    return completed;
   };
 
-  const refreshOnboarding = () => {
-    if (user) fetchOnboarding(user.id);
+  const refreshOnboarding = async () => {
+    if (!user) return false;
+    return fetchOnboarding(user.id);
   };
 
   useEffect(() => {
