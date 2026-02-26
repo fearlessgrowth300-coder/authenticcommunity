@@ -73,7 +73,7 @@ const Login = () => {
           </div>
         </div>
 
-        <button type="button" className="text-sm text-primary hover:underline">Forgot password?</button>
+        <button type="button" onClick={() => navigate("/forgot-password")} className="text-sm text-primary hover:underline">Forgot password?</button>
 
         <Button variant="gradient" size="lg" className="w-full" type="submit" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
