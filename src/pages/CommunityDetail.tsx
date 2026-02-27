@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2 } from "lucide-react";
@@ -12,6 +13,7 @@ const CommunityDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();
+  const { canInteract, restrictionMessage } = useAccountRestrictions();
   const [community, setCommunity] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [memberCount, setMemberCount] = useState(0);
@@ -45,6 +47,10 @@ const CommunityDetail = () => {
 
   const handleJoin = async () => {
     if (!user || !id) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     setJoining(true);
 
     if (isMember) {
@@ -125,7 +131,7 @@ const CommunityDetail = () => {
               size="lg"
               className="flex-1"
               onClick={handleJoin}
-              disabled={joining}
+              disabled={joining || !canInteract}
             >
               {joining ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isMember ? "Leave Community" : "Join Community"}

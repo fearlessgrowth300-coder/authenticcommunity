@@ -13,6 +13,7 @@ import { WelcomeGuide } from "@/components/WelcomeGuide";
 import { StoriesFeed } from "@/components/StoriesFeed";
 import { PersonalizedActivityFeed } from "@/components/feed/PersonalizedActivityFeed";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { toast } from "sonner";
 
 interface Profile {
   first_name: string | null;
@@ -47,7 +48,8 @@ const Dashboard = () => {
     return !localStorage.getItem("welcome_guide_seen");
   });
   const [showPushBanner, setShowPushBanner] = useState(false);
-  const { isSupported, isSubscribed, subscribe } = usePushNotifications();
+  const { isSupported, isSubscribed, permission, subscribe } = usePushNotifications();
+  const pushBannerDismissedKey = user ? `push_banner_dismissed_${user.id}` : "push_banner_dismissed_guest";
 
   const closeGuide = () => {
     setShowGuide(false);
@@ -56,13 +58,20 @@ const Dashboard = () => {
 
   // Show push notification banner if supported and not subscribed
   useEffect(() => {
+    const dismissed = localStorage.getItem(pushBannerDismissedKey);
     if (isSubscribed) {
       setShowPushBanner(false);
-      localStorage.setItem("push_banner_dismissed", "true");
-    } else if (isSupported && !localStorage.getItem("push_banner_dismissed")) {
-      setShowPushBanner(true);
+      localStorage.setItem(pushBannerDismissedKey, "true");
+      return;
     }
-  }, [isSupported, isSubscribed]);
+
+    if (!isSupported || permission === "denied" || dismissed) {
+      setShowPushBanner(false);
+      return;
+    }
+
+    setShowPushBanner(true);
+  }, [isSupported, isSubscribed, permission, pushBannerDismissedKey]);
 
   useEffect(() => {
     if (!user) return;
@@ -222,10 +231,23 @@ const Dashboard = () => {
                 <p className="text-xs text-muted-foreground">Get alerts for new matches, messages, and followers</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
-                <Button size="sm" variant="ghost" onClick={() => { setShowPushBanner(false); localStorage.setItem("push_banner_dismissed", "true"); }}>
+                <Button size="sm" variant="ghost" onClick={() => { setShowPushBanner(false); localStorage.setItem(pushBannerDismissedKey, "true"); }}>
                   Later
                 </Button>
-                <Button size="sm" onClick={async () => { const ok = await subscribe(); if (ok) { setShowPushBanner(false); localStorage.setItem("push_banner_dismissed", "true"); } }}>
+                <Button size="sm" onClick={async () => {
+                  const ok = await subscribe();
+                  if (ok) {
+                    setShowPushBanner(false);
+                    localStorage.setItem(pushBannerDismissedKey, "true");
+                    toast.success("Push notifications enabled");
+                  } else if (Notification.permission === "denied") {
+                    setShowPushBanner(false);
+                    localStorage.setItem(pushBannerDismissedKey, "true");
+                    toast.error("Notification permission denied. Enable it in browser settings.");
+                  } else {
+                    toast.error("Could not enable push notifications.");
+                  }
+                }}>
                   Enable
                 </Button>
               </div>

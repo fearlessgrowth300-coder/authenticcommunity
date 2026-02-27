@@ -10,6 +10,7 @@ import { StoryHighlights } from "@/components/StoryHighlights";
 import { cn } from "@/lib/utils";
 import MatchDialog from "@/components/chat/MatchDialog";
 import { useFollow } from "@/hooks/useFollow";
+import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 
 interface ProfileData {
   user_id: string;
@@ -32,6 +33,7 @@ const MatchProfile = () => {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [matchDialog, setMatchDialog] = useState(false);
+  const { canInteract, restrictionMessage } = useAccountRestrictions();
   const { isFollowing, followerCount, followingCount, toggleFollow, loading: followLoading } = useFollow(id);
 
   useEffect(() => {
@@ -70,6 +72,10 @@ const MatchProfile = () => {
 
   const handleLike = async () => {
     if (!user || !id) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     try {
       if (liked) {
         await supabase.from("user_likes").delete().eq("liker_id", user.id).eq("liked_id", id);
@@ -96,6 +102,22 @@ const MatchProfile = () => {
     } catch {
       toast.error("Failed to update like");
     }
+  };
+
+  const handleFollow = () => {
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
+    toggleFollow();
+  };
+
+  const handleMessage = () => {
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
+    navigate(`/messages/${id}`);
   };
 
   if (loading) {
@@ -166,7 +188,7 @@ const MatchProfile = () => {
             <Button
               variant={isFollowing ? "outline" : "default"}
               size="sm"
-              onClick={toggleFollow}
+              onClick={handleFollow}
               disabled={followLoading}
               className="gap-1.5"
             >
@@ -233,7 +255,7 @@ const MatchProfile = () => {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="gradient" size="lg" className="flex-1" onClick={() => navigate(`/messages/${id}`)}>
+            <Button variant="gradient" size="lg" className="flex-1" onClick={handleMessage}>
               <MessageCircle className="h-4 w-4 mr-2" /> Message
             </Button>
             <Button
