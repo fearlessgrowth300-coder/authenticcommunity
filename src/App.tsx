@@ -40,6 +40,7 @@ const CreateStory = lazy(() => import("./pages/CreateStory"));
 const StoryViewer = lazy(() => import("./pages/StoryViewer"));
 const StoryReplies = lazy(() => import("./pages/StoryReplies"));
 const StoryViewers = lazy(() => import("./pages/StoryViewers"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/signup" element={<Signup />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding/complete" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route path="/onboarding/:step" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
