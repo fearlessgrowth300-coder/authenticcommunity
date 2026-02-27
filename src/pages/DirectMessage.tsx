@@ -23,7 +23,10 @@ import AttachmentMenu from "@/components/chat/AttachmentMenu";
 import MessageContextMenu from "@/components/chat/MessageContextMenu";
 import IncomingCall from "@/components/chat/IncomingCall";
 import ChatStoryViewer from "@/components/chat/ChatStoryViewer";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import LinkPreview, { extractUrls, renderMessageWithLinks } from "@/components/chat/LinkPreview";
 import { usePresence } from "@/hooks/usePresence";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 const VideoCall = lazy(() => import("@/components/chat/VideoCall"));
 
 interface Message {
@@ -68,6 +71,9 @@ const DirectMessage = () => {
   
   // Real presence tracking
   const presence = usePresence(recipientId);
+  
+  // Typing indicator
+  const { isRecipientTyping, sendTyping, sendStopTyping } = useTypingIndicator(recipientId);
   
   // Incoming call state
   const [incomingCall, setIncomingCall] = useState<{ callerId: string; offer: RTCSessionDescriptionInit } | null>(null);
@@ -195,6 +201,10 @@ const DirectMessage = () => {
             supabase.from("messages").update({ is_read: true }).eq("id", newMsg.id);
           }
         }
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (payload) => {
+        const updated = payload.new as Message;
+        setMessages((prev) => prev.map((m) => m.id === updated.id ? { ...m, ...updated } : m));
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (payload) => {
         setMessages((prev) => prev.filter((m) => m.id !== (payload.old as any).id));
@@ -573,7 +583,10 @@ const DirectMessage = () => {
                           : "bg-muted text-foreground rounded-bl-md"
                       )}
                     >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-sm whitespace-pre-wrap">{renderMessageWithLinks(msg.content, isMe)}</p>
+                      {extractUrls(msg.content).length > 0 && (
+                        <LinkPreview url={extractUrls(msg.content)[0]} />
+                      )}
                       <div className="flex items-center gap-1 justify-end mt-0.5">
                         {msg.disappears_at && <Timer className={cn("h-2.5 w-2.5", isMe ? "text-primary-foreground/50" : "text-muted-foreground/50")} />}
                         <p className={cn("text-[10px]", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
@@ -592,6 +605,7 @@ const DirectMessage = () => {
             );
           })
         )}
+        {isRecipientTyping && <TypingIndicator />}
         <div ref={bottomRef} />
       </main>
 
@@ -674,8 +688,13 @@ const DirectMessage = () => {
             <input
               placeholder="Type a message..."
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                if (e.target.value.trim()) sendTyping();
+                else sendStopTyping();
+              }}
               onKeyDown={handleKeyDown}
+              onBlur={sendStopTyping}
               className="flex-1 bg-transparent border-0 outline-none py-2 px-2 text-sm text-foreground placeholder:text-muted-foreground"
               autoFocus
             />
