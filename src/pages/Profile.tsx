@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
+import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck, Heart } from "lucide-react";
 
 interface ProfileData {
   first_name: string | null;
@@ -156,6 +156,11 @@ const Profile = () => {
 
         {/* Stats links */}
         <div className="bg-card rounded-xl shadow-card border border-border/50 divide-y divide-border">
+          <button onClick={() => navigate("/profile/liked")} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
+            <Heart className="h-4 w-4 text-destructive" />
+            <span className="text-sm text-foreground flex-1 text-left">Liked Users</span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
           {[
             { icon: Users, label: "My Connections", value: stats.connections.toString() },
             { icon: Users, label: "My Communities", value: stats.communities.toString() },

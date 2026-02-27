@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ProfileCard {
   user_id: string;
@@ -30,26 +35,36 @@ const MatchesFeed = () => {
   const [loading, setLoading] = useState(true);
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
   const [loadingAi, setLoadingAi] = useState(false);
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
 
   useEffect(() => {
     if (!user) return;
 
     const load = async () => {
-      // Get all profiles except current user
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state")
-        .neq("user_id", user.id)
-        .eq("is_active", true);
+      const [profilesRes, likesRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state")
+          .neq("user_id", user.id)
+          .eq("is_active", true),
+        supabase
+          .from("user_likes")
+          .select("liked_id")
+          .eq("liker_id", user.id),
+      ]);
 
-      if (!profilesData || profilesData.length === 0) {
+      const liked = new Set((likesRes.data || []).map((l: any) => l.liked_id));
+      setLikedIds(liked);
+
+      if (!profilesRes.data || profilesRes.data.length === 0) {
         setProfiles([]);
         setLoading(false);
         return;
       }
 
-      // Get interests and values for all users
-      const userIds = profilesData.map((p) => p.user_id);
+      const userIds = profilesRes.data.map((p) => p.user_id);
       const [interestsRes, valuesRes] = await Promise.all([
         supabase.from("user_interests").select("user_id, interest_name").in("user_id", userIds),
         supabase.from("user_values").select("user_id, value_name").in("user_id", userIds),
@@ -67,7 +82,7 @@ const MatchesFeed = () => {
         valuesMap.get(v.user_id)!.push(v.value_name);
       });
 
-      const cards: ProfileCard[] = profilesData.map((p) => ({
+      const cards: ProfileCard[] = profilesRes.data.map((p) => ({
         ...p,
         interests: interestsMap.get(p.user_id) || [],
         values: valuesMap.get(p.user_id) || [],
@@ -80,12 +95,41 @@ const MatchesFeed = () => {
     load();
   }, [user]);
 
-  const currentProfile = profiles[currentIndex];
+  const filteredProfiles = profiles.filter((p) => {
+    if (p.age && (p.age < filterAge[0] || p.age > filterAge[1])) return false;
+    return true;
+  });
 
-  const handleAction = (action: "like" | "pass") => {
+  const currentProfile = filteredProfiles[currentIndex];
+
+  const handleLike = async (userId: string) => {
+    if (!user) return;
+    try {
+      if (likedIds.has(userId)) {
+        await supabase.from("user_likes").delete().eq("liker_id", user.id).eq("liked_id", userId);
+        setLikedIds((prev) => { const n = new Set(prev); n.delete(userId); return n; });
+        toast.success("Unliked");
+      } else {
+        await supabase.from("user_likes").insert({ liker_id: user.id, liked_id: userId });
+        setLikedIds((prev) => new Set(prev).add(userId));
+        toast.success("Liked! ❤️");
+      }
+    } catch {
+      toast.error("Failed to update like");
+    }
+  };
+
+  const handleAction = async (action: "like" | "pass") => {
+    if (!currentProfile) return;
+    if (action === "like") {
+      await handleLike(currentProfile.user_id);
+    }
     setDirection(action === "like" ? "right" : "left");
     setTimeout(() => {
-      setCurrentIndex((prev) => (prev + 1) % profiles.length);
+      setCurrentIndex((prev) => {
+        const next = prev + 1;
+        return next >= filteredProfiles.length ? 0 : next;
+      });
       setDirection(null);
     }, 300);
   };
@@ -128,7 +172,10 @@ const MatchesFeed = () => {
               {loadingAi ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
               AI Match
             </Button>
-            <button className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
+            <button
+              onClick={() => setShowFilter(true)}
+              className="h-9 w-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+            >
               <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
@@ -143,31 +190,49 @@ const MatchesFeed = () => {
           </h2>
           <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar">
             {aiSuggestions.map((s) => (
-              <button
+              <div
                 key={s.user_id}
-                onClick={() => navigate(`/matches/${s.user_id}`)}
                 className="flex-shrink-0 w-44 bg-card rounded-xl border border-border/50 p-3 text-left hover:shadow-card-hover transition-shadow"
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
-                  <span className="text-[10px] font-bold text-primary">{s.score}%</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground line-clamp-2">{s.reason}</p>
-                {s.interests?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {s.interests.slice(0, 2).map((i: string) => (
-                      <Badge key={i} variant="outline" className="text-[9px] px-1.5 py-0">{i}</Badge>
-                    ))}
+                <button
+                  onClick={() => navigate(`/matches/${s.user_id}`)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                    <span className="text-[10px] font-bold text-primary">{s.score}%</span>
                   </div>
-                )}
-              </button>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2">{s.reason}</p>
+                  {s.interests?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {s.interests.slice(0, 2).map((i: string) => (
+                        <Badge key={i} variant="outline" className="text-[9px] px-1.5 py-0">{i}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </button>
+                <div className="flex gap-1.5 mt-2">
+                  <button
+                    onClick={() => handleLike(s.user_id)}
+                    className="flex-1 h-7 rounded-lg bg-muted flex items-center justify-center hover:bg-accent transition-colors"
+                  >
+                    <Heart className={cn("h-3.5 w-3.5", likedIds.has(s.user_id) ? "fill-destructive text-destructive" : "text-muted-foreground")} />
+                  </button>
+                  <button
+                    onClick={() => navigate(`/messages/${s.user_id}`)}
+                    className="flex-1 h-7 rounded-lg bg-muted flex items-center justify-center hover:bg-accent transition-colors"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
       )}
 
       <main className="px-5 py-5 max-w-lg mx-auto">
-        {profiles.length === 0 ? (
+        {filteredProfiles.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-muted-foreground text-sm">No profiles to discover yet. Check back soon!</p>
           </div>
@@ -235,14 +300,39 @@ const MatchesFeed = () => {
               </button>
               <button
                 onClick={() => handleAction("like")}
-                className="h-16 w-16 rounded-full gradient-primary shadow-soft flex items-center justify-center hover:opacity-90 transition-all active:scale-95"
+                className={cn(
+                  "h-16 w-16 rounded-full shadow-soft flex items-center justify-center hover:opacity-90 transition-all active:scale-95",
+                  likedIds.has(currentProfile.user_id) ? "bg-destructive" : "gradient-primary"
+                )}
               >
-                <Heart className="h-7 w-7 text-primary-foreground" />
+                <Heart className={cn("h-7 w-7 text-primary-foreground", likedIds.has(currentProfile.user_id) && "fill-primary-foreground")} />
               </button>
             </div>
           </>
         ) : null}
       </main>
+
+      {/* Filter Dialog */}
+      <Dialog open={showFilter} onOpenChange={setShowFilter}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Filter Profiles</DialogTitle></DialogHeader>
+          <div className="space-y-6 py-2">
+            <div className="space-y-3">
+              <Label>Age Range: {filterAge[0]} - {filterAge[1]}</Label>
+              <Slider
+                min={18}
+                max={80}
+                step={1}
+                value={filterAge}
+                onValueChange={(v) => setFilterAge(v as [number, number])}
+              />
+            </div>
+            <Button className="w-full" onClick={() => { setCurrentIndex(0); setShowFilter(false); }}>
+              Apply Filters
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
