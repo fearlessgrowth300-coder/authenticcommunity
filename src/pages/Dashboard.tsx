@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WelcomeGuide } from "@/components/WelcomeGuide";
 import { StoriesFeed } from "@/components/StoriesFeed";
+import { PersonalizedActivityFeed } from "@/components/feed/PersonalizedActivityFeed";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface Profile {
@@ -232,6 +233,9 @@ const Dashboard = () => {
           <section>
             <StoriesFeed />
           </section>
+
+          {/* Personalized activity feed */}
+          <PersonalizedActivityFeed />
 
           {/* Liked Users horizontal scroller */}
           {likedProfiles.length > 0 && (

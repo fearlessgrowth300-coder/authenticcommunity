@@ -72,10 +72,12 @@ export async function getActiveStories() {
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
 
-  return (data || []).map((s: any) => ({
-    ...s,
-    profile: profileMap.get(s.user_id) || null,
-  }));
+  return (data || [])
+    .map((s: any) => ({
+      ...s,
+      profile: profileMap.get(s.user_id) || null,
+    }))
+    .filter((s: any) => !!s.profile);
 }
 
 export async function recordStoryView(storyId: string) {
