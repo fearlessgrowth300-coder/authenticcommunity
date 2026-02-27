@@ -218,14 +218,9 @@ const Onboarding = () => {
         });
       }
 
-      // Wait for onboarding state to refresh before navigating
-      const completed = await refreshOnboarding();
-      if (completed) {
-        navigate("/onboarding/complete", { replace: true });
-      } else {
-        // Force navigation even if state hasn't caught up
-        navigate("/onboarding/complete", { replace: true });
-      }
+      // Refresh onboarding state and navigate
+      await refreshOnboarding();
+      navigate("/onboarding/complete", { replace: true });
     } catch (err: any) {
       console.error("Onboarding save error:", err);
       toast.error(err.message || "Failed to save profile. Please try again.");
