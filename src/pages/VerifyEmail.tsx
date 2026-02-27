@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Mail, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 type VerifyLocationState = {
   email?: string;
@@ -26,8 +27,11 @@ const VerifyEmail = () => {
   );
 
   const [email] = useState(initialEmail);
+  const [otp, setOtp] = useState("");
+  const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const submittedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (email) {
@@ -38,7 +42,7 @@ const VerifyEmail = () => {
     navigate("/signup", { replace: true });
   }, [email, navigate]);
 
-  // Listen for auth state change (user clicked link in email and got verified)
+  // Listen for auth state change (fallback if user clicks a link)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
@@ -58,6 +62,48 @@ const VerifyEmail = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const handleVerify = async () => {
+    if (!otp || otp.length < 6 || !email || verifying) return;
+    if (submittedRef.current === otp) return;
+    submittedRef.current = otp;
+
+    setVerifying(true);
+    try {
+      // Try email type first, then signup type
+      const { error: emailError } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: "email",
+      });
+
+      if (emailError) {
+        // Fallback to signup type
+        const { error: signupError } = await supabase.auth.verifyOtp({
+          email,
+          token: otp,
+          type: "signup",
+        });
+        if (signupError) throw signupError;
+      }
+
+      sessionStorage.removeItem("pending_signup_email");
+      toast.success("Email verified! Welcome aboard.");
+      navigate("/onboarding/1", { replace: true });
+    } catch (err: any) {
+      toast.error(err.message || "Invalid or expired code. Please try again.");
+      submittedRef.current = null;
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  // Auto-verify when 6 digits entered
+  useEffect(() => {
+    if (otp.length === 6) {
+      handleVerify();
+    }
+  }, [otp]);
+
   const handleResend = async () => {
     if (resendCooldown > 0 || !email || resending) return;
 
@@ -69,10 +115,12 @@ const VerifyEmail = () => {
       });
       if (error) throw error;
 
-      toast.success("New verification email sent!");
+      toast.success("New verification code sent!");
       setResendCooldown(RESEND_COOLDOWN);
+      setOtp("");
+      submittedRef.current = null;
     } catch (err: any) {
-      toast.error(err.message || "Failed to resend email");
+      toast.error(err.message || "Failed to resend code");
     } finally {
       setResending(false);
     }
@@ -88,29 +136,58 @@ const VerifyEmail = () => {
         <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-6">
           <Mail className="h-8 w-8 text-primary-foreground" />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
-        <p className="text-muted-foreground text-sm mb-2">We sent a verification link to</p>
-        <p className="text-foreground font-medium mb-6">{email}</p>
+        <h1 className="text-2xl font-bold text-foreground mb-2">Enter verification code</h1>
+        <p className="text-muted-foreground text-sm mb-2">We sent a 6-digit code to</p>
+        <p className="text-foreground font-medium mb-8">{email}</p>
 
-        <div className="bg-muted/50 rounded-xl p-6 mb-6 max-w-sm w-full">
-          <p className="text-sm text-foreground font-medium mb-2">📧 Open your email</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Click the <strong>"Verify Email"</strong> button in the email we just sent you. You'll be redirected back here automatically.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            ⏱️ The link expires in 15 minutes
-          </p>
+        <div className="mb-6">
+          <InputOTP
+            maxLength={6}
+            value={otp}
+            onChange={setOtp}
+            disabled={verifying}
+          >
+            <InputOTPGroup>
+              <InputOTPSlot index={0} />
+              <InputOTPSlot index={1} />
+              <InputOTPSlot index={2} />
+              <InputOTPSlot index={3} />
+              <InputOTPSlot index={4} />
+              <InputOTPSlot index={5} />
+            </InputOTPGroup>
+          </InputOTP>
         </div>
+
+        {verifying && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Verifying...
+          </div>
+        )}
+
+        <Button
+          variant="gradient"
+          size="lg"
+          className="w-full max-w-xs mb-6"
+          onClick={handleVerify}
+          disabled={otp.length < 6 || verifying}
+        >
+          {verifying ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Verifying...</>
+          ) : (
+            "Verify Email"
+          )}
+        </Button>
 
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Didn't receive the email?{" "}
+            Didn't receive the code?{" "}
             <button
               onClick={handleResend}
               disabled={resending || resendCooldown > 0}
               className="text-primary font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {resending ? "Sending..." : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend email"}
+              {resending ? "Sending..." : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
             </button>
           </p>
           <p className="text-xs text-muted-foreground mt-2">
