@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface ProfileData {
   user_id: string;
@@ -20,10 +22,12 @@ interface ProfileData {
 const MatchProfile = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [values, setValues] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [liked, setLiked] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -43,6 +47,30 @@ const MatchProfile = () => {
 
     load();
   }, [id]);
+
+  // Check if already liked
+  useEffect(() => {
+    if (!user || !id) return;
+    supabase.from("user_likes").select("id").eq("liker_id", user.id).eq("liked_id", id).maybeSingle()
+      .then(({ data }) => setLiked(!!data));
+  }, [user, id]);
+
+  const handleLike = async () => {
+    if (!user || !id) return;
+    try {
+      if (liked) {
+        await supabase.from("user_likes").delete().eq("liker_id", user.id).eq("liked_id", id);
+        setLiked(false);
+        toast.success("Unliked");
+      } else {
+        await supabase.from("user_likes").insert({ liker_id: user.id, liked_id: id });
+        setLiked(true);
+        toast.success("Liked! ❤️");
+      }
+    } catch {
+      toast.error("Failed to update like");
+    }
+  };
 
   if (loading) {
     return (
@@ -153,8 +181,13 @@ const MatchProfile = () => {
             <Button variant="gradient" size="lg" className="flex-1" onClick={() => navigate(`/messages/${id}`)}>
               <MessageCircle className="h-4 w-4 mr-2" /> Message
             </Button>
-            <Button variant="accent" size="lg">
-              <Heart className="h-4 w-4" />
+            <Button
+              variant="accent"
+              size="lg"
+              onClick={handleLike}
+              className={cn(liked && "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+            >
+              <Heart className={cn("h-4 w-4", liked && "fill-current")} />
             </Button>
           </div>
         </div>

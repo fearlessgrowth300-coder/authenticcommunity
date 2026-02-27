@@ -3,9 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Phone, MoreVertical, Send, Smile, Image, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Phone, MoreVertical, Send, Smile, Image, Loader2, Flag, Ban, BellOff, Trash2, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface Message {
   id: string;
@@ -89,7 +94,6 @@ const DirectMessage = () => {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          // Only add if it's part of this conversation
           if (
             (newMsg.sender_id === user.id && newMsg.recipient_id === recipientId) ||
             (newMsg.sender_id === recipientId && newMsg.recipient_id === user.id)
@@ -98,12 +102,8 @@ const DirectMessage = () => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
-            // Mark as read if we're the recipient
             if (newMsg.recipient_id === user.id) {
-              supabase
-                .from("messages")
-                .update({ is_read: true })
-                .eq("id", newMsg.id);
+              supabase.from("messages").update({ is_read: true }).eq("id", newMsg.id);
             }
           }
         }
@@ -126,12 +126,16 @@ const DirectMessage = () => {
     const content = message.trim();
     setMessage("");
 
-    await supabase.from("messages").insert({
+    const { error } = await supabase.from("messages").insert({
       sender_id: user.id,
       recipient_id: recipientId,
       content,
     });
 
+    if (error) {
+      toast.error("Failed to send message");
+      setMessage(content);
+    }
     setSending(false);
   };
 
@@ -139,6 +143,32 @@ const DirectMessage = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleBlock = async () => {
+    if (!user || !recipientId) return;
+    try {
+      await supabase.from("blocked_users").insert({ blocker_id: user.id, blocked_id: recipientId });
+      toast.success("User blocked");
+      navigate("/messages", { replace: true });
+    } catch {
+      toast.error("Failed to block user");
+    }
+  };
+
+  const handleReport = async () => {
+    if (!user || !recipientId) return;
+    try {
+      await supabase.from("reports").insert({
+        reporter_id: user.id,
+        reported_user_id: recipientId,
+        reason: "Inappropriate behavior in messages",
+        report_type: "user",
+      });
+      toast.success("Report submitted. We'll review it shortly.");
+    } catch {
+      toast.error("Failed to submit report");
     }
   };
 
@@ -151,21 +181,50 @@ const DirectMessage = () => {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-4 py-2.5">
         <div className="flex items-center gap-3 max-w-lg mx-auto">
-          <button onClick={() => navigate("/messages")} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          {recipientProfile?.profile_image_url ? (
-            <img src={recipientProfile.profile_image_url} alt={displayName} className="h-9 w-9 rounded-full object-cover" />
-          ) : (
-            <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
-              {displayName[0]?.toUpperCase()}
-            </div>
-          )}
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">{displayName}</p>
-          </div>
-          <button className="text-muted-foreground"><Phone className="h-4 w-4" /></button>
-          <button className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></button>
+          <button
+            onClick={() => navigate(`/matches/${recipientId}`)}
+            className="flex items-center gap-2 flex-1 min-w-0"
+          >
+            {recipientProfile?.profile_image_url ? (
+              <img src={recipientProfile.profile_image_url} alt={displayName} className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
+                {displayName[0]?.toUpperCase()}
+              </div>
+            )}
+            <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
+          </button>
+          <button
+            onClick={() => toast.info("Voice/video calls coming soon!")}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Phone className="h-4 w-4" />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => navigate(`/matches/${recipientId}`)}>
+                View Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toast.info("Notifications muted for this chat")}>
+                <BellOff className="h-4 w-4 mr-2" /> Mute
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleReport} className="text-destructive">
+                <Flag className="h-4 w-4 mr-2" /> Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleBlock} className="text-destructive">
+                <Ban className="h-4 w-4 mr-2" /> Block
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -176,7 +235,9 @@ const DirectMessage = () => {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : messages.length === 0 ? (
-          <p className="text-center text-muted-foreground text-sm py-12">No messages yet. Say hello!</p>
+          <div className="text-center py-12">
+            <p className="text-muted-foreground text-sm">No messages yet. Say hello! 👋</p>
+          </div>
         ) : (
           messages.map((msg) => {
             const isMe = msg.sender_id === user?.id;
@@ -207,17 +268,16 @@ const DirectMessage = () => {
         <div ref={bottomRef} />
       </main>
 
-      {/* Input */}
-      <div className="border-t border-border bg-card px-4 py-3">
+      {/* Input - always visible */}
+      <div className="sticky bottom-0 border-t border-border bg-card px-4 py-3">
         <div className="flex items-center gap-2 max-w-lg mx-auto">
-          <button className="text-muted-foreground"><Smile className="h-5 w-5" /></button>
-          <button className="text-muted-foreground"><Image className="h-5 w-5" /></button>
           <Input
             placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-muted border-0"
+            autoFocus
           />
           <button
             onClick={handleSend}

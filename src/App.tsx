@@ -41,6 +41,7 @@ const StoryViewer = lazy(() => import("./pages/StoryViewer"));
 const StoryReplies = lazy(() => import("./pages/StoryReplies"));
 const StoryViewers = lazy(() => import("./pages/StoryViewers"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const LikedUsers = lazy(() => import("./pages/LikedUsers"));
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,7 @@ const App = () => (
               <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+              <Route path="/profile/liked" element={<ProtectedRoute><LikedUsers /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               <Route path="/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
               <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
