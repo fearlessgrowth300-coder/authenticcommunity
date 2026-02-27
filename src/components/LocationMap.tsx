@@ -80,6 +80,13 @@ export function LocationMap({ onLocationSelect, initialLat = 37.7749, initialLng
     };
   }, []);
 
+  // Fly to new coordinates when initialLat/initialLng change
+  useEffect(() => {
+    if (!map.current || !marker.current) return;
+    map.current.flyTo({ center: [initialLng, initialLat], zoom: 12 });
+    marker.current.setLngLat([initialLng, initialLat]);
+  }, [initialLat, initialLng]);
+
   return (
     <div className={`relative ${className || "w-full h-48 rounded-xl overflow-hidden border border-border"}`}>
       {loading && (
