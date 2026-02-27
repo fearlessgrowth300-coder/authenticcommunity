@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ShieldAlert, Clock, Eye, LogOut } from "lucide-react";
+import { ShieldAlert, Clock, Eye, LogOut, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -147,6 +147,15 @@ const SuspendedAccount = () => {
             </ul>
           </div>
         </div>
+
+        {/* Contact Support */}
+        <Button
+          className="w-full max-w-xs mb-3"
+          onClick={() => navigate("/help-support")}
+        >
+          <MessageCircle className="h-4 w-4 mr-2" />
+          Contact Support to Appeal
+        </Button>
 
         {/* Browse feeds button */}
         <Button
