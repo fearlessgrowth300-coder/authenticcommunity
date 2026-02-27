@@ -1,8 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Image as ImageIcon, Camera, MapPin, FileText, Headphones, BarChart3, Calendar, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import LocationPicker from "./LocationPicker";
 
 interface AttachmentMenuProps {
   recipientId: string;
@@ -17,6 +18,7 @@ const AttachmentMenu = ({ recipientId, onClose, onStickerOpen, onImageSent }: At
   const cameraRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
+  const [showLocation, setShowLocation] = useState(false);
 
   const handleFileUpload = async (file: File, type: string) => {
     if (!user) return;
@@ -56,7 +58,7 @@ const AttachmentMenu = ({ recipientId, onClose, onStickerOpen, onImageSent }: At
       label: "Camera",
       color: "text-pink-500",
       bg: "bg-pink-50 dark:bg-pink-950/30",
-      action: () => cameraRef.current?.click(),
+      action: () => cameraRef.current?.click(), // uses capture="environment" on the input
     },
     {
       icon: FileText,
@@ -77,24 +79,7 @@ const AttachmentMenu = ({ recipientId, onClose, onStickerOpen, onImageSent }: At
       label: "Location",
       color: "text-green-500",
       bg: "bg-green-50 dark:bg-green-950/30",
-      action: () => {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-              if (!user) return;
-              await supabase.from("messages").insert({
-                sender_id: user.id,
-                recipient_id: recipientId,
-                content: `📍 Location: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
-                message_type: "location",
-              });
-              toast.success("Location shared");
-              onClose();
-            },
-            () => toast.error("Location access denied")
-          );
-        }
-      },
+      action: () => setShowLocation(true),
     },
     {
       icon: User,
@@ -118,6 +103,16 @@ const AttachmentMenu = ({ recipientId, onClose, onStickerOpen, onImageSent }: At
       action: () => { toast.info("Event sharing coming soon"); onClose(); },
     },
   ];
+
+  if (showLocation) {
+    return (
+      <LocationPicker
+        recipientId={recipientId}
+        onClose={() => setShowLocation(false)}
+        onSent={() => onClose()}
+      />
+    );
+  }
 
   return (
     <div className="bg-card border-t border-border px-4 py-4 animate-in slide-in-from-bottom-4 duration-200">

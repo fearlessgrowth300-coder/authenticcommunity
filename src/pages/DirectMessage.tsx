@@ -22,7 +22,8 @@ import StickerPicker from "@/components/chat/StickerPicker";
 import AttachmentMenu from "@/components/chat/AttachmentMenu";
 import MessageContextMenu from "@/components/chat/MessageContextMenu";
 import IncomingCall from "@/components/chat/IncomingCall";
-
+import ChatStoryViewer from "@/components/chat/ChatStoryViewer";
+import { usePresence } from "@/hooks/usePresence";
 const VideoCall = lazy(() => import("@/components/chat/VideoCall"));
 
 interface Message {
@@ -62,8 +63,11 @@ const DirectMessage = () => {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [onlineStatus, setOnlineStatus] = useState<string>("offline");
   const [hasStory, setHasStory] = useState(false);
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
+  
+  // Real presence tracking
+  const presence = usePresence(recipientId);
   
   // Incoming call state
   const [incomingCall, setIncomingCall] = useState<{ callerId: string; offer: RTCSessionDescriptionInit } | null>(null);
@@ -98,8 +102,7 @@ const DirectMessage = () => {
         setHasStory((data || []).length > 0);
       });
 
-    // Simulate online status (in production, use presence)
-    setOnlineStatus("online");
+    // No simulated status needed - usePresence handles it
   }, [recipientId]);
 
   // Listen for incoming calls
@@ -423,7 +426,17 @@ const DirectMessage = () => {
           <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <button onClick={() => navigate(`/matches/${recipientId}`)} className="flex items-center gap-2 flex-1 min-w-0">
+          <button
+            onClick={(e) => {
+              if (hasStory) {
+                e.stopPropagation();
+                setShowStoryViewer(true);
+              } else {
+                navigate(`/matches/${recipientId}`);
+              }
+            }}
+            className="flex items-center gap-2 flex-1 min-w-0"
+          >
             <div className="relative">
               {/* Story ring */}
               <div className={cn(
@@ -439,7 +452,7 @@ const DirectMessage = () => {
                 )}
               </div>
               {/* Online indicator */}
-              {onlineStatus === "online" && (
+              {presence.status === "online" && (
                 <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
               )}
             </div>
@@ -447,7 +460,7 @@ const DirectMessage = () => {
               <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
               <p className="text-[10px] text-muted-foreground">
                 {disappearingEnabled && <Timer className="h-2.5 w-2.5 inline mr-0.5" />}
-                {onlineStatus === "online" ? "Online" : "Last seen recently"}
+                {presence.status === "online" ? "Online" : "Last seen recently"}
               </p>
             </div>
           </button>
@@ -748,6 +761,15 @@ const DirectMessage = () => {
             incomingOffer={incomingOffer || undefined}
           />
         </Suspense>
+      )}
+
+      {/* Story Viewer */}
+      {showStoryViewer && recipientId && (
+        <ChatStoryViewer
+          userId={recipientId}
+          userName={displayName}
+          onClose={() => setShowStoryViewer(false)}
+        />
       )}
     </div>
   );
