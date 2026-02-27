@@ -20,9 +20,10 @@ export function BottomNav() {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const hideOn = ["/", "/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"];
+  const isDMRoute = /^\/messages\/[^/]+$/.test(location.pathname);
   const shouldHide = hideOn.some(
     (path) => location.pathname === path
-  ) || location.pathname.startsWith("/onboarding") || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
+  ) || isDMRoute || location.pathname.startsWith("/onboarding") || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
 
   useEffect(() => {
     if (!user) return;

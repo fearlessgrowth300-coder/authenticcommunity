@@ -218,10 +218,17 @@ const Onboarding = () => {
         });
       }
 
-      await refreshOnboarding();
-      navigate("/onboarding/complete");
+      // Wait for onboarding state to refresh before navigating
+      const completed = await refreshOnboarding();
+      if (completed) {
+        navigate("/onboarding/complete", { replace: true });
+      } else {
+        // Force navigation even if state hasn't caught up
+        navigate("/onboarding/complete", { replace: true });
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to save profile");
+      console.error("Onboarding save error:", err);
+      toast.error(err.message || "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -263,7 +270,12 @@ const Onboarding = () => {
               </div>
             ))}
           </div>
-          <Button variant="gradient" size="lg" className="w-full" onClick={async () => { await refreshOnboarding(); navigate("/dashboard"); }}>
+          <Button variant="gradient" size="lg" className="w-full" onClick={async () => {
+            try {
+              await refreshOnboarding();
+            } catch {}
+            navigate("/dashboard", { replace: true });
+          }}>
             <Sparkles className="h-4 w-4 mr-2" /> Go to Home
           </Button>
         </div>
