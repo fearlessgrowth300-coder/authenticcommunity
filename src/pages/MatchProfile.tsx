@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2 } from "lucide-react";
+import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2, UserPlus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { StoryHighlights } from "@/components/StoryHighlights";
 import { cn } from "@/lib/utils";
 import MatchDialog from "@/components/chat/MatchDialog";
+import { useFollow } from "@/hooks/useFollow";
 
 interface ProfileData {
   user_id: string;
@@ -31,6 +32,7 @@ const MatchProfile = () => {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [matchDialog, setMatchDialog] = useState(false);
+  const { isFollowing, followerCount, followingCount, toggleFollow, loading: followLoading } = useFollow(id);
 
   useEffect(() => {
     if (!id) return;
@@ -152,6 +154,27 @@ const MatchProfile = () => {
                   </span>
                 </div>
               )}
+            </div>
+            <Button
+              variant={isFollowing ? "outline" : "default"}
+              size="sm"
+              onClick={toggleFollow}
+              disabled={followLoading}
+              className="gap-1.5"
+            >
+              {isFollowing ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+              {isFollowing ? "Following" : "Follow"}
+            </Button>
+          </div>
+
+          <div className="flex gap-4 mb-4 text-center">
+            <div>
+              <p className="text-sm font-bold text-foreground">{followerCount}</p>
+              <p className="text-[11px] text-muted-foreground">Followers</p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">{followingCount}</p>
+              <p className="text-[11px] text-muted-foreground">Following</p>
             </div>
           </div>
 

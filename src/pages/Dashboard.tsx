@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { Bell, Search, Loader2, Heart, X } from "lucide-react";
+import { Bell, Search, Loader2, Heart, X, BellRing } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WelcomeGuide } from "@/components/WelcomeGuide";
 import { StoriesFeed } from "@/components/StoriesFeed";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface Profile {
   first_name: string | null;
@@ -43,11 +45,20 @@ const Dashboard = () => {
   const [showGuide, setShowGuide] = useState(() => {
     return !localStorage.getItem("welcome_guide_seen");
   });
+  const [showPushBanner, setShowPushBanner] = useState(false);
+  const { isSupported, isSubscribed, subscribe } = usePushNotifications();
 
   const closeGuide = () => {
     setShowGuide(false);
     localStorage.setItem("welcome_guide_seen", "true");
   };
+
+  // Show push notification banner if supported and not subscribed
+  useEffect(() => {
+    if (isSupported && !isSubscribed && !localStorage.getItem("push_banner_dismissed")) {
+      setShowPushBanner(true);
+    }
+  }, [isSupported, isSubscribed]);
 
   useEffect(() => {
     if (!user) return;
@@ -198,6 +209,25 @@ const Dashboard = () => {
 
       {!showSearch && (
         <main className="px-5 py-5 max-w-lg mx-auto space-y-7">
+          {/* Push Notification Banner */}
+          {showPushBanner && (
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
+              <BellRing className="h-5 w-5 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">Enable Push Notifications</p>
+                <p className="text-xs text-muted-foreground">Get alerts for new matches, messages, and followers</p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <Button size="sm" variant="ghost" onClick={() => { setShowPushBanner(false); localStorage.setItem("push_banner_dismissed", "true"); }}>
+                  Later
+                </Button>
+                <Button size="sm" onClick={async () => { const ok = await subscribe(); if (ok) setShowPushBanner(false); }}>
+                  Enable
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Stories */}
           <section>
             <StoriesFeed />

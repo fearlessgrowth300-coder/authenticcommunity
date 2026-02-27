@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, Bell, Users, MessageCircle, Calendar, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Bell, Users, MessageCircle, Calendar, Check, Loader2, UserPlus, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -20,6 +20,8 @@ const iconMap: Record<string, typeof Bell> = {
   match: Users,
   message: MessageCircle,
   event: Calendar,
+  follow: UserPlus,
+  like: Heart,
 };
 
 const Notifications = () => {

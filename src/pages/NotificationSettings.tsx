@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, MessageCircle, Heart, CalendarDays, Newspaper, Clock, Mail, Loader2 } from "lucide-react";
+import { ArrowLeft, Users, MessageCircle, Heart, CalendarDays, Newspaper, Clock, Mail, Loader2, BellRing } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface NotifSettings {
   notify_matches: boolean;
@@ -31,6 +33,7 @@ const NotificationSettings = () => {
   const [settings, setSettings] = useState<NotifSettings>(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { isSupported, isSubscribed, subscribe, unsubscribe } = usePushNotifications();
 
   useEffect(() => {
     if (!user) return;
@@ -97,6 +100,36 @@ const NotificationSettings = () => {
       </header>
 
       <main className="px-5 py-5 max-w-lg mx-auto space-y-6">
+        {/* Push Notification Section */}
+        {isSupported && (
+          <section className="bg-card rounded-xl shadow-card border border-border/50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <BellRing className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-foreground">Push Notifications</Label>
+                  <p className="text-xs text-muted-foreground">Get alerts even when the app is closed</p>
+                </div>
+              </div>
+              <Switch
+                checked={isSubscribed}
+                onCheckedChange={async (checked) => {
+                  if (checked) {
+                    const ok = await subscribe();
+                    if (ok) toast.success("Push notifications enabled!");
+                    else toast.error("Permission denied");
+                  } else {
+                    await unsubscribe();
+                    toast.success("Push notifications disabled");
+                  }
+                }}
+              />
+            </div>
+          </section>
+        )}
+
         {/* Toggle Section */}
         <section className="bg-card rounded-xl shadow-card border border-border/50 divide-y divide-border">
           {toggleItems.map((item) => (
