@@ -12,6 +12,7 @@ interface LikedUser {
   profile_image_url: string | null;
   age: number | null;
   location_city: string | null;
+  isMutual?: boolean;
 }
 
 const LikedUsers = () => {
@@ -37,14 +38,26 @@ const LikedUsers = () => {
       }
 
       const ids = likes.map((l: any) => l.liked_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, first_name, last_name, profile_image_url, age, location_city")
-        .in("user_id", ids);
+      const [profilesRes, mutualRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, first_name, last_name, profile_image_url, age, location_city")
+          .in("user_id", ids),
+        supabase
+          .from("user_likes")
+          .select("liker_id")
+          .eq("liked_id", user.id)
+          .in("liker_id", ids),
+      ]);
 
-      // Maintain order from likes
-      const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]));
-      const ordered = ids.map((id) => profileMap.get(id)).filter(Boolean) as LikedUser[];
+      const mutualIds = new Set((mutualRes.data || []).map((m: any) => m.liker_id));
+      const profileMap = new Map((profilesRes.data || []).map((p) => [p.user_id, p]));
+      const ordered = ids.map((id) => {
+        const p = profileMap.get(id);
+        return p ? { ...p, isMutual: mutualIds.has(id) } : null;
+      }).filter(Boolean) as LikedUser[];
+      // Sort mutuals first
+      ordered.sort((a, b) => (b.isMutual ? 1 : 0) - (a.isMutual ? 1 : 0));
       setLikedUsers(ordered);
       setLoading(false);
     };
@@ -90,25 +103,37 @@ const LikedUsers = () => {
                 key={u.user_id}
                 className="flex items-center gap-3 px-5 py-3.5 border-b border-border/30 hover:bg-muted/50 transition-colors"
               >
-                <button
-                  onClick={() => navigate(`/matches/${u.user_id}`)}
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                >
+              <button
+                onClick={() => navigate(`/matches/${u.user_id}`)}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left"
+              >
+                <div className="relative flex-shrink-0">
                   {u.profile_image_url ? (
-                    <img src={u.profile_image_url} alt={name} className="h-12 w-12 rounded-full object-cover flex-shrink-0" />
+                    <img src={u.profile_image_url} alt={name} className="h-12 w-12 rounded-full object-cover" />
                   ) : (
-                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground flex-shrink-0">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
                       {name[0]?.toUpperCase()}
                     </div>
                   )}
-                  <div className="min-w-0">
+                  {u.isMutual && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive flex items-center justify-center">
+                      <Heart className="h-2.5 w-2.5 fill-primary-foreground text-primary-foreground" />
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
                     <p className="text-sm font-semibold text-foreground truncate">
                       {name}{u.age ? `, ${u.age}` : ""}
                     </p>
-                    {u.location_city && (
-                      <p className="text-xs text-muted-foreground truncate">{u.location_city}</p>
+                    {u.isMutual && (
+                      <span className="text-[10px] font-bold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-full">Match!</span>
                     )}
                   </div>
+                  {u.location_city && (
+                    <p className="text-xs text-muted-foreground truncate">{u.location_city}</p>
+                  )}
+                </div>
                 </button>
                 <div className="flex gap-1.5 flex-shrink-0">
                   <button

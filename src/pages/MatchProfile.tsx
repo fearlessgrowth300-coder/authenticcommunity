@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import MatchDialog from "@/components/chat/MatchDialog";
 
 interface ProfileData {
   user_id: string;
@@ -28,6 +29,7 @@ const MatchProfile = () => {
   const [values, setValues] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
+  const [matchDialog, setMatchDialog] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -65,7 +67,20 @@ const MatchProfile = () => {
       } else {
         await supabase.from("user_likes").insert({ liker_id: user.id, liked_id: id });
         setLiked(true);
-        toast.success("Liked! ❤️");
+
+        // Check mutual
+        const { data: mutualLike } = await supabase
+          .from("user_likes")
+          .select("id")
+          .eq("liker_id", id)
+          .eq("liked_id", user.id)
+          .maybeSingle();
+
+        if (mutualLike) {
+          setMatchDialog(true);
+        } else {
+          toast.success("Liked! ❤️");
+        }
       }
     } catch {
       toast.error("Failed to update like");
@@ -192,6 +207,16 @@ const MatchProfile = () => {
           </div>
         </div>
       </main>
+
+      <MatchDialog
+        open={matchDialog}
+        onOpenChange={setMatchDialog}
+        matchedUser={{ name: displayName, imageUrl: profile.profile_image_url, userId: id! }}
+        onMessage={() => {
+          setMatchDialog(false);
+          navigate(`/messages/${id}`);
+        }}
+      />
     </div>
   );
 };
