@@ -14,26 +14,37 @@ const SplashScreen = ({ onFinished }: SplashScreenProps) => {
 
     const handleEnded = () => {
       setFadeOut(true);
-      setTimeout(onFinished, 500);
+      setTimeout(onFinished, 600);
     };
 
-    // Fallback: if video can't play (e.g. autoplay blocked), skip after 3s
-    const fallback = setTimeout(() => {
-      if (!fadeOut) {
-        setFadeOut(true);
-        setTimeout(onFinished, 500);
-      }
-    }, 5000);
+    // Minimum display time of 6 seconds
+    const minTime = 6000;
+    const startedAt = Date.now();
 
-    video.addEventListener("ended", handleEnded);
+    const endWithMinTime = () => {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, minTime - elapsed);
+      setTimeout(() => {
+        setFadeOut(true);
+        setTimeout(onFinished, 600);
+      }, remaining);
+    };
+
+    // Fallback: if video can't play, still show splash for 6s
+    const fallback = setTimeout(() => {
+      if (!fadeOut) endWithMinTime();
+    }, 8000);
+
+    video.addEventListener("ended", () => endWithMinTime());
     video.play().catch(() => {
-      // autoplay blocked – skip splash
-      clearTimeout(fallback);
-      onFinished();
+      // autoplay blocked – still hold splash for 6s then skip
+      setTimeout(() => {
+        setFadeOut(true);
+        setTimeout(onFinished, 600);
+      }, minTime);
     });
 
     return () => {
-      video.removeEventListener("ended", handleEnded);
       clearTimeout(fallback);
     };
   }, [onFinished, fadeOut]);
@@ -49,6 +60,7 @@ const SplashScreen = ({ onFinished }: SplashScreenProps) => {
         src="/splash.mp4"
         muted
         playsInline
+        loop
         className="w-full h-full object-contain"
       />
     </div>
