@@ -21,6 +21,40 @@ export function usePushNotifications() {
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
 
+  const storageKey = user ? `push_subscribed_${user.id}` : "push_subscribed_guest";
+
+  const syncSubscription = useCallback(async () => {
+    if (!isSupported || !user) {
+      setIsSubscribed(false);
+      return;
+    }
+
+    try {
+      setPermission(Notification.permission);
+      const reg: any = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager?.getSubscription();
+
+      if (sub) {
+        const json = sub.toJSON();
+        await supabase.from("push_subscriptions").upsert({
+          user_id: user.id,
+          endpoint: json.endpoint!,
+          p256dh: json.keys!.p256dh,
+          auth: json.keys!.auth,
+        }, { onConflict: "user_id,endpoint" });
+        setIsSubscribed(true);
+        localStorage.setItem(storageKey, "true");
+        return;
+      }
+
+      const remembered = localStorage.getItem(storageKey) === "true";
+      setIsSubscribed(remembered && Notification.permission === "granted");
+    } catch {
+      const remembered = localStorage.getItem(storageKey) === "true";
+      setIsSubscribed(remembered && Notification.permission === "granted");
+    }
+  }, [isSupported, user, storageKey]);
+
   useEffect(() => {
     setIsSupported("serviceWorker" in navigator && "PushManager" in window && "Notification" in window);
     if ("Notification" in window) {
@@ -29,28 +63,42 @@ export function usePushNotifications() {
   }, []);
 
   useEffect(() => {
-    if (!isSupported || !user) return;
-    // Check existing subscription
-    navigator.serviceWorker.ready.then((reg: any) => {
-      reg.pushManager?.getSubscription().then((sub: any) => {
-        setIsSubscribed(!!sub);
-      });
-    });
-  }, [isSupported, user]);
+    syncSubscription();
+  }, [syncSubscription]);
+
+  useEffect(() => {
+    const refresh = () => syncSubscription();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [syncSubscription]);
 
   const subscribe = useCallback(async () => {
     if (!isSupported || !user) return false;
 
     try {
-      const perm = await Notification.requestPermission();
+      const currentPermission = Notification.permission;
+      if (currentPermission === "denied") {
+        setPermission("denied");
+        return false;
+      }
+
+      const perm = currentPermission === "granted" ? "granted" : await Notification.requestPermission();
       setPermission(perm);
       if (perm !== "granted") return false;
 
       const reg: any = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
+      let sub = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
 
       const json = sub.toJSON();
       await supabase.from("push_subscriptions").upsert({
@@ -60,12 +108,13 @@ export function usePushNotifications() {
         auth: json.keys!.auth,
       }, { onConflict: "user_id,endpoint" });
 
+      localStorage.setItem(storageKey, "true");
       setIsSubscribed(true);
       return true;
     } catch {
       return false;
     }
-  }, [isSupported, user]);
+  }, [isSupported, user, storageKey]);
 
   const unsubscribe = useCallback(async () => {
     if (!isSupported || !user) return;
@@ -77,10 +126,14 @@ export function usePushNotifications() {
         const endpoint = sub.endpoint;
         await sub.unsubscribe();
         await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", endpoint);
+      } else {
+        await supabase.from("push_subscriptions").delete().eq("user_id", user.id);
       }
+      localStorage.removeItem(storageKey);
       setIsSubscribed(false);
     } catch {}
-  }, [isSupported, user]);
+  }, [isSupported, user, storageKey]);
 
-  return { isSupported, isSubscribed, permission, subscribe, unsubscribe };
+  return { isSupported, isSubscribed, permission, subscribe, unsubscribe, refresh: syncSubscription };
 }
+

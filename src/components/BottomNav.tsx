@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Compass, CalendarDays, MessageCircle, User } from "lucide-react";
+import { Home, Compass, CalendarDays, MessageCircle, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Home", badgeKey: null },
   { to: "/matches", icon: Compass, label: "Discover", badgeKey: null },
+  { to: "/communities", icon: Users, label: "Community", badgeKey: null },
   { to: "/events", icon: CalendarDays, label: "Events", badgeKey: null },
   { to: "/messages", icon: MessageCircle, label: "Messages", badgeKey: "messages" as const },
   { to: "/profile", icon: User, label: "Profile", badgeKey: null },

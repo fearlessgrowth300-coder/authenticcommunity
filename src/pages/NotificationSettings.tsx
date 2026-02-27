@@ -33,7 +33,7 @@ const NotificationSettings = () => {
   const [settings, setSettings] = useState<NotifSettings>(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { isSupported, isSubscribed, subscribe, unsubscribe } = usePushNotifications();
+  const { isSupported, isSubscribed, permission, subscribe, unsubscribe } = usePushNotifications();
 
   useEffect(() => {
     if (!user) return;
@@ -103,23 +103,32 @@ const NotificationSettings = () => {
         {/* Push Notification Section */}
         {isSupported && (
           <section className="bg-card rounded-xl shadow-card border border-border/50 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                   <BellRing className="h-4 w-4 text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label className="text-sm font-medium text-foreground">Push Notifications</Label>
-                  <p className="text-xs text-muted-foreground">Get alerts even when the app is closed</p>
+                  <p className="text-xs text-muted-foreground">
+                    {permission === "denied"
+                      ? "Permission is blocked in your browser. Enable notifications in phone/browser settings first."
+                      : "Get alerts even when the app is closed"}
+                  </p>
                 </div>
               </div>
               <Switch
                 checked={isSubscribed}
+                disabled={permission === "denied" && !isSubscribed}
                 onCheckedChange={async (checked) => {
                   if (checked) {
                     const ok = await subscribe();
                     if (ok) toast.success("Push notifications enabled!");
-                    else toast.error("Permission denied");
+                    else if (Notification.permission === "denied") {
+                      toast.error("Permission denied. Enable notifications in your browser settings and try again.");
+                    } else {
+                      toast.error("Could not enable push notifications");
+                    }
                   } else {
                     await unsubscribe();
                     toast.success("Push notifications disabled");

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ const CommunitiesFeed = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { hasFeature } = useSubscription();
+  const { canInteract, restrictionMessage } = useAccountRestrictions();
   const [communities, setCommunities] = useState<any[]>([]);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,10 @@ const CommunitiesFeed = () => {
 
   const handleJoin = async (communityId: string) => {
     if (!user) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     setJoining(communityId);
 
     if (joinedIds.has(communityId)) {
@@ -80,6 +86,10 @@ const CommunitiesFeed = () => {
 
   const handleCreate = async () => {
     if (!formName.trim() || !user) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     setCreating(true);
 
     const { error } = await supabase.from("communities").insert({
@@ -117,7 +127,7 @@ const CommunitiesFeed = () => {
           </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <button className="h-9 w-9 rounded-full gradient-primary flex items-center justify-center">
+              <button className="h-9 w-9 rounded-full gradient-primary flex items-center justify-center disabled:opacity-50" disabled={!canInteract}>
                 <Plus className="h-4 w-4 text-primary-foreground" />
               </button>
             </DialogTrigger>
@@ -207,7 +217,7 @@ const CommunitiesFeed = () => {
                       size="sm"
                       variant={joinedIds.has(c.id) ? "outline" : "gradient"}
                       className="ml-auto text-xs h-7"
-                      disabled={joining === c.id}
+                      disabled={joining === c.id || !canInteract}
                       onClick={(e) => { e.stopPropagation(); handleJoin(c.id); }}
                     >
                       {joining === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : joinedIds.has(c.id) ? "Joined" : "Join"}

@@ -8,6 +8,7 @@ import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles, 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,6 +42,7 @@ const MatchesFeed = () => {
   const [showFilter, setShowFilter] = useState(false);
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
+  const { canInteract, restrictionMessage } = useAccountRestrictions();
   const { hasFeature } = useSubscription();
 
   useEffect(() => {
@@ -52,7 +54,8 @@ const MatchesFeed = () => {
           .from("profiles")
           .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state")
           .neq("user_id", user.id)
-          .eq("is_active", true),
+          .eq("is_active", true)
+          .eq("account_status", "active"),
         supabase
           .from("user_likes")
           .select("liked_id")
@@ -108,6 +111,10 @@ const MatchesFeed = () => {
 
   const handleLike = async (userId: string) => {
     if (!user) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     try {
       if (likedIds.has(userId)) {
         await supabase.from("user_likes").delete().eq("liker_id", user.id).eq("liked_id", userId);
@@ -144,6 +151,10 @@ const MatchesFeed = () => {
 
   const handleAction = async (action: "like" | "pass") => {
     if (!currentProfile) return;
+    if (!canInteract) {
+      toast.error(restrictionMessage || "This action is disabled for your account.");
+      return;
+    }
     if (action === "like") {
       await handleLike(currentProfile.user_id);
     }
@@ -251,8 +262,14 @@ const MatchesFeed = () => {
                   >
                     <Heart className={cn("h-3.5 w-3.5", likedIds.has(s.user_id) ? "fill-destructive text-destructive" : "text-muted-foreground")} />
                   </button>
-                  <button
-                    onClick={() => navigate(`/messages/${s.user_id}`)}
+                    <button
+                      onClick={() => {
+                        if (!canInteract) {
+                          toast.error(restrictionMessage || "This action is disabled for your account.");
+                          return;
+                        }
+                        navigate(`/messages/${s.user_id}`);
+                      }}
                     className="flex-1 h-7 rounded-lg bg-muted flex items-center justify-center hover:bg-accent transition-colors"
                   >
                     <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
@@ -325,8 +342,14 @@ const MatchesFeed = () => {
               >
                 <X className="h-6 w-6 text-destructive" />
               </button>
-              <button
-                onClick={() => navigate(`/messages/${currentProfile.user_id}`)}
+                <button
+                  onClick={() => {
+                    if (!canInteract) {
+                      toast.error(restrictionMessage || "This action is disabled for your account.");
+                      return;
+                    }
+                    navigate(`/messages/${currentProfile.user_id}`);
+                  }}
                 className="h-12 w-12 rounded-full bg-card shadow-card border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-colors active:scale-95"
               >
                 <MessageCircle className="h-5 w-5 text-primary" />

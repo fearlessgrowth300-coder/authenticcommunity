@@ -29,6 +29,7 @@ import LinkPreview, { extractUrls, renderMessageWithLinks } from "@/components/c
 import MessageReactions from "@/components/chat/MessageReactions";
 import { usePresence } from "@/hooks/usePresence";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 const VideoCall = lazy(() => import("@/components/chat/VideoCall"));
 
 interface Message {
@@ -47,6 +48,9 @@ interface Profile {
   first_name: string | null;
   last_name: string | null;
   profile_image_url: string | null;
+  account_status?: string | null;
+  suspended_until?: string | null;
+  is_active?: boolean | null;
 }
 
 const DirectMessage = () => {
@@ -77,48 +81,83 @@ const DirectMessage = () => {
     const saved = localStorage.getItem(`chat-bg-${recipientId}`);
     return saved ? JSON.parse(saved) : { type: "color", value: "" };
   });
+  const { canInteract, restrictionMessage } = useAccountRestrictions();
+  const [blockState, setBlockState] = useState<{ iBlocked: boolean; blockedByOther: boolean; blockRowId: string | null }>({
+    iBlocked: false,
+    blockedByOther: false,
+    blockRowId: null,
+  });
+  const [recipientRestricted, setRecipientRestricted] = useState(false);
   
   // Real presence tracking
   const presence = usePresence(recipientId);
-  
+
   // Typing indicator
   const { isRecipientTyping, sendTyping, sendStopTyping } = useTypingIndicator(recipientId);
-  
+
   // Incoming call state
   const [incomingCall, setIncomingCall] = useState<{ callerId: string; offer: RTCSessionDescriptionInit } | null>(null);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [incomingOffer, setIncomingOffer] = useState<RTCSessionDescriptionInit | null>(null);
-
+  
   const bottomRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load recipient profile
+  // Load recipient profile and block state
   useEffect(() => {
     if (!recipientId) return;
-    supabase
-      .from("profiles")
-      .select("first_name, last_name, profile_image_url")
-      .eq("user_id", recipientId)
-      .single()
-      .then(({ data }) => {
-        if (data) setRecipientProfile(data);
-      });
-    
-    // Check for active stories
-    supabase
-      .from("stories")
-      .select("id")
-      .eq("user_id", recipientId)
-      .eq("is_deleted", false)
-      .gt("expires_at", new Date().toISOString())
-      .limit(1)
-      .then(({ data }) => {
-        setHasStory((data || []).length > 0);
-      });
 
-    // No simulated status needed - usePresence handles it
-  }, [recipientId]);
+    const loadRecipientState = async () => {
+      const [{ data: profileData }, { data: storyData }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("first_name, last_name, profile_image_url, account_status, suspended_until, is_active")
+          .eq("user_id", recipientId)
+          .single(),
+        supabase
+          .from("stories")
+          .select("id")
+          .eq("user_id", recipientId)
+          .eq("is_deleted", false)
+          .gt("expires_at", new Date().toISOString())
+          .limit(1),
+      ]);
+
+      if (profileData) {
+        const now = Date.now();
+        const suspendedUntil = profileData.suspended_until ? new Date(profileData.suspended_until).getTime() : null;
+        const suspended =
+          profileData.account_status === "suspended" &&
+          (suspendedUntil === null || Number.isNaN(suspendedUntil) || suspendedUntil > now);
+        const deleted = profileData.account_status === "deleted" || profileData.is_active === false;
+        const restricted = suspended || deleted;
+
+        setRecipientRestricted(restricted);
+        setRecipientProfile({
+          ...profileData,
+          profile_image_url: restricted ? null : profileData.profile_image_url,
+        });
+      }
+
+      setHasStory((storyData || []).length > 0);
+
+      if (user) {
+        const [{ data: iBlockedRow }, { data: blockedByRow }] = await Promise.all([
+          supabase.from("blocked_users").select("id").eq("blocker_id", user.id).eq("blocked_id", recipientId).maybeSingle(),
+          supabase.from("blocked_users").select("id").eq("blocker_id", recipientId).eq("blocked_id", user.id).maybeSingle(),
+        ]);
+
+        setBlockState({
+          iBlocked: !!iBlockedRow,
+          blockedByOther: !!blockedByRow,
+          blockRowId: iBlockedRow?.id || null,
+        });
+      }
+    };
+
+    loadRecipientState();
+  }, [recipientId, user]);
 
   // Listen for incoming calls
   useEffect(() => {
@@ -231,6 +270,17 @@ const DirectMessage = () => {
   const handleSend = async (type: string = "text", stickerUrl?: string) => {
     if (type === "text" && !message.trim()) return;
     if (!user || !recipientId || sending) return;
+
+    if (!canInteract) {
+      toast.error(restrictionMessage || "Your account cannot send messages right now.");
+      return;
+    }
+
+    if (recipientRestricted || blockState.iBlocked || blockState.blockedByOther) {
+      toast.error("Messaging is unavailable in this conversation.");
+      return;
+    }
+
     setSending(true);
     const content = type === "sticker" ? "🖼️ Sticker" : message.trim();
     if (type === "text") setMessage("");
@@ -282,10 +332,26 @@ const DirectMessage = () => {
   const handleBlock = async () => {
     if (!user || !recipientId) return;
     try {
-      await supabase.from("blocked_users").insert({ blocker_id: user.id, blocked_id: recipientId });
-      toast.success("User blocked");
-      navigate("/messages", { replace: true });
-    } catch { toast.error("Failed to block user"); }
+      if (blockState.iBlocked) {
+        if (blockState.blockRowId) {
+          await supabase.from("blocked_users").delete().eq("id", blockState.blockRowId);
+        } else {
+          await supabase.from("blocked_users").delete().eq("blocker_id", user.id).eq("blocked_id", recipientId);
+        }
+        setBlockState((prev) => ({ ...prev, iBlocked: false, blockRowId: null }));
+        toast.success("User unblocked");
+      } else {
+        const { data } = await supabase
+          .from("blocked_users")
+          .insert({ blocker_id: user.id, blocked_id: recipientId })
+          .select("id")
+          .maybeSingle();
+        setBlockState((prev) => ({ ...prev, iBlocked: true, blockRowId: data?.id || prev.blockRowId }));
+        toast.success("User blocked");
+      }
+    } catch {
+      toast.error("Failed to update block status");
+    }
   };
 
   const handleReport = async () => {
@@ -408,6 +474,23 @@ const DirectMessage = () => {
     if (seconds < 3600) return `${seconds / 60} minutes`;
     if (seconds < 86400) return `${seconds / 3600} hours`;
     return `${seconds / 86400} days`;
+  };
+
+  const isChatBlocked = recipientRestricted || blockState.iBlocked || blockState.blockedByOther;
+  const chatRestrictionMessage =
+    restrictionMessage ||
+    (recipientRestricted
+      ? "This account is suspended or deleted."
+      : blockState.iBlocked
+      ? "You blocked this user. Unblock to message again."
+      : blockState.blockedByOther
+      ? "You cannot message this user because they blocked you."
+      : null);
+
+  const getTickSymbol = (msg: Message) => {
+    if (msg.is_read) return "✓✓";
+    if (presence.status === "online") return "✓✓";
+    return "✓";
   };
 
   const displayName = recipientProfile
@@ -533,7 +616,7 @@ const DirectMessage = () => {
                 <Flag className="h-4 w-4 mr-2" /> Report
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleBlock} className="text-destructive">
-                <Ban className="h-4 w-4 mr-2" /> Block
+                <Ban className="h-4 w-4 mr-2" /> {blockState.iBlocked ? "Unblock" : "Block"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -550,6 +633,11 @@ const DirectMessage = () => {
             : { backgroundImage: `url(${chatBg.value})`, backgroundSize: "cover", backgroundPosition: "center" }
         ) : undefined}
       >
+        {chatRestrictionMessage && (
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            {chatRestrictionMessage}
+          </div>
+        )}
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -603,7 +691,7 @@ const DirectMessage = () => {
                       <div className={cn("px-3 py-1", isMe ? "gradient-primary" : "bg-muted")}>
                         <p className={cn("text-[10px] text-right", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
                           {format(new Date(msg.created_at), "h:mm a")}
-                          {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
+                          {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-green-500" : "text-primary-foreground/50")}>{getTickSymbol(msg)}</span>}
                         </p>
                       </div>
                     </div>
@@ -618,7 +706,7 @@ const DirectMessage = () => {
                       <audio src={msg.sticker_url!} controls className="max-w-full h-8" />
                       <p className={cn("text-[10px] text-right mt-0.5", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
                         {format(new Date(msg.created_at), "h:mm a")}
-                        {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
+                        {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-green-500" : "text-primary-foreground/50")}>{getTickSymbol(msg)}</span>}
                       </p>
                     </div>
                   ) : (
@@ -641,8 +729,8 @@ const DirectMessage = () => {
                           {format(new Date(msg.created_at), "h:mm a")}
                         </p>
                         {isMe && (
-                          <span className={cn("text-[10px] transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>
-                            ✓✓
+                          <span className={cn("text-[10px] transition-colors duration-500", msg.is_read ? "text-green-500" : "text-primary-foreground/50")}>
+                            {getTickSymbol(msg)}
                           </span>
                         )}
                       </div>
