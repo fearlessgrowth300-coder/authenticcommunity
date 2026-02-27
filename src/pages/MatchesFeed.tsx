@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +41,7 @@ const MatchesFeed = () => {
   const [showFilter, setShowFilter] = useState(false);
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
+  const { hasFeature } = useSubscription();
 
   useEffect(() => {
     if (!user) return;
@@ -157,6 +159,10 @@ const MatchesFeed = () => {
 
   const fetchAiSuggestions = async () => {
     if (!user) return;
+    if (!hasFeature("ai_insights")) {
+      toast.error("AI Match Insights is a Premium feature. Upgrade to unlock!");
+      return;
+    }
     setLoadingAi(true);
     try {
       const { data, error } = await supabase.functions.invoke("match-suggestions");

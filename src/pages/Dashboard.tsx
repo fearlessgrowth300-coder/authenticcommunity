@@ -56,7 +56,10 @@ const Dashboard = () => {
 
   // Show push notification banner if supported and not subscribed
   useEffect(() => {
-    if (isSupported && !isSubscribed && !localStorage.getItem("push_banner_dismissed")) {
+    if (isSubscribed) {
+      setShowPushBanner(false);
+      localStorage.setItem("push_banner_dismissed", "true");
+    } else if (isSupported && !localStorage.getItem("push_banner_dismissed")) {
       setShowPushBanner(true);
     }
   }, [isSupported, isSubscribed]);
@@ -222,7 +225,7 @@ const Dashboard = () => {
                 <Button size="sm" variant="ghost" onClick={() => { setShowPushBanner(false); localStorage.setItem("push_banner_dismissed", "true"); }}>
                   Later
                 </Button>
-                <Button size="sm" onClick={async () => { const ok = await subscribe(); if (ok) setShowPushBanner(false); }}>
+                <Button size="sm" onClick={async () => { const ok = await subscribe(); if (ok) { setShowPushBanner(false); localStorage.setItem("push_banner_dismissed", "true"); } }}>
                   Enable
                 </Button>
               </div>

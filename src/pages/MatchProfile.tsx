@@ -48,10 +48,18 @@ const MatchProfile = () => {
       setInterests(interestsRes.data?.map((i) => i.interest_name) || []);
       setValues(valuesRes.data?.map((v) => v.value_name) || []);
       setLoading(false);
+
+      // Record profile view
+      if (user && id && user.id !== id) {
+        supabase.from("profile_views").upsert(
+          { profile_user_id: id, viewer_id: user.id },
+          { onConflict: "profile_user_id,viewer_id" }
+        ).then(() => {});
+      }
     };
 
     load();
-  }, [id]);
+  }, [id, user]);
 
   // Check if already liked
   useEffect(() => {
