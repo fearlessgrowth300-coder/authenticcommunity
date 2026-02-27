@@ -20,7 +20,8 @@ const EMAIL_SUBJECTS: Record<string, string> = {
   auth: "Your verification code for Authentic Community",
 };
 
-function buildSignupHtml(token: string, email: string): string {
+function buildSignupHtml(token: string, email: string, confirmationUrl: string): string {
+  const hasLink = confirmationUrl && confirmationUrl.length > 10;
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -35,18 +36,21 @@ function buildSignupHtml(token: string, email: string): string {
     — we're excited to help you find genuine connections, meaningful friendships, and communities that feel like home.
   </p>
   <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
-    Use the code below to verify your email (${email}):
+    Click the button below to verify your email (${email}):
   </p>
-  <div style="background:#f3f4f6;border-radius:12px;padding:28px;text-align:center;margin:24px 0;">
+  ${hasLink ? `<div style="text-align:center;margin:32px 0;">
+    <a href="${confirmationUrl}" style="display:inline-block;background:hsl(217,91%,60%);color:#ffffff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Verify Email</a>
+  </div>
+  <p style="font-size:13px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
+    Or copy and paste this link into your browser:<br/>
+    <a href="${confirmationUrl}" style="color:hsl(217,91%,60%);word-break:break-all;">${confirmationUrl}</a>
+  </p>` : `<div style="background:#f3f4f6;border-radius:12px;padding:28px;text-align:center;margin:24px 0;">
     <p style="font-size:13px;color:hsl(220,10%,46%);margin:0 0 12px;">Your Verification Code</p>
     <p style="font-family:'Courier New',monospace;font-size:42px;font-weight:bold;color:hsl(217,91%,60%);letter-spacing:8px;margin:0 0 12px;">${token || "------"}</p>
     <p style="font-size:13px;color:#ef4444;margin:0;">⏱️ This code expires in 15 minutes</p>
-  </div>
-  <p style="font-size:15px;color:hsl(220,10%,46%);line-height:1.6;margin:0 0 20px;">
-    Enter this code in the verification screen to confirm your email address.
-  </p>
+  </div>`}
   <div style="background:hsl(217,91%,95%);border-left:4px solid hsl(217,91%,60%);padding:12px 16px;border-radius:4px;margin:20px 0;">
-    <p style="font-size:13px;color:hsl(217,91%,35%);margin:0;">🔒 Never share this code with anyone. We'll never ask for it via email or message.</p>
+    <p style="font-size:13px;color:hsl(217,91%,35%);margin:0;">🔒 This verification link expires in 15 minutes.</p>
   </div>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
   <p style="font-size:13px;color:#9ca3af;margin:0 0 8px;">If you didn't create an account, you can safely ignore this email.</p>
@@ -184,7 +188,7 @@ function buildReauthHtml(token: string): string {
 function buildEmailHtml(type: string, data: Record<string, any>): string {
   switch (type) {
     case "signup":
-      return buildSignupHtml(data.token || "", data.email || "");
+      return buildSignupHtml(data.token || "", data.email || "", data.confirmation_url || data.url || "");
     case "recovery":
       return buildRecoveryHtml(data.confirmation_url || data.url || SITE_URL);
     case "magiclink":
@@ -196,7 +200,7 @@ function buildEmailHtml(type: string, data: Record<string, any>): string {
     case "reauthentication":
       return buildReauthHtml(data.token || "");
     default:
-      return buildSignupHtml(data.token || "", data.email || "");
+      return buildSignupHtml(data.token || "", data.email || "", data.confirmation_url || data.url || "");
   }
 }
 
@@ -204,7 +208,7 @@ function buildEmailHtml(type: string, data: Record<string, any>): string {
 function buildPlainText(type: string, data: Record<string, any>): string {
   switch (type) {
     case "signup":
-      return `Authentic Community — Verify your email\n\nYour verification code: ${data.token || "------"}\n\nThis code expires in 15 minutes.\n\nIf you didn't create an account, ignore this email.`;
+      return `Authentic Community — Verify your email\n\nClick this link to verify your email:\n${data.confirmation_url || data.url || SITE_URL}\n\nThis link expires in 15 minutes.\n\nIf you didn't create an account, ignore this email.`;
     case "recovery":
       return `Authentic Community — Reset your password\n\nClick this link to reset your password:\n${data.confirmation_url || data.url || SITE_URL}\n\nThis link expires in 1 hour.`;
     case "magiclink":
