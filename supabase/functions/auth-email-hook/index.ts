@@ -39,7 +39,7 @@ function buildSignupHtml(token: string, email: string): string {
   </p>
   <div style="background:#f3f4f6;border-radius:12px;padding:28px;text-align:center;margin:24px 0;">
     <p style="font-size:13px;color:hsl(220,10%,46%);margin:0 0 12px;">Your Verification Code</p>
-    <p style="font-family:'Courier New',monospace;font-size:42px;font-weight:bold;color:hsl(217,91%,60%);letter-spacing:8px;margin:0 0 12px;">${token || "------"}</p>
+    <p style="font-family:'Courier New',monospace;font-size:36px;font-weight:bold;color:hsl(217,91%,60%);letter-spacing:6px;margin:0 0 12px;">${token || "--------"}</p>
     <p style="font-size:13px;color:#ef4444;margin:0;">⏱️ This code expires in 15 minutes</p>
   </div>
   <div style="background:hsl(217,91%,95%);border-left:4px solid hsl(217,91%,60%);padding:12px 16px;border-radius:4px;margin:20px 0;">
