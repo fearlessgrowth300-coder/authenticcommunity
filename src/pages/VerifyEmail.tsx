@@ -63,7 +63,7 @@ const VerifyEmail = () => {
   }, []);
 
   const handleVerify = async () => {
-    if (!otp || otp.length < 6 || !email || verifying) return;
+    if (!otp || otp.length < 8 || !email || verifying) return;
     if (submittedRef.current === otp) return;
     submittedRef.current = otp;
 
@@ -97,9 +97,9 @@ const VerifyEmail = () => {
     }
   };
 
-  // Auto-verify when 6 digits entered
+  // Auto-verify when 8 characters entered
   useEffect(() => {
-    if (otp.length === 6) {
+    if (otp.length === 8) {
       handleVerify();
     }
   }, [otp]);
@@ -137,12 +137,12 @@ const VerifyEmail = () => {
           <Mail className="h-8 w-8 text-primary-foreground" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Enter verification code</h1>
-        <p className="text-muted-foreground text-sm mb-2">We sent a 6-digit code to</p>
+        <p className="text-muted-foreground text-sm mb-2">We sent a verification code to</p>
         <p className="text-foreground font-medium mb-8">{email}</p>
 
         <div className="mb-6">
           <InputOTP
-            maxLength={6}
+            maxLength={8}
             value={otp}
             onChange={setOtp}
             disabled={verifying}
@@ -154,6 +154,8 @@ const VerifyEmail = () => {
               <InputOTPSlot index={3} />
               <InputOTPSlot index={4} />
               <InputOTPSlot index={5} />
+              <InputOTPSlot index={6} />
+              <InputOTPSlot index={7} />
             </InputOTPGroup>
           </InputOTP>
         </div>
@@ -170,7 +172,7 @@ const VerifyEmail = () => {
           size="lg"
           className="w-full max-w-xs mb-6"
           onClick={handleVerify}
-          disabled={otp.length < 6 || verifying}
+          disabled={otp.length < 8 || verifying}
         >
           {verifying ? (
             <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Verifying...</>
