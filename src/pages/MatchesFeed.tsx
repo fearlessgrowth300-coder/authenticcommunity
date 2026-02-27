@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles } from "lucide-react";
+import { Heart, X, MapPin, SlidersHorizontal, Loader2, MessageCircle, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
@@ -183,6 +183,12 @@ const MatchesFeed = () => {
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <h1 className="text-lg font-bold text-foreground">Discover</h1>
           <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/profile/liked")}
+              className="h-9 w-9 rounded-full bg-muted flex items-center justify-center hover:bg-destructive/10 transition-colors"
+            >
+              <Heart className="h-4 w-4 text-destructive" />
+            </button>
             <Button
               variant="outline"
               size="sm"

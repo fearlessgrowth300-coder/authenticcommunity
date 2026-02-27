@@ -26,6 +26,7 @@ import IncomingCall from "@/components/chat/IncomingCall";
 import ChatStoryViewer from "@/components/chat/ChatStoryViewer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import LinkPreview, { extractUrls, renderMessageWithLinks } from "@/components/chat/LinkPreview";
+import MessageReactions from "@/components/chat/MessageReactions";
 import { usePresence } from "@/hooks/usePresence";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 const VideoCall = lazy(() => import("@/components/chat/VideoCall"));
@@ -580,7 +581,7 @@ const DirectMessage = () => {
                     </span>
                   </div>
                 )}
-                <div className={cn("flex mb-1", isMe ? "justify-end" : "justify-start")}>
+                <div className={cn("flex flex-col mb-1", isMe ? "items-end" : "items-start")}>
                   {isSticker ? (
                     <button
                       onClick={() => !isMe && handleSaveSticker(msg.sticker_url!)}
@@ -647,6 +648,7 @@ const DirectMessage = () => {
                       </div>
                     </div>
                   )}
+                  <MessageReactions messageId={msg.id} isMe={isMe} />
                 </div>
               </div>
             );
