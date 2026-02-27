@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Save, RefreshCw, Clock } from "lucide-react";
+import { Save, Clock, LockKeyhole } from "lucide-react";
 import { format } from "date-fns";
 
 type SettingsMap = Record<string, any>;
@@ -265,6 +265,96 @@ function AdminLogs() {
   );
 }
 
+function AdminSecuritySettings() {
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+
+  const { data: isPinSet, isLoading: loadingPinStatus, refetch } = useQuery({
+    queryKey: ["admin-pin-status-settings"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("admin_access_pin_is_set");
+      if (error) throw error;
+      return !!data;
+    },
+  });
+
+  const savePin = useMutation({
+    mutationFn: async ({ newPin }: { newPin: string }) => {
+      const { error } = await (supabase as any).rpc("set_admin_access_pin", { _pin: newPin });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setPin("");
+      setConfirmPin("");
+      await refetch();
+      toast.success("Admin PIN updated successfully");
+    },
+    onError: () => toast.error("Failed to update admin PIN"),
+  });
+
+  const handleSavePin = () => {
+    const trimmedPin = pin.trim();
+
+    if (trimmedPin.length < 4) {
+      toast.error("PIN must be at least 4 characters");
+      return;
+    }
+
+    if (trimmedPin !== confirmPin.trim()) {
+      toast.error("PIN confirmation does not match");
+      return;
+    }
+
+    savePin.mutate({ newPin: trimmedPin });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <LockKeyhole className="h-4 w-4" /> Admin Access PIN
+        </CardTitle>
+        <CardDescription>
+          Require a second security PIN before any admin dashboard access.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+          <span className="text-sm text-muted-foreground">PIN status</span>
+          <Badge variant={isPinSet ? "default" : "secondary"}>
+            {loadingPinStatus ? "Checking..." : isPinSet ? "Configured" : "Not set"}
+          </Badge>
+        </div>
+
+        <div className="space-y-2">
+          <Label>New PIN</Label>
+          <Input
+            type="password"
+            placeholder="At least 4 characters"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Confirm PIN</Label>
+          <Input
+            type="password"
+            placeholder="Re-enter PIN"
+            value={confirmPin}
+            onChange={(e) => setConfirmPin(e.target.value)}
+          />
+        </div>
+
+        <Button className="w-full" onClick={handleSavePin} disabled={savePin.isPending}>
+          <Save className="h-4 w-4 mr-2" />
+          {savePin.isPending ? "Saving..." : isPinSet ? "Update PIN" : "Set PIN"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   const [tab, setTab] = useState("general");
 
@@ -276,10 +366,11 @@ export default function AdminSettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-4 max-w-lg">
+        <TabsList className="grid w-full grid-cols-5 max-w-2xl">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="logs">Activity</TabsTrigger>
         </TabsList>
 
@@ -293,6 +384,10 @@ export default function AdminSettingsPage() {
 
         <TabsContent value="moderation" className="mt-6">
           <ModerationSettings />
+        </TabsContent>
+
+        <TabsContent value="security" className="mt-6">
+          <AdminSecuritySettings />
         </TabsContent>
 
         <TabsContent value="logs" className="mt-6">

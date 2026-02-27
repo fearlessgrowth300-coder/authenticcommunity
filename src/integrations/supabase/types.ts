@@ -1135,6 +1135,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_access_pin_is_set: { Args: never; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1142,6 +1143,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      set_admin_access_pin: { Args: { _pin: string }; Returns: undefined }
+      verify_admin_access_pin: { Args: { _pin: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
