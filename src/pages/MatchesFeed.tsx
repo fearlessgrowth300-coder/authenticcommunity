@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import MatchDialog from "@/components/chat/MatchDialog";
 
 interface ProfileCard {
   user_id: string;
@@ -38,6 +39,7 @@ const MatchesFeed = () => {
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [showFilter, setShowFilter] = useState(false);
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
+  const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
 
   useEffect(() => {
     if (!user) return;
@@ -112,7 +114,26 @@ const MatchesFeed = () => {
       } else {
         await supabase.from("user_likes").insert({ liker_id: user.id, liked_id: userId });
         setLikedIds((prev) => new Set(prev).add(userId));
-        toast.success("Liked! ❤️");
+
+        // Check if mutual like
+        const { data: mutualLike } = await supabase
+          .from("user_likes")
+          .select("id")
+          .eq("liker_id", userId)
+          .eq("liked_id", user.id)
+          .maybeSingle();
+
+        if (mutualLike) {
+          const matchedProfile = profiles.find((p) => p.user_id === userId);
+          setMatchDialog({
+            open: true,
+            name: `${matchedProfile?.first_name || ""} ${matchedProfile?.last_name || ""}`.trim() || "User",
+            imageUrl: matchedProfile?.profile_image_url || null,
+            userId,
+          });
+        } else {
+          toast.success("Liked! ❤️");
+        }
       }
     } catch {
       toast.error("Failed to update like");
@@ -333,6 +354,16 @@ const MatchesFeed = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Match Dialog */}
+      <MatchDialog
+        open={matchDialog.open}
+        onOpenChange={(open) => setMatchDialog((prev) => ({ ...prev, open }))}
+        matchedUser={matchDialog}
+        onMessage={() => {
+          setMatchDialog((prev) => ({ ...prev, open: false }));
+          navigate(`/messages/${matchDialog.userId}`);
+        }}
+      />
     </div>
   );
 };

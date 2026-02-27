@@ -92,6 +92,33 @@ export type Database = {
         }
         Relationships: []
       }
+      call_signals: {
+        Row: {
+          callee_id: string
+          caller_id: string
+          created_at: string
+          id: string
+          signal_data: Json
+          signal_type: string
+        }
+        Insert: {
+          callee_id: string
+          caller_id: string
+          created_at?: string
+          id?: string
+          signal_data: Json
+          signal_type: string
+        }
+        Update: {
+          callee_id?: string
+          caller_id?: string
+          created_at?: string
+          id?: string
+          signal_data?: Json
+          signal_type?: string
+        }
+        Relationships: []
+      }
       communities: {
         Row: {
           category: string | null
@@ -267,6 +294,30 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_settings: {
+        Row: {
+          disappearing_duration: number | null
+          id: string
+          other_user_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          disappearing_duration?: number | null
+          id?: string
+          other_user_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          disappearing_duration?: number | null
+          id?: string
+          other_user_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       event_attendees: {
         Row: {
           created_at: string
@@ -404,26 +455,35 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          disappears_at: string | null
           id: string
           is_read: boolean | null
+          message_type: string | null
           recipient_id: string
           sender_id: string
+          sticker_url: string | null
         }
         Insert: {
           content: string
           created_at?: string
+          disappears_at?: string | null
           id?: string
           is_read?: boolean | null
+          message_type?: string | null
           recipient_id: string
           sender_id: string
+          sticker_url?: string | null
         }
         Update: {
           content?: string
           created_at?: string
+          disappears_at?: string | null
           id?: string
           is_read?: boolean | null
+          message_type?: string | null
           recipient_id?: string
           sender_id?: string
+          sticker_url?: string | null
         }
         Relationships: []
       }
@@ -655,6 +715,62 @@ export type Database = {
         }
         Relationships: []
       }
+      sticker_packs: {
+        Row: {
+          created_at: string
+          creator_id: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
+      stickers: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          name: string | null
+          pack_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          name?: string | null
+          pack_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          name?: string | null
+          pack_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stickers_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           background_color: string | null
@@ -885,6 +1001,27 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_saved_stickers: {
+        Row: {
+          created_at: string
+          id: string
+          sticker_url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          sticker_url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          sticker_url?: string
           user_id?: string
         }
         Relationships: []
