@@ -511,7 +511,7 @@ const DirectMessage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col max-w-[100vw] overflow-x-hidden">
       {/* Incoming Call */}
       {incomingCall && (
         <IncomingCall
@@ -626,7 +626,7 @@ const DirectMessage = () => {
 
       {/* Messages */}
       <main
-        className="flex-1 px-4 py-4 max-w-lg mx-auto w-full overflow-y-auto space-y-1"
+        className="flex-1 px-4 py-4 max-w-lg mx-auto w-full overflow-y-auto overflow-x-hidden space-y-1"
         style={chatBg.value ? (
           chatBg.type === "color"
             ? { backgroundColor: chatBg.value }

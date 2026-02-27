@@ -102,9 +102,22 @@ export default function AdminUsers() {
 
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
+      // Delete all user data permanently
+      await Promise.all([
+        supabase.from("messages").delete().or(`sender_id.eq.${userId},recipient_id.eq.${userId}`),
+        supabase.from("matches").delete().or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`),
+        supabase.from("connections").delete().or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`),
+        supabase.from("community_members").delete().eq("user_id", userId),
+        supabase.from("user_likes").delete().or(`liker_id.eq.${userId},liked_id.eq.${userId}`),
+        supabase.from("user_follows").delete().or(`follower_id.eq.${userId},following_id.eq.${userId}`),
+        supabase.from("stories").delete().eq("user_id", userId),
+        supabase.from("notifications").delete().eq("user_id", userId),
+        supabase.from("blocked_users").delete().or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+      ]);
+
       const { error } = await supabase
         .from("profiles")
-        .update({ account_status: "deleted", is_active: false })
+        .update({ account_status: "deleted", is_active: false, first_name: "Deleted", last_name: "User", bio: null, profile_image_url: null })
         .eq("user_id", userId);
       if (error) throw error;
 
@@ -159,12 +172,8 @@ export default function AdminUsers() {
   const handleTouchEnd = (userId: string, name: string, status: string | null) => {
     const offset = swipeStates[userId] || 0;
     if (offset < -60) {
-      // Swipe left → delete (only if suspended)
-      if ((status || "active") === "suspended") {
-        setDeleteDialog({ open: true, userId, name });
-      } else {
-        toast.info("Suspend the user first before deleting");
-      }
+      // Swipe left → delete
+      setDeleteDialog({ open: true, userId, name });
     } else if (offset > 60) {
       // Swipe right → suspend/reactivate
       if ((status || "active") === "active") {
@@ -340,14 +349,24 @@ export default function AdminUsers() {
                           <Eye className="h-4 w-4" />
                         </Button>
                         {(u.account_status || "active") === "active" ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-amber-500 hover:text-amber-600"
-                            onClick={() => setSuspendDialog({ open: true, userId: u.user_id, name })}
-                          >
-                            <Ban className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-500 hover:text-amber-600"
+                              onClick={() => setSuspendDialog({ open: true, userId: u.user_id, name })}
+                            >
+                              <Ban className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => setDeleteDialog({ open: true, userId: u.user_id, name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
                         ) : (u.account_status || "active") === "suspended" ? (
                           <>
                             <Button
