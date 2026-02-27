@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState, useCallback } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { BottomNav } from "@/components/BottomNav";
+import SplashScreen from "@/components/SplashScreen";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -53,59 +54,77 @@ const PageLoader = () => (
   </div>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/onboarding/complete" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-              <Route path="/onboarding/:step" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/matches" element={<ProtectedRoute><MatchesFeed /></ProtectedRoute>} />
-              <Route path="/matches/:id" element={<ProtectedRoute><MatchProfile /></ProtectedRoute>} />
-              <Route path="/communities" element={<ProtectedRoute><CommunitiesFeed /></ProtectedRoute>} />
-              <Route path="/communities/:id" element={<ProtectedRoute><CommunityDetail /></ProtectedRoute>} />
-              <Route path="/messages" element={<ProtectedRoute><MessagesList /></ProtectedRoute>} />
-              <Route path="/messages/:id" element={<ProtectedRoute><DirectMessage /></ProtectedRoute>} />
-              <Route path="/events" element={<ProtectedRoute><EventsFeed /></ProtectedRoute>} />
-              <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
-              <Route path="/profile/liked" element={<ProtectedRoute><LikedUsers /></ProtectedRoute>} />
-              <Route path="/profile/viewers" element={<ProtectedRoute><ProfileViewers /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-              <Route path="/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-              <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
-              <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
-              <Route path="/settings/help" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
-              <Route path="/settings/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
-              <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-              <Route path="/stories/create" element={<ProtectedRoute><CreateStory /></ProtectedRoute>} />
-              <Route path="/stories/:id" element={<ProtectedRoute><StoryViewer /></ProtectedRoute>} />
-              <Route path="/stories/:id/replies" element={<ProtectedRoute><StoryReplies /></ProtectedRoute>} />
-              <Route path="/stories/:id/viewers" element={<ProtectedRoute><StoryViewers /></ProtectedRoute>} />
-              <Route path="/install" element={<Install />} />
-              <Route path="/suspended" element={<ProtectedRoute><SuspendedAccount /></ProtectedRoute>} />
-              <Route path="/admin/*" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-          <BottomNav />
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const SPLASH_KEY = "commune_splash_shown";
+
+const App = () => {
+  const [showSplash, setShowSplash] = useState(() => {
+    if (sessionStorage.getItem(SPLASH_KEY)) return false;
+    return true;
+  });
+
+  const handleSplashDone = useCallback(() => {
+    sessionStorage.setItem(SPLASH_KEY, "1");
+    setShowSplash(false);
+  }, []);
+
+  if (showSplash) {
+    return <SplashScreen onFinished={handleSplashDone} />;
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/onboarding/complete" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+                <Route path="/onboarding/:step" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/matches" element={<ProtectedRoute><MatchesFeed /></ProtectedRoute>} />
+                <Route path="/matches/:id" element={<ProtectedRoute><MatchProfile /></ProtectedRoute>} />
+                <Route path="/communities" element={<ProtectedRoute><CommunitiesFeed /></ProtectedRoute>} />
+                <Route path="/communities/:id" element={<ProtectedRoute><CommunityDetail /></ProtectedRoute>} />
+                <Route path="/messages" element={<ProtectedRoute><MessagesList /></ProtectedRoute>} />
+                <Route path="/messages/:id" element={<ProtectedRoute><DirectMessage /></ProtectedRoute>} />
+                <Route path="/events" element={<ProtectedRoute><EventsFeed /></ProtectedRoute>} />
+                <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+                <Route path="/profile/liked" element={<ProtectedRoute><LikedUsers /></ProtectedRoute>} />
+                <Route path="/profile/viewers" element={<ProtectedRoute><ProfileViewers /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                <Route path="/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+                <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
+                <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+                <Route path="/settings/help" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
+                <Route path="/settings/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
+                <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                <Route path="/stories/create" element={<ProtectedRoute><CreateStory /></ProtectedRoute>} />
+                <Route path="/stories/:id" element={<ProtectedRoute><StoryViewer /></ProtectedRoute>} />
+                <Route path="/stories/:id/replies" element={<ProtectedRoute><StoryReplies /></ProtectedRoute>} />
+                <Route path="/stories/:id/viewers" element={<ProtectedRoute><StoryViewers /></ProtectedRoute>} />
+                <Route path="/install" element={<Install />} />
+                <Route path="/suspended" element={<ProtectedRoute><SuspendedAccount /></ProtectedRoute>} />
+                <Route path="/admin/*" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            <BottomNav />
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
