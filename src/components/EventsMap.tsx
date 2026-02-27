@@ -62,6 +62,9 @@ export function EventsMap({ events, onEventClick, className }: EventsMapProps) {
 
       const eventsWithCoords = events.filter((e) => e.latitude && e.longitude);
 
+      const escapeHtml = (str: string) =>
+        str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
       eventsWithCoords.forEach((event) => {
         const el = document.createElement("div");
         el.className = "event-map-marker";
@@ -74,11 +77,15 @@ export function EventsMap({ events, onEventClick, className }: EventsMapProps) {
         `;
         el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
 
+        const safeName = escapeHtml(event.name);
+        const safeLocation = event.location ? escapeHtml(event.location) : "";
+        const safeCount = parseInt(String(event.attendee_count)) || 0;
+
         const popup = new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
           <div style="padding:4px 8px;">
-            <strong style="font-size:13px;">${event.name}</strong>
-            ${event.location ? `<p style="font-size:11px;color:#888;margin:2px 0 0;">${event.location}</p>` : ""}
-            <p style="font-size:11px;color:#6366f1;margin:2px 0 0;">${event.attendee_count || 0} going</p>
+            <strong style="font-size:13px;">${safeName}</strong>
+            ${event.location ? `<p style="font-size:11px;color:#888;margin:2px 0 0;">${safeLocation}</p>` : ""}
+            <p style="font-size:11px;color:#6366f1;margin:2px 0 0;">${safeCount} going</p>
           </div>
         `);
 
