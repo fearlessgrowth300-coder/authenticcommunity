@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck, Heart } from "lucide-react";
 import { StoryHighlights } from "@/components/StoryHighlights";
+import { useFollow } from "@/hooks/useFollow";
 
 interface ProfileData {
   first_name: string | null;
@@ -27,6 +28,7 @@ const Profile = () => {
   const [stats, setStats] = useState({ connections: 0, communities: 0, events: 0 });
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { followerCount, followingCount } = useFollow(user?.id);
 
   useEffect(() => {
     if (!user) return;
@@ -116,7 +118,17 @@ const Profile = () => {
               </span>
             </div>
           )}
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/profile/edit")}>
+          <div className="flex justify-center gap-6 mt-3 mb-3">
+            <div className="text-center">
+              <p className="text-base font-bold text-foreground">{followerCount}</p>
+              <p className="text-xs text-muted-foreground">Followers</p>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-bold text-foreground">{followingCount}</p>
+              <p className="text-xs text-muted-foreground">Following</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate("/profile/edit")}>
             <Edit className="h-3.5 w-3.5 mr-1" /> Edit Profile
           </Button>
         </div>
