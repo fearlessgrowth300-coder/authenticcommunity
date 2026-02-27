@@ -53,7 +53,7 @@
     --shadow-soft: 0 2px 12px -2px hsl(217 91% 60% / 0.12);
     --shadow-card: 0 1px 3px 0 hsl(222 20% 10% / 0.06), 0 1px 2px -1px hsl(222 20% 10% / 0.06);
     --shadow-card-hover: 0 8px 25px -5px hsl(271 81% 56% / 0.18);
-    --nav-height: 4.5rem;
+    --nav-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .dark {
@@ -92,13 +92,26 @@
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overscroll-behavior-y: contain;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+  }
+  /* Prevent text selection on interactive elements for mobile feel */
+  button, a, [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Mobile input zoom prevention */
+  input, select, textarea {
+    font-size: 16px !important;
   }
 }
 

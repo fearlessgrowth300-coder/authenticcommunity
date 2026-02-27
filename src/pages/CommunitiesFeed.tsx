@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "T
 const CommunitiesFeed = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { hasFeature } = useSubscription();
   const [communities, setCommunities] = useState<any[]>([]);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,12 @@ const CommunitiesFeed = () => {
       setJoinedIds((prev) => { const n = new Set(prev); n.delete(communityId); return n; });
       toast.success("Left community");
     } else {
+      // Check free tier community limit
+      if (!hasFeature("unlimited_communities") && joinedIds.size >= 3) {
+        toast.error("Free plan is limited to 3 communities. Upgrade to join more!");
+        setJoining(null);
+        return;
+      }
       await supabase.from("community_members").insert({ community_id: communityId, user_id: user.id });
       setJoinedIds((prev) => new Set(prev).add(communityId));
       toast.success("Joined community!");
