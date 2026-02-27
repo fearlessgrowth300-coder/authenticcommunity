@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Flag, CheckCircle, XCircle, Eye, Loader2, MoreHorizontal } from "lucide-react";
+import { Flag, CheckCircle, XCircle, Eye, Loader2, MoreHorizontal, Ban, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -29,6 +29,10 @@ export default function AdminReports() {
   const [resolveDialog, setResolveDialog] = useState<{ open: boolean; reportId?: string }>({ open: false });
   const [resolution, setResolution] = useState("");
   const [detailReport, setDetailReport] = useState<any>(null);
+  const [suspendDialog, setSuspendDialog] = useState<{ open: boolean; userId?: string; reportId?: string }>({ open: false });
+  const [suspendReason, setSuspendReason] = useState("");
+  const [suspendDuration, setSuspendDuration] = useState("7days");
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; userId?: string; reportId?: string }>({ open: false });
 
   const { data: reports, isLoading } = useQuery({
     queryKey: ["admin-reports", statusFilter],
@@ -52,11 +56,7 @@ export default function AdminReports() {
     mutationFn: async ({ reportId, resolution }: { reportId: string; resolution: string }) => {
       const { error } = await supabase
         .from("reports")
-        .update({
-          status: "resolved",
-          resolution,
-          resolved_at: new Date().toISOString(),
-        })
+        .update({ status: "resolved", resolution, resolved_at: new Date().toISOString() })
         .eq("id", reportId);
       if (error) throw error;
 
@@ -98,13 +98,95 @@ export default function AdminReports() {
     },
   });
 
+  const suspendFromReportMutation = useMutation({
+    mutationFn: async ({ userId, reason, duration, reportId }: { userId: string; reason: string; duration: string; reportId: string }) => {
+      const suspendUntil = new Date();
+      if (duration === "permanent") suspendUntil.setFullYear(2099);
+      else if (duration === "7days") suspendUntil.setDate(suspendUntil.getDate() + 7);
+      else if (duration === "30days") suspendUntil.setDate(suspendUntil.getDate() + 30);
+      else if (duration === "90days") suspendUntil.setDate(suspendUntil.getDate() + 90);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          account_status: "suspended",
+          suspended_until: suspendUntil.toISOString(),
+          suspension_reason: reason,
+        })
+        .eq("user_id", userId);
+      if (error) throw error;
+
+      // Also resolve the report
+      await supabase.from("reports").update({
+        status: "resolved",
+        resolution: `User suspended (${duration}): ${reason}`,
+        resolved_at: new Date().toISOString(),
+      }).eq("id", reportId);
+
+      await supabase.from("admin_logs").insert({
+        admin_id: currentUser!.id,
+        action: "suspend_user_from_report",
+        target_type: "user",
+        target_id: userId,
+        details: { reason, duration, reportId },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
+      toast.success("User suspended & report resolved");
+      setSuspendDialog({ open: false });
+      setSuspendReason("");
+    },
+    onError: () => toast.error("Failed to suspend user"),
+  });
+
+  const deleteFromReportMutation = useMutation({
+    mutationFn: async ({ userId, reportId }: { userId: string; reportId: string }) => {
+      // Permanently delete user data
+      await Promise.all([
+        supabase.from("messages").delete().or(`sender_id.eq.${userId},recipient_id.eq.${userId}`),
+        supabase.from("matches").delete().or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`),
+        supabase.from("connections").delete().or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`),
+        supabase.from("community_members").delete().eq("user_id", userId),
+        supabase.from("user_likes").delete().or(`liker_id.eq.${userId},liked_id.eq.${userId}`),
+        supabase.from("user_follows").delete().or(`follower_id.eq.${userId},following_id.eq.${userId}`),
+        supabase.from("stories").delete().eq("user_id", userId),
+        supabase.from("notifications").delete().eq("user_id", userId),
+        supabase.from("blocked_users").delete().or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+      ]);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ account_status: "deleted", is_active: false, first_name: "Deleted", last_name: "User", bio: null, profile_image_url: null })
+        .eq("user_id", userId);
+      if (error) throw error;
+
+      await supabase.from("reports").update({
+        status: "resolved",
+        resolution: "User permanently deleted",
+        resolved_at: new Date().toISOString(),
+      }).eq("id", reportId);
+
+      await supabase.from("admin_logs").insert({
+        admin_id: currentUser!.id,
+        action: "delete_user_from_report",
+        target_type: "user",
+        target_id: userId,
+        details: { permanent: true, reportId },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
+      toast.success("User permanently deleted & report resolved");
+      setDeleteDialog({ open: false });
+    },
+    onError: () => toast.error("Failed to delete user"),
+  });
+
   const getSeverityBadge = (severity: string | null) => {
     const s = severity || "medium";
     const map: Record<string, "default" | "destructive" | "secondary"> = {
-      low: "secondary",
-      medium: "default",
-      high: "destructive",
-      critical: "destructive",
+      low: "secondary", medium: "default", high: "destructive", critical: "destructive",
     };
     return <Badge variant={map[s] || "secondary"} className="text-[10px]">{s}</Badge>;
   };
@@ -123,7 +205,6 @@ export default function AdminReports() {
         <p className="text-muted-foreground text-sm">{reports?.length ?? 0} reports</p>
       </div>
 
-      {/* Filter */}
       <div className="flex gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
@@ -139,7 +220,6 @@ export default function AdminReports() {
         </Select>
       </div>
 
-      {/* Reports Table */}
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -178,7 +258,7 @@ export default function AdminReports() {
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuItem onClick={() => setDetailReport(r)}>
                               <Eye className="h-4 w-4 mr-2" /> View Details
                             </DropdownMenuItem>
@@ -192,6 +272,26 @@ export default function AdminReports() {
                                 <DropdownMenuItem onClick={() => dismissMutation.mutate(r.id)}>
                                   <XCircle className="h-4 w-4 mr-2" /> Dismiss
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {r.reported_user_id && (
+                                  <>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSuspendReason(r.reason || "");
+                                        setSuspendDialog({ open: true, userId: r.reported_user_id!, reportId: r.id });
+                                      }}
+                                      className="text-amber-600"
+                                    >
+                                      <Ban className="h-4 w-4 mr-2" /> Suspend User
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setDeleteDialog({ open: true, userId: r.reported_user_id!, reportId: r.id })}
+                                      className="text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" /> Delete User Permanently
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </>
                             )}
                           </DropdownMenuContent>
@@ -226,9 +326,7 @@ export default function AdminReports() {
             onChange={(e) => setResolution(e.target.value)}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResolveDialog({ open: false })}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setResolveDialog({ open: false })}>Cancel</Button>
             <Button
               disabled={!resolution || resolveMutation.isPending}
               onClick={() => {
@@ -238,6 +336,73 @@ export default function AdminReports() {
               }}
             >
               {resolveMutation.isPending ? "Resolving..." : "Resolve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Suspend from Report Dialog */}
+      <Dialog open={suspendDialog.open} onOpenChange={(open) => setSuspendDialog({ open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend Reported User</DialogTitle>
+            <DialogDescription>Suspend this user's account and resolve the report.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select value={suspendDuration} onValueChange={setSuspendDuration}>
+              <SelectTrigger><SelectValue placeholder="Duration" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7days">7 Days</SelectItem>
+                <SelectItem value="30days">30 Days</SelectItem>
+                <SelectItem value="90days">90 Days</SelectItem>
+                <SelectItem value="permanent">Permanent</SelectItem>
+              </SelectContent>
+            </Select>
+            <Textarea placeholder="Reason for suspension..." value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSuspendDialog({ open: false })}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={!suspendReason || suspendFromReportMutation.isPending}
+              onClick={() => {
+                if (suspendDialog.userId && suspendDialog.reportId) {
+                  suspendFromReportMutation.mutate({
+                    userId: suspendDialog.userId,
+                    reason: suspendReason,
+                    duration: suspendDuration,
+                    reportId: suspendDialog.reportId,
+                  });
+                }
+              }}
+            >
+              {suspendFromReportMutation.isPending ? "Suspending..." : "Suspend User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete from Report Dialog */}
+      <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">⚠️ Delete User Permanently</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the reported user's account, messages, matches, and all data. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog({ open: false })}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteFromReportMutation.isPending}
+              onClick={() => {
+                if (deleteDialog.userId && deleteDialog.reportId) {
+                  deleteFromReportMutation.mutate({ userId: deleteDialog.userId, reportId: deleteDialog.reportId });
+                }
+              }}
+            >
+              {deleteFromReportMutation.isPending ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>

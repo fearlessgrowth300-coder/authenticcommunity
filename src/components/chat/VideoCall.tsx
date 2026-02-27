@@ -27,6 +27,7 @@ const VideoCall = ({ recipientId, recipientName, onClose, isIncoming, incomingOf
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
   const cleanup = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -35,13 +36,127 @@ const VideoCall = ({ recipientId, recipientName, onClose, isIncoming, incomingOf
     localStreamRef.current = null;
   }, []);
 
+  // Get media FIRST (must be in user gesture context from parent click)
   useEffect(() => {
     if (!user) return;
-    startCall();
 
-    // Listen for signals
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        // Get media stream
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        // Create peer connection
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        pcRef.current = pc;
+
+        // Add all tracks to peer connection
+        stream.getTracks().forEach((track) => {
+          pc.addTrack(track, stream);
+        });
+
+        // Handle remote tracks
+        pc.ontrack = (e) => {
+          if (remoteVideoRef.current && e.streams[0]) {
+            remoteVideoRef.current.srcObject = e.streams[0];
+          }
+          setCallState("connected");
+        };
+
+        // Handle ICE candidates
+        pc.onicecandidate = (e) => {
+          if (e.candidate && user) {
+            supabase.from("call_signals").insert({
+              caller_id: user.id,
+              callee_id: recipientId,
+              signal_type: "ice-candidate",
+              signal_data: e.candidate.toJSON(),
+            } as any);
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            setCallState("connected");
+          } else if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+            toast.error("Connection lost");
+          }
+        };
+
+        if (isIncoming && incomingOffer) {
+          // Answer the call
+          await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
+          
+          // Flush queued ICE candidates
+          for (const candidate of iceCandidateQueue.current) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+          }
+          iceCandidateQueue.current = [];
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+
+          await supabase.from("call_signals").insert({
+            caller_id: user.id,
+            callee_id: recipientId,
+            signal_type: "answer",
+            signal_data: answer,
+          } as any);
+
+          setCallState("connected");
+        } else {
+          // Create offer
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true,
+          });
+          await pc.setLocalDescription(offer);
+
+          await supabase.from("call_signals").insert({
+            caller_id: user.id,
+            callee_id: recipientId,
+            signal_type: "offer",
+            signal_data: offer,
+          } as any);
+
+          setCallState("ringing");
+        }
+      } catch (err: any) {
+        console.error("Call setup error:", err);
+        toast.error("Camera/microphone access denied. Check browser permissions.");
+        onClose();
+      }
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, []);
+
+  // Listen for signaling
+  useEffect(() => {
+    if (!user) return;
+
     const channel = supabase
-      .channel(`call-${user.id}`)
+      .channel(`call-signal-${user.id}-${Date.now()}`)
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
@@ -50,12 +165,27 @@ const VideoCall = ({ recipientId, recipientName, onClose, isIncoming, incomingOf
       }, async (payload) => {
         const signal = payload.new as any;
         if (signal.caller_id !== recipientId) return;
-        
-        if (signal.signal_type === "answer" && pcRef.current) {
-          await pcRef.current.setRemoteDescription(signal.signal_data);
-          setCallState("connected");
-        } else if (signal.signal_type === "ice-candidate" && pcRef.current) {
-          await pcRef.current.addIceCandidate(signal.signal_data);
+        const pc = pcRef.current;
+
+        if (signal.signal_type === "answer" && pc) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
+            // Flush queued ICE candidates
+            for (const candidate of iceCandidateQueue.current) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+            }
+            iceCandidateQueue.current = [];
+            setCallState("connected");
+          } catch (e) {
+            console.error("Error setting remote description:", e);
+          }
+        } else if (signal.signal_type === "ice-candidate") {
+          if (pc && pc.remoteDescription) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(signal.signal_data)); } catch {}
+          } else {
+            // Queue if remote description not set yet
+            iceCandidateQueue.current.push(signal.signal_data);
+          }
         } else if (signal.signal_type === "hangup") {
           setCallState("ended");
           cleanup();
@@ -64,83 +194,10 @@ const VideoCall = ({ recipientId, recipientName, onClose, isIncoming, incomingOf
       })
       .subscribe();
 
-    // Also listen for signals where we are the callee receiving from caller
-    const channel2 = supabase
-      .channel(`call-recv-${user.id}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "call_signals",
-        filter: `callee_id=eq.${user.id}`,
-      }, async (payload) => {
-        const signal = payload.new as any;
-        if (signal.signal_type === "ice-candidate" && pcRef.current) {
-          try { await pcRef.current.addIceCandidate(signal.signal_data); } catch {}
-        }
-      })
-      .subscribe();
-
     return () => {
-      cleanup();
       supabase.removeChannel(channel);
-      supabase.removeChannel(channel2);
     };
-  }, []);
-
-  const startCall = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-      pcRef.current = pc;
-
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-      pc.ontrack = (e) => {
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
-        setCallState("connected");
-      };
-
-      pc.onicecandidate = (e) => {
-        if (e.candidate && user) {
-          supabase.from("call_signals").insert({
-            caller_id: user.id,
-            callee_id: recipientId,
-            signal_type: "ice-candidate",
-            signal_data: e.candidate.toJSON(),
-          } as any);
-        }
-      };
-
-      if (isIncoming && incomingOffer) {
-        await pc.setRemoteDescription(incomingOffer);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await supabase.from("call_signals").insert({
-          caller_id: user!.id,
-          callee_id: recipientId,
-          signal_type: "answer",
-          signal_data: answer,
-        } as any);
-        setCallState("connected");
-      } else {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await supabase.from("call_signals").insert({
-          caller_id: user!.id,
-          callee_id: recipientId,
-          signal_type: "offer",
-          signal_data: offer,
-        } as any);
-        setCallState("ringing");
-      }
-    } catch (err: any) {
-      toast.error("Camera/microphone access denied");
-      onClose();
-    }
-  };
+  }, [user, recipientId]);
 
   const hangUp = async () => {
     if (user) {
