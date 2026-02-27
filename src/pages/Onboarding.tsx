@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,9 +24,11 @@ const stepLabels = ["Profile", "Location", "Interests", "Values", "Preferences",
 
 const Onboarding = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { step } = useParams();
   const { user, refreshOnboarding } = useAuth();
   const currentStep = parseInt(step || "1");
+  const isCompleteStep = step === "complete" || location.pathname === "/onboarding/complete";
 
   // Step 1: Profile
   const [bio, setBio] = useState("");
@@ -243,7 +245,7 @@ const Onboarding = () => {
   };
 
   // Complete screen
-  if (step === "complete") {
+  if (isCompleteStep) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 max-w-lg mx-auto text-center">
         <div className="animate-fade-in space-y-6">
