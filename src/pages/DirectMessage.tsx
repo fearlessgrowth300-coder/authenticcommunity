@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react"
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, Phone, Video, MoreVertical, Send, Smile, Camera, Mic, Loader2, Flag, Ban, BellOff, Timer, Plus, X, MicOff } from "lucide-react";
+import { ArrowLeft, Phone, Video, MoreVertical, Send, Smile, Camera, Mic, Loader2, Flag, Ban, BellOff, Timer, Plus, X, MicOff, Search, Image, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -68,6 +69,13 @@ const DirectMessage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [hasStory, setHasStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showBgSettings, setShowBgSettings] = useState(false);
+  const [chatBg, setChatBg] = useState<{ type: "color" | "image"; value: string }>(() => {
+    const saved = localStorage.getItem(`chat-bg-${recipientId}`);
+    return saved ? JSON.parse(saved) : { type: "color", value: "" };
+  });
   
   // Real presence tracking
   const presence = usePresence(recipientId);
@@ -432,8 +440,27 @@ const DirectMessage = () => {
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-4 py-2.5">
+        {showSearch ? (
+          <div className="flex items-center gap-2 max-w-lg mx-auto">
+            <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <Input
+              placeholder="Search messages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-muted border-0 h-9"
+              autoFocus
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="flex items-center gap-3 max-w-lg mx-auto">
-          <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => navigate("/messages")} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-5 w-5" />
           </button>
           <button
@@ -487,6 +514,12 @@ const DirectMessage = () => {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => setShowSearch(true)}>
+                <Search className="h-4 w-4 mr-2" /> Search
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowBgSettings(true)}>
+                <Palette className="h-4 w-4 mr-2" /> Chat Background
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/matches/${recipientId}`)}>View Profile</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowDisappearSettings(true)}>
                 <Timer className="h-4 w-4 mr-2" /> Disappearing Messages
@@ -504,22 +537,36 @@ const DirectMessage = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        )}
       </header>
 
       {/* Messages */}
-      <main className="flex-1 px-4 py-4 max-w-lg mx-auto w-full overflow-y-auto space-y-1">
+      <main
+        className="flex-1 px-4 py-4 max-w-lg mx-auto w-full overflow-y-auto space-y-1"
+        style={chatBg.value ? (
+          chatBg.type === "color"
+            ? { backgroundColor: chatBg.value }
+            : { backgroundImage: `url(${chatBg.value})`, backgroundSize: "cover", backgroundPosition: "center" }
+        ) : undefined}
+      >
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : messages.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm">No messages yet. Say hello! 👋</p>
-          </div>
-        ) : (
-          messages.map((msg, idx) => {
+        ) : (() => {
+          const filtered = searchQuery
+            ? messages.filter((m) => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
+            : messages;
+          if (filtered.length === 0 && searchQuery) {
+            return (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-sm">No messages matching "{searchQuery}"</p>
+              </div>
+            );
+          }
+          return filtered.map((msg, idx, arr) => {
             const isMe = msg.sender_id === user?.id;
-            const showDate = idx === 0 || !isSameDay(new Date(msg.created_at), new Date(messages[idx - 1].created_at));
+            const showDate = idx === 0 || !isSameDay(new Date(msg.created_at), new Date(arr[idx - 1].created_at));
             const isSticker = msg.message_type === "sticker" && msg.sticker_url;
             const isImage = msg.message_type === "image" && msg.sticker_url;
             const isAudio = msg.message_type === "audio" && msg.sticker_url;
@@ -555,7 +602,7 @@ const DirectMessage = () => {
                       <div className={cn("px-3 py-1", isMe ? "gradient-primary" : "bg-muted")}>
                         <p className={cn("text-[10px] text-right", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
                           {format(new Date(msg.created_at), "h:mm a")}
-                          {isMe && <span className={cn("ml-1", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
+                          {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
                         </p>
                       </div>
                     </div>
@@ -570,7 +617,7 @@ const DirectMessage = () => {
                       <audio src={msg.sticker_url!} controls className="max-w-full h-8" />
                       <p className={cn("text-[10px] text-right mt-0.5", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
                         {format(new Date(msg.created_at), "h:mm a")}
-                        {isMe && <span className={cn("ml-1", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
+                        {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>✓✓</span>}
                       </p>
                     </div>
                   ) : (
@@ -593,7 +640,7 @@ const DirectMessage = () => {
                           {format(new Date(msg.created_at), "h:mm a")}
                         </p>
                         {isMe && (
-                          <span className={cn("text-[10px]", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>
+                          <span className={cn("text-[10px] transition-colors duration-500", msg.is_read ? "text-blue-300" : "text-primary-foreground/50")}>
                             ✓✓
                           </span>
                         )}
@@ -603,8 +650,8 @@ const DirectMessage = () => {
                 </div>
               </div>
             );
-          })
-        )}
+          });
+        })()}
         {isRecipientTyping && <TypingIndicator />}
         <div ref={bottomRef} />
       </main>
@@ -765,6 +812,76 @@ const DirectMessage = () => {
             <button onClick={saveDisappearSettings} className="w-full h-10 rounded-lg gradient-primary text-primary-foreground text-sm font-medium">
               Save
             </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Chat Background Settings */}
+      <Dialog open={showBgSettings} onOpenChange={setShowBgSettings}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Chat Background</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm mb-2 block">Background Color</Label>
+              <div className="flex flex-wrap gap-2">
+                {["", "#0f172a", "#1e293b", "#1a1a2e", "#16213e", "#0d1b2a", "#1b1b3a", "#2d1b69", "#1a3c34", "#3c1a1a", "#2c1810"].map((color) => (
+                  <button
+                    key={color || "default"}
+                    onClick={() => {
+                      const bg = color ? { type: "color" as const, value: color } : { type: "color" as const, value: "" };
+                      setChatBg(bg);
+                      localStorage.setItem(`chat-bg-${recipientId}`, JSON.stringify(bg));
+                    }}
+                    className={cn(
+                      "h-10 w-10 rounded-full border-2 transition-all",
+                      chatBg.value === color ? "border-primary scale-110" : "border-border"
+                    )}
+                    style={{ backgroundColor: color || "hsl(var(--background))" }}
+                  >
+                    {!color && <span className="text-[10px] text-muted-foreground">Def</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm mb-2 block">Background Image</Label>
+              <button
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = "image/*";
+                  input.onchange = async (e: any) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const bg = { type: "image" as const, value: reader.result as string };
+                      setChatBg(bg);
+                      localStorage.setItem(`chat-bg-${recipientId}`, JSON.stringify(bg));
+                      setShowBgSettings(false);
+                    };
+                    reader.readAsDataURL(file);
+                  };
+                  input.click();
+                }}
+                className="w-full h-10 rounded-lg border border-dashed border-border flex items-center justify-center gap-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <Image className="h-4 w-4" /> Choose Image
+              </button>
+            </div>
+            {chatBg.value && (
+              <button
+                onClick={() => {
+                  const bg = { type: "color" as const, value: "" };
+                  setChatBg(bg);
+                  localStorage.removeItem(`chat-bg-${recipientId}`);
+                  setShowBgSettings(false);
+                }}
+                className="w-full h-10 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Reset to Default
+              </button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
