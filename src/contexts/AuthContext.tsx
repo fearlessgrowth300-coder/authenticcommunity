@@ -7,6 +7,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   onboardingCompleted: boolean | null;
+  accountStatus: string;
+  accountStatusLoading: boolean;
   refreshOnboarding: () => Promise<boolean>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -20,16 +22,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [accountStatus, setAccountStatus] = useState<string>("active");
+  const [accountStatusLoading, setAccountStatusLoading] = useState(true);
 
   const fetchOnboarding = async (userId: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("onboarding_completed")
+      .select("onboarding_completed, account_status, is_active, suspended_until")
       .eq("user_id", userId)
       .maybeSingle();
 
     if (error) {
       setOnboardingCompleted(false);
+      setAccountStatus("active");
+      setAccountStatusLoading(false);
       return false;
     }
 
@@ -40,24 +46,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isRaceCondition = msg.includes("duplicate") || msg.includes("unique");
         if (!isRaceCondition) {
           setOnboardingCompleted(false);
+          setAccountStatus("active");
+          setAccountStatusLoading(false);
           return false;
         }
       }
 
       const { data: createdProfile } = await supabase
         .from("profiles")
-        .select("onboarding_completed")
+        .select("onboarding_completed, account_status, is_active, suspended_until")
         .eq("user_id", userId)
         .maybeSingle();
 
       const completed = Boolean(createdProfile?.onboarding_completed);
       setOnboardingCompleted(completed);
+      resolveAccountStatus(createdProfile, userId);
       return completed;
     }
 
     const completed = Boolean(data.onboarding_completed);
     setOnboardingCompleted(completed);
+    resolveAccountStatus(data, userId);
     return completed;
+  };
+
+  const resolveAccountStatus = async (
+    data: { account_status: string | null; is_active: boolean | null; suspended_until: string | null } | null,
+    userId: string
+  ) => {
+    if (!data) {
+      setAccountStatus("active");
+      setAccountStatusLoading(false);
+      return;
+    }
+
+    const raw = data.account_status || "active";
+
+    // Deleted
+    if (raw === "deleted" || data.is_active === false) {
+      setAccountStatus("deleted");
+      setAccountStatusLoading(false);
+      return;
+    }
+
+    // Suspended - check expiry
+    if (raw === "suspended" && data.suspended_until) {
+      const until = new Date(data.suspended_until).getTime();
+      if (!Number.isNaN(until) && until <= Date.now()) {
+        // Auto-reactivate
+        await supabase
+          .from("profiles")
+          .update({ account_status: "active", suspended_until: null, suspension_reason: null, is_active: true })
+          .eq("user_id", userId);
+        setAccountStatus("active");
+        setAccountStatusLoading(false);
+        return;
+      }
+    }
+
+    setAccountStatus(raw);
+    setAccountStatusLoading(false);
   };
 
   const refreshOnboarding = async () => {
@@ -70,9 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setAccountStatusLoading(true);
         fetchOnboarding(session.user.id);
       } else {
         setOnboardingCompleted(null);
+        setAccountStatus("active");
+        setAccountStatusLoading(false);
       }
       setLoading(false);
     });
@@ -81,9 +132,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setAccountStatusLoading(true);
         fetchOnboarding(session.user.id);
       } else {
         setOnboardingCompleted(null);
+        setAccountStatus("active");
+        setAccountStatusLoading(false);
       }
       setLoading(false);
     });
@@ -114,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, onboardingCompleted, refreshOnboarding, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, onboardingCompleted, accountStatus, accountStatusLoading, refreshOnboarding, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

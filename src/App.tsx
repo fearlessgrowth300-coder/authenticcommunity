@@ -43,6 +43,7 @@ const StoryViewers = lazy(() => import("./pages/StoryViewers"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const LikedUsers = lazy(() => import("./pages/LikedUsers"));
 const ProfileViewers = lazy(() => import("./pages/ProfileViewers"));
+const SuspendedAccount = lazy(() => import("./pages/SuspendedAccount"));
 
 const queryClient = new QueryClient();
 
@@ -95,6 +96,7 @@ const App = () => (
               <Route path="/stories/:id/replies" element={<ProtectedRoute><StoryReplies /></ProtectedRoute>} />
               <Route path="/stories/:id/viewers" element={<ProtectedRoute><StoryViewers /></ProtectedRoute>} />
               <Route path="/install" element={<Install />} />
+              <Route path="/suspended" element={<ProtectedRoute><SuspendedAccount /></ProtectedRoute>} />
               <Route path="/admin/*" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
