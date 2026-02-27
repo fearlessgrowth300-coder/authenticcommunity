@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { X, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Eye, Loader2, Send } from "lucide-react";
+import { X, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Eye, Loader2, Send, Bookmark } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -221,6 +222,21 @@ const StoryViewer = () => {
         <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
           <DialogHeader><DialogTitle>Options</DialogTitle></DialogHeader>
           <div className="space-y-2">
+            <Button variant="outline" className="w-full" onClick={async () => {
+              if (!user || !story) return;
+              try {
+                await (supabase as any).from("story_highlights").insert({
+                  user_id: user.id,
+                  story_id: story.id,
+                  title: story.text_content?.slice(0, 20) || "Highlight",
+                  cover_url: story.content_url || null,
+                });
+                toast.success("Saved to highlights!");
+                setShowMore(false);
+              } catch { toast.error("Failed to save"); }
+            }}>
+              <Bookmark className="h-4 w-4 mr-2" />Save to Highlights
+            </Button>
             {isOwn && (
               <Button variant="destructive" className="w-full" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4 mr-2" />Delete Story

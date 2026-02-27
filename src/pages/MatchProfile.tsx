@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, MessageCircle, Heart, Star, Shield, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { StoryHighlights } from "@/components/StoryHighlights";
 import { cn } from "@/lib/utils";
 import MatchDialog from "@/components/chat/MatchDialog";
 
@@ -175,6 +176,14 @@ const MatchProfile = () => {
                   <Badge key={v} className="bg-accent text-accent-foreground border-0">{v}</Badge>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Authenticity */}
+          {id && (
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Highlights</h3>
+              <StoryHighlights userId={id} isOwn={false} />
             </div>
           )}
 

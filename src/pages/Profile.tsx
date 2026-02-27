@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck, Heart } from "lucide-react";
+import { StoryHighlights } from "@/components/StoryHighlights";
 
 interface ProfileData {
   first_name: string | null;
@@ -119,6 +120,14 @@ const Profile = () => {
             <Edit className="h-3.5 w-3.5 mr-1" /> Edit Profile
           </Button>
         </div>
+
+        {/* Story Highlights */}
+        {user && (
+          <div className="bg-card rounded-xl shadow-card border border-border/50 p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-3">Highlights</h3>
+            <StoryHighlights userId={user.id} isOwn={true} />
+          </div>
+        )}
 
         {/* Bio */}
         {profile?.bio && (
