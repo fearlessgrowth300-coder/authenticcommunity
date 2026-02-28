@@ -27,6 +27,8 @@ import ChatStoryViewer from "@/components/chat/ChatStoryViewer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import LinkPreview, { extractUrls, renderMessageWithLinks } from "@/components/chat/LinkPreview";
 import MessageReactions from "@/components/chat/MessageReactions";
+import VoiceMessagePlayer from "@/components/chat/VoiceMessagePlayer";
+import VoiceRecorder from "@/components/chat/VoiceRecorder";
 import { usePresence } from "@/hooks/usePresence";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
@@ -42,6 +44,8 @@ interface Message {
   message_type?: string;
   sticker_url?: string;
   disappears_at?: string;
+  voice_url?: string;
+  voice_duration?: number;
 }
 
 interface Profile {
@@ -72,6 +76,7 @@ const DirectMessage = () => {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [hasStory, setHasStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -658,7 +663,7 @@ const DirectMessage = () => {
             const showDate = idx === 0 || !isSameDay(new Date(msg.created_at), new Date(arr[idx - 1].created_at));
             const isSticker = msg.message_type === "sticker" && msg.sticker_url;
             const isImage = msg.message_type === "image" && msg.sticker_url;
-            const isAudio = msg.message_type === "audio" && msg.sticker_url;
+            const isAudio = (msg.message_type === "audio" || msg.message_type === "voice") && (msg.sticker_url || msg.voice_url);
 
             return (
               <div key={msg.id}>
@@ -703,7 +708,11 @@ const DirectMessage = () => {
                         isMe ? "gradient-primary text-primary-foreground rounded-br-md" : "bg-muted text-foreground rounded-bl-md"
                       )}
                     >
-                      <audio src={msg.sticker_url!} controls className="max-w-full h-8" />
+                      {msg.voice_url ? (
+                        <VoiceMessagePlayer url={msg.voice_url} duration={msg.voice_duration} isMe={isMe} />
+                      ) : (
+                        <audio src={msg.sticker_url!} controls className="max-w-full h-8" />
+                      )}
                       <p className={cn("text-[10px] text-right mt-0.5", isMe ? "text-primary-foreground/70" : "text-muted-foreground")}>
                         {format(new Date(msg.created_at), "h:mm a")}
                         {isMe && <span className={cn("ml-1 transition-colors duration-500", msg.is_read ? "text-green-500" : "text-primary-foreground/50")}>{getTickSymbol(msg)}</span>}
@@ -866,7 +875,7 @@ const DirectMessage = () => {
                   <MicOff className="h-4 w-4 text-card" />
                 </button>
               ) : (
-                <button onClick={startRecording} className="h-9 w-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <button onClick={() => setShowVoiceRecorder(true)} className="h-9 w-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                   <Mic className="h-5 w-5" />
                 </button>
               )}
@@ -975,6 +984,15 @@ const DirectMessage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Voice Recorder */}
+      {showVoiceRecorder && recipientId && (
+        <VoiceRecorder
+          recipientId={recipientId}
+          onClose={() => setShowVoiceRecorder(false)}
+          onSent={() => setShowVoiceRecorder(false)}
+        />
+      )}
 
       {/* Video Call */}
       {showCall && (

@@ -5,9 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, FileText, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import CommunityFeed from "@/components/community/CommunityFeed";
+import CommunityMembers from "@/components/community/CommunityMembers";
+import CommunityResources from "@/components/community/CommunityResources";
 
 const CommunityDetail = () => {
   const navigate = useNavigate();
@@ -136,44 +140,62 @@ const CommunityDetail = () => {
               {joining ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isMember ? "Leave Community" : "Join Community"}
             </Button>
-            <Button variant="outline" size="lg"><MessageCircle className="h-4 w-4" /></Button>
           </div>
         </div>
 
-        {/* Upcoming Events */}
-        {events.length > 0 && (
-          <div className="bg-card rounded-xl shadow-card border border-border/50 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Upcoming Events</h3>
-              <button onClick={() => navigate("/events")} className="text-xs text-primary font-medium">See all</button>
-            </div>
-            <div className="space-y-3">
-              {events.map((event) => (
-                <div
-                  key={event.id}
-                  onClick={() => navigate(`/events/${event.id}`)}
-                  className="flex gap-3 cursor-pointer hover:bg-muted/30 rounded-lg transition-colors p-1 -m-1"
-                >
-                  <div className="bg-primary/10 rounded-lg p-2 text-center min-w-[48px]">
-                    <Calendar className="h-4 w-4 text-primary mx-auto" />
-                    {event.event_date && (
-                      <p className="text-xs font-semibold text-primary mt-0.5">
-                        {format(new Date(event.event_date + "T00:00:00"), "MMM d")}
+        {/* Tabs */}
+        <Tabs defaultValue="feed" className="w-full">
+          <TabsList className="w-full grid grid-cols-4 h-10">
+            <TabsTrigger value="feed" className="text-xs">Feed</TabsTrigger>
+            <TabsTrigger value="members" className="text-xs">Members</TabsTrigger>
+            <TabsTrigger value="events" className="text-xs">Events</TabsTrigger>
+            <TabsTrigger value="resources" className="text-xs">Resources</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="feed" className="mt-4">
+            {id && <CommunityFeed communityId={id} isMember={isMember} />}
+          </TabsContent>
+
+          <TabsContent value="members" className="mt-4">
+            {id && <CommunityMembers communityId={id} />}
+          </TabsContent>
+
+          <TabsContent value="events" className="mt-4">
+            {events.length > 0 ? (
+              <div className="space-y-3">
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    onClick={() => navigate(`/events/${event.id}`)}
+                    className="flex gap-3 cursor-pointer hover:bg-muted/30 rounded-lg transition-colors p-3 bg-card border border-border/50 rounded-xl"
+                  >
+                    <div className="bg-primary/10 rounded-lg p-2 text-center min-w-[48px]">
+                      <Calendar className="h-4 w-4 text-primary mx-auto" />
+                      {event.event_date && (
+                        <p className="text-xs font-semibold text-primary mt-0.5">
+                          {format(new Date(event.event_date + "T00:00:00"), "MMM d")}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{event.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {event.start_time ? event.start_time.slice(0, 5) : ""}
+                        {event.location ? ` · ${event.location}` : ""}
                       </p>
-                    )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{event.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {event.start_time ? event.start_time.slice(0, 5) : ""}
-                      {event.location ? ` · ${event.location}` : ""}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground py-8">No upcoming events</p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="resources" className="mt-4">
+            {id && <CommunityResources communityId={id} isMember={isMember} />}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
