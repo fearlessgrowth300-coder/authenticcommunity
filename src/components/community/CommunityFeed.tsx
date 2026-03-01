@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Heart, MessageCircle, Send, Loader2, Image as ImageIcon, X, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Send, Loader2, Image as ImageIcon, X, Trash2, Video } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -39,12 +39,17 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPost, setNewPost] = useState("");
+  const [postTitle, setPostTitle] = useState("");
   const [posting, setPosting] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPosts = async () => {
     const { data } = await supabase
@@ -55,7 +60,6 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
       .limit(50);
 
     if (data) {
-      // Fetch profiles for posts
       const userIds = [...new Set(data.map((p) => p.user_id))];
       const { data: profiles } = await supabase
         .from("profiles")
@@ -66,7 +70,6 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
       const enriched = data.map((p) => ({ ...p, profile: profileMap.get(p.user_id) }));
       setPosts(enriched);
 
-      // Check which posts user has liked
       if (user) {
         const postIds = data.map((p) => p.id);
         if (postIds.length > 0) {
@@ -84,16 +87,67 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
 
   useEffect(() => { loadPosts(); }, [communityId]);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File must be under 10MB");
+      return;
+    }
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handlePost = async () => {
     if (!newPost.trim() || !user) return;
     setPosting(true);
+
+    let imageUrl: string | null = null;
+
+    // Upload image if selected
+    if (selectedImage) {
+      setUploading(true);
+      const ext = selectedImage.name.split(".").pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("community-posts")
+        .upload(path, selectedImage);
+
+      if (uploadError) {
+        toast.error("Failed to upload image");
+        setPosting(false);
+        setUploading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("community-posts")
+        .getPublicUrl(path);
+      imageUrl = urlData.publicUrl;
+      setUploading(false);
+    }
+
     const { error } = await supabase.from("community_posts").insert({
       community_id: communityId,
       user_id: user.id,
       content: newPost.trim(),
+      title: postTitle.trim() || null,
+      image_url: imageUrl,
     });
+
     if (error) toast.error("Failed to post");
-    else { setNewPost(""); loadPosts(); }
+    else {
+      setNewPost("");
+      setPostTitle("");
+      clearImage();
+      loadPosts();
+    }
     setPosting(false);
   };
 
@@ -149,16 +203,59 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
       {/* Create post */}
       {isMember && (
         <div className="bg-card rounded-xl border border-border/50 p-4 space-y-3">
+          <Input
+            placeholder="Post title (optional)"
+            value={postTitle}
+            onChange={(e) => setPostTitle(e.target.value)}
+            className="text-sm"
+          />
           <Textarea
             placeholder="Share something with the community..."
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
-            rows={2}
+            rows={3}
             className="resize-none"
           />
-          <div className="flex justify-end">
-            <Button variant="gradient" size="sm" onClick={handlePost} disabled={!newPost.trim() || posting}>
-              {posting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+
+          {/* Image preview */}
+          {imagePreview && (
+            <div className="relative">
+              <img src={imagePreview} alt="Preview" className="w-full max-h-48 object-cover rounded-lg" />
+              <button
+                onClick={clearImage}
+                className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 flex items-center justify-center"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-muted"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Photo
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-muted"
+              >
+                <Video className="h-4 w-4" />
+                Video
+              </button>
+            </div>
+            <Button variant="gradient" size="sm" onClick={handlePost} disabled={!newPost.trim() || posting || uploading}>
+              {posting || uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
               Post
             </Button>
           </div>
@@ -203,7 +300,7 @@ const CommunityFeed = ({ communityId, isMember }: CommunityFeedProps) => {
           </div>
 
           {post.image_url && (
-            <img src={post.image_url} className="w-full max-h-64 object-cover" alt="" />
+            <img src={post.image_url} className="w-full max-h-80 object-cover" alt="" loading="lazy" />
           )}
 
           {/* Actions */}

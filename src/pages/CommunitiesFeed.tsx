@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, MapPin, Users, Loader2, ArrowLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Search, Plus, MapPin, Users, Loader2, ArrowLeft, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -34,6 +36,7 @@ const CommunitiesFeed = () => {
   const [formDesc, setFormDesc] = useState("");
   const [formCategory, setFormCategory] = useState("");
   const [formCity, setFormCity] = useState("");
+  const [formPrivate, setFormPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const loadData = async () => {
@@ -58,7 +61,7 @@ const CommunitiesFeed = () => {
     loadData();
   }, [user, selectedCategory]);
 
-  const handleJoin = async (communityId: string) => {
+  const handleJoin = async (communityId: string, communityType?: string) => {
     if (!user) return;
     if (!canInteract) {
       toast.error(restrictionMessage || "This action is disabled for your account.");
@@ -71,9 +74,14 @@ const CommunitiesFeed = () => {
       setJoinedIds((prev) => { const n = new Set(prev); n.delete(communityId); return n; });
       toast.success("Left community");
     } else {
-      // Check free tier community limit
       if (!hasFeature("unlimited_communities") && joinedIds.size >= 3) {
         toast.error("Free plan is limited to 3 communities. Upgrade to join more!");
+        setJoining(null);
+        return;
+      }
+      if (communityType === "private") {
+        // Navigate to detail page for private communities
+        navigate(`/communities/${communityId}`);
         setJoining(null);
         return;
       }
@@ -92,20 +100,29 @@ const CommunitiesFeed = () => {
     }
     setCreating(true);
 
-    const { error } = await supabase.from("communities").insert({
+    const { data, error } = await supabase.from("communities").insert({
       community_name: formName.trim(),
       description: formDesc.trim() || null,
       category: formCategory || null,
       location_city: formCity.trim() || null,
       creator_id: user.id,
-    });
+      community_type: formPrivate ? "private" : "public",
+    }).select("id").single();
 
     if (error) {
       toast.error("Failed to create community");
     } else {
+      // Auto-join as admin
+      if (data) {
+        await supabase.from("community_members").insert({
+          community_id: data.id,
+          user_id: user.id,
+          role: "admin",
+        });
+      }
       toast.success("Community created!");
       setCreateOpen(false);
-      setFormName(""); setFormDesc(""); setFormCategory(""); setFormCity("");
+      setFormName(""); setFormDesc(""); setFormCategory(""); setFormCity(""); setFormPrivate(false);
       loadData();
     }
     setCreating(false);
@@ -143,6 +160,13 @@ const CommunitiesFeed = () => {
                   </SelectContent>
                 </Select>
                 <Input placeholder="City" value={formCity} onChange={(e) => setFormCity(e.target.value)} />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">Private Community</Label>
+                    <p className="text-xs text-muted-foreground">Members must be approved by admin</p>
+                  </div>
+                  <Switch checked={formPrivate} onCheckedChange={setFormPrivate} />
+                </div>
                 <Button variant="gradient" className="w-full" onClick={handleCreate} disabled={!formName.trim() || creating}>
                   {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Create Community
@@ -201,7 +225,12 @@ const CommunitiesFeed = () => {
                   <img src={c.profile_image_url} alt={c.community_name} className="w-full h-36 object-cover" loading="lazy" />
                 )}
                 <div className="p-4">
-                  <h3 className="font-semibold text-foreground">{c.community_name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground">{c.community_name}</h3>
+                    {c.community_type === "private" && (
+                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </div>
                   {c.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.description}</p>}
                   <div className="flex items-center gap-3 mt-3">
                     {c.category && <Badge variant="outline" className="text-xs">{c.category}</Badge>}
@@ -218,9 +247,9 @@ const CommunitiesFeed = () => {
                       variant={joinedIds.has(c.id) ? "outline" : "gradient"}
                       className="ml-auto text-xs h-7"
                       disabled={joining === c.id || !canInteract}
-                      onClick={(e) => { e.stopPropagation(); handleJoin(c.id); }}
+                      onClick={(e) => { e.stopPropagation(); handleJoin(c.id, c.community_type); }}
                     >
-                      {joining === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : joinedIds.has(c.id) ? "Joined" : "Join"}
+                      {joining === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : joinedIds.has(c.id) ? "Joined" : c.community_type === "private" ? "Request" : "Join"}
                     </Button>
                   </div>
                 </div>

@@ -176,6 +176,44 @@ export type Database = {
         }
         Relationships: []
       }
+      community_join_requests: {
+        Row: {
+          community_id: string
+          created_at: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          community_id: string
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          community_id?: string
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_join_requests_community_id_fkey"
+            columns: ["community_id"]
+            isOneToOne: false
+            referencedRelation: "communities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_members: {
         Row: {
           community_id: string
@@ -882,12 +920,18 @@ export type Database = {
           allow_invitations: boolean | null
           allow_messages: boolean | null
           bio: string | null
+          children: string | null
           created_at: string
           date_of_birth: string | null
+          drinking: string | null
+          education: string | null
+          ethnicity: string | null
           first_name: string | null
           gender: string | null
+          height_cm: number | null
           id: string
           is_active: boolean | null
+          languages: string[] | null
           last_name: string | null
           latitude: number | null
           location_city: string | null
@@ -902,8 +946,11 @@ export type Database = {
           onboarding_completed: boolean | null
           onboarding_step: number | null
           profile_image_url: string | null
+          relationship_status: string | null
+          religion: string | null
           show_in_search: boolean | null
           show_location: boolean | null
+          smoking: string | null
           suspended_until: string | null
           suspension_reason: string | null
           target_countries: string[] | null
@@ -916,12 +963,18 @@ export type Database = {
           allow_invitations?: boolean | null
           allow_messages?: boolean | null
           bio?: string | null
+          children?: string | null
           created_at?: string
           date_of_birth?: string | null
+          drinking?: string | null
+          education?: string | null
+          ethnicity?: string | null
           first_name?: string | null
           gender?: string | null
+          height_cm?: number | null
           id?: string
           is_active?: boolean | null
+          languages?: string[] | null
           last_name?: string | null
           latitude?: number | null
           location_city?: string | null
@@ -936,8 +989,11 @@ export type Database = {
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
           profile_image_url?: string | null
+          relationship_status?: string | null
+          religion?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
+          smoking?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null
           target_countries?: string[] | null
@@ -950,12 +1006,18 @@ export type Database = {
           allow_invitations?: boolean | null
           allow_messages?: boolean | null
           bio?: string | null
+          children?: string | null
           created_at?: string
           date_of_birth?: string | null
+          drinking?: string | null
+          education?: string | null
+          ethnicity?: string | null
           first_name?: string | null
           gender?: string | null
+          height_cm?: number | null
           id?: string
           is_active?: boolean | null
+          languages?: string[] | null
           last_name?: string | null
           latitude?: number | null
           location_city?: string | null
@@ -970,8 +1032,11 @@ export type Database = {
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
           profile_image_url?: string | null
+          relationship_status?: string | null
+          religion?: string | null
           show_in_search?: boolean | null
           show_location?: boolean | null
+          smoking?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null
           target_countries?: string[] | null
