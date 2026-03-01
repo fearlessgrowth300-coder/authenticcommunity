@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Camera, Loader2, X } from "lucide-react";
+import { ArrowLeft, Camera, Loader2 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -34,6 +34,18 @@ const EditProfile = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // New profile fields
+  const [occupation, setOccupation] = useState("");
+  const [lookingFor, setLookingFor] = useState("");
+  const [religion, setReligion] = useState("");
+  const [ethnicity, setEthnicity] = useState("");
+  const [education, setEducation] = useState("");
+  const [relationshipStatus, setRelationshipStatus] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [smoking, setSmoking] = useState("");
+  const [drinking, setDrinking] = useState("");
+  const [children, setChildren] = useState("");
+
   useEffect(() => {
     if (!user) return;
 
@@ -54,6 +66,16 @@ const EditProfile = () => {
         setState(p.location_state || "");
         setProfileImageUrl(p.profile_image_url);
         setGender(p.gender || "");
+        setOccupation((p as any).occupation || "");
+        setLookingFor((p as any).looking_for || "");
+        setReligion((p as any).religion || "");
+        setEthnicity((p as any).ethnicity || "");
+        setEducation((p as any).education || "");
+        setRelationshipStatus((p as any).relationship_status || "");
+        setHeightCm((p as any).height_cm?.toString() || "");
+        setSmoking((p as any).smoking || "");
+        setDrinking((p as any).drinking || "");
+        setChildren((p as any).children || "");
       }
 
       setSelectedInterests(interestsRes.data?.map((i) => i.interest_name) || []);
@@ -86,7 +108,6 @@ const EditProfile = () => {
       .from("avatars")
       .getPublicUrl(filePath);
 
-    // Add cache buster
     const url = `${publicUrl}?t=${Date.now()}`;
     setProfileImageUrl(url);
     setUploading(false);
@@ -110,7 +131,6 @@ const EditProfile = () => {
     setSaving(true);
 
     try {
-      // Update profile
       await supabase.from("profiles").update({
         first_name: firstName.trim() || null,
         last_name: lastName.trim() || null,
@@ -120,9 +140,18 @@ const EditProfile = () => {
         location_city: city.trim() || null,
         location_state: state.trim() || null,
         profile_image_url: profileImageUrl,
-      }).eq("user_id", user.id);
+        occupation: occupation.trim() || null,
+        looking_for: lookingFor || null,
+        religion: religion || null,
+        ethnicity: ethnicity || null,
+        education: education || null,
+        relationship_status: relationshipStatus || null,
+        height_cm: heightCm ? parseInt(heightCm) : null,
+        smoking: smoking || null,
+        drinking: drinking || null,
+        children: children || null,
+      } as any).eq("user_id", user.id);
 
-      // Update interests: delete then insert
       await supabase.from("user_interests").delete().eq("user_id", user.id);
       if (selectedInterests.length > 0) {
         await supabase.from("user_interests").insert(
@@ -130,7 +159,6 @@ const EditProfile = () => {
         );
       }
 
-      // Update values: delete then insert
       await supabase.from("user_values").delete().eq("user_id", user.id);
       if (selectedValues.length > 0) {
         await supabase.from("user_values").insert(
@@ -210,9 +238,7 @@ const EditProfile = () => {
             <div className="space-y-1">
               <Label className="text-xs">Gender</Label>
               <Select value={gender} onValueChange={setGender}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Male">Male</SelectItem>
                   <SelectItem value="Female">Female</SelectItem>
@@ -226,6 +252,7 @@ const EditProfile = () => {
             <Input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
             <Input placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
           </div>
+          <Input placeholder="Occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} />
         </div>
 
         {/* Bio */}
@@ -237,6 +264,132 @@ const EditProfile = () => {
             onChange={(e) => setBio(e.target.value)}
             rows={4}
           />
+        </div>
+
+        {/* Lifestyle & Preferences */}
+        <div className="bg-card rounded-xl shadow-card border border-border/50 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Lifestyle & Preferences</h3>
+          <div className="space-y-1">
+            <Label className="text-xs">Looking For</Label>
+            <Select value={lookingFor} onValueChange={setLookingFor}>
+              <SelectTrigger><SelectValue placeholder="What are you looking for?" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Friendship">Friendship</SelectItem>
+                <SelectItem value="Relationship">Relationship</SelectItem>
+                <SelectItem value="Networking">Networking</SelectItem>
+                <SelectItem value="Activity Partners">Activity Partners</SelectItem>
+                <SelectItem value="Open to anything">Open to anything</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Relationship Status</Label>
+            <Select value={relationshipStatus} onValueChange={setRelationshipStatus}>
+              <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Single">Single</SelectItem>
+                <SelectItem value="In a relationship">In a relationship</SelectItem>
+                <SelectItem value="Married">Married</SelectItem>
+                <SelectItem value="Divorced">Divorced</SelectItem>
+                <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Height (cm)</Label>
+              <Input type="number" placeholder="Height" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Education</Label>
+              <Select value={education} onValueChange={setEducation}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="High School">High School</SelectItem>
+                  <SelectItem value="Associate">Associate</SelectItem>
+                  <SelectItem value="Bachelor's">Bachelor's</SelectItem>
+                  <SelectItem value="Master's">Master's</SelectItem>
+                  <SelectItem value="Doctorate">Doctorate</SelectItem>
+                  <SelectItem value="Trade School">Trade School</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Religion</Label>
+              <Select value={religion} onValueChange={setReligion}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Christian">Christian</SelectItem>
+                  <SelectItem value="Muslim">Muslim</SelectItem>
+                  <SelectItem value="Jewish">Jewish</SelectItem>
+                  <SelectItem value="Hindu">Hindu</SelectItem>
+                  <SelectItem value="Buddhist">Buddhist</SelectItem>
+                  <SelectItem value="Spiritual">Spiritual</SelectItem>
+                  <SelectItem value="Agnostic">Agnostic</SelectItem>
+                  <SelectItem value="Atheist">Atheist</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                  <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Ethnicity</Label>
+              <Select value={ethnicity} onValueChange={setEthnicity}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="African">African</SelectItem>
+                  <SelectItem value="Asian">Asian</SelectItem>
+                  <SelectItem value="Caucasian">Caucasian</SelectItem>
+                  <SelectItem value="Hispanic/Latino">Hispanic/Latino</SelectItem>
+                  <SelectItem value="Middle Eastern">Middle Eastern</SelectItem>
+                  <SelectItem value="Mixed">Mixed</SelectItem>
+                  <SelectItem value="Native American">Native American</SelectItem>
+                  <SelectItem value="Pacific Islander">Pacific Islander</SelectItem>
+                  <SelectItem value="South Asian">South Asian</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                  <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Smoking</Label>
+              <Select value={smoking} onValueChange={setSmoking}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Never">Never</SelectItem>
+                  <SelectItem value="Sometimes">Sometimes</SelectItem>
+                  <SelectItem value="Regularly">Regularly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Drinking</Label>
+              <Select value={drinking} onValueChange={setDrinking}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Never">Never</SelectItem>
+                  <SelectItem value="Socially">Socially</SelectItem>
+                  <SelectItem value="Regularly">Regularly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Children</Label>
+              <Select value={children} onValueChange={setChildren}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="None">None</SelectItem>
+                  <SelectItem value="Have children">Have children</SelectItem>
+                  <SelectItem value="Want children">Want children</SelectItem>
+                  <SelectItem value="Don't want">Don't want</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
         {/* Interests */}

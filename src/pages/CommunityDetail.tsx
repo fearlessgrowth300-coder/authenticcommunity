@@ -6,12 +6,13 @@ import { useAccountRestrictions } from "@/hooks/useAccountRestrictions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, FileText, BookOpen } from "lucide-react";
+import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import CommunityFeed from "@/components/community/CommunityFeed";
 import CommunityMembers from "@/components/community/CommunityMembers";
 import CommunityResources from "@/components/community/CommunityResources";
+import CommunityChat from "@/components/community/CommunityChat";
 
 const CommunityDetail = () => {
   const navigate = useNavigate();
@@ -24,6 +25,9 @@ const CommunityDetail = () => {
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState(false);
+  const [isCreator, setIsCreator] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -35,12 +39,46 @@ const CommunityDetail = () => {
         supabase.from("community_members").select("id, user_id").eq("community_id", id),
       ]);
 
-      if (communityRes.data) setCommunity(communityRes.data);
+      if (communityRes.data) {
+        setCommunity(communityRes.data);
+        setIsCreator(communityRes.data.creator_id === user?.id);
+      }
       setEvents(eventsRes.data || []);
       setMemberCount(membersRes.data?.length || 0);
 
       if (user) {
         setIsMember(membersRes.data?.some((m) => m.user_id === user.id) || false);
+
+        // Check for pending join request (for private communities)
+        if (communityRes.data?.community_type === "private") {
+          const { data: reqData } = await supabase
+            .from("community_join_requests")
+            .select("id, status")
+            .eq("community_id", id)
+            .eq("user_id", user.id)
+            .eq("status", "pending")
+            .maybeSingle();
+          setPendingRequest(!!reqData);
+
+          // Load join requests for admins
+          if (communityRes.data.creator_id === user.id || membersRes.data?.some((m) => m.user_id === user.id)) {
+            const { data: requests } = await supabase
+              .from("community_join_requests")
+              .select("*")
+              .eq("community_id", id)
+              .eq("status", "pending");
+
+            if (requests && requests.length > 0) {
+              const userIds = requests.map((r) => r.user_id);
+              const { data: profiles } = await supabase
+                .from("profiles")
+                .select("user_id, first_name, last_name, profile_image_url")
+                .in("user_id", userIds);
+              const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]));
+              setJoinRequests(requests.map((r) => ({ ...r, profile: profileMap.get(r.user_id) })));
+            }
+          }
+        }
       }
 
       setLoading(false);
@@ -62,6 +100,19 @@ const CommunityDetail = () => {
       setIsMember(false);
       setMemberCount((c) => Math.max(0, c - 1));
       toast.success("Left community");
+    } else if (community?.community_type === "private") {
+      // Send join request for private communities
+      const { error } = await supabase.from("community_join_requests").insert({
+        community_id: id,
+        user_id: user.id,
+      });
+      if (error) {
+        if (error.code === "23505") toast.info("Request already sent");
+        else toast.error("Failed to send request");
+      } else {
+        setPendingRequest(true);
+        toast.success("Join request sent! Admin will review it.");
+      }
     } else {
       await supabase.from("community_members").insert({ community_id: id, user_id: user.id });
       setIsMember(true);
@@ -69,6 +120,26 @@ const CommunityDetail = () => {
       toast.success("Joined community!");
     }
     setJoining(false);
+  };
+
+  const handleApproveRequest = async (requestId: string, requestUserId: string) => {
+    if (!id) return;
+    await supabase.from("community_join_requests").update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq("id", requestId);
+    await supabase.from("community_members").insert({ community_id: id, user_id: requestUserId });
+    setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    setMemberCount((c) => c + 1);
+    toast.success("Request approved!");
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    await supabase.from("community_join_requests").update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq("id", requestId);
+    setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    toast.success("Request rejected");
+  };
+
+  const getName = (profile?: any) => {
+    if (!profile) return "User";
+    return `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "User";
   };
 
   if (loading) {
@@ -87,6 +158,8 @@ const CommunityDetail = () => {
       </div>
     );
   }
+
+  const isPrivate = community.community_type === "private";
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -118,7 +191,14 @@ const CommunityDetail = () => {
 
       <main className="px-5 -mt-8 relative z-10 max-w-lg mx-auto space-y-5">
         <div className="bg-card rounded-2xl shadow-card border border-border/50 p-5">
-          {community.category && <Badge variant="outline" className="mb-2">{community.category}</Badge>}
+          <div className="flex items-center gap-2 mb-2">
+            {community.category && <Badge variant="outline">{community.category}</Badge>}
+            {isPrivate && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Private
+              </Badge>
+            )}
+          </div>
           <h1 className="text-xl font-bold text-foreground">{community.community_name}</h1>
           {community.description && <p className="text-sm text-muted-foreground mt-1">{community.description}</p>}
 
@@ -131,22 +211,48 @@ const CommunityDetail = () => {
 
           <div className="flex gap-3 mt-5">
             <Button
-              variant={isMember ? "outline" : "gradient"}
+              variant={isMember ? "outline" : pendingRequest ? "secondary" : "gradient"}
               size="lg"
               className="flex-1"
               onClick={handleJoin}
-              disabled={joining || !canInteract}
+              disabled={joining || !canInteract || pendingRequest}
             >
               {joining ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {isMember ? "Leave Community" : "Join Community"}
+              {isMember ? "Leave Community" : pendingRequest ? "Request Pending" : isPrivate ? "Request to Join" : "Join Community"}
             </Button>
           </div>
         </div>
 
+        {/* Join Requests (for admins of private communities) */}
+        {isCreator && isPrivate && joinRequests.length > 0 && (
+          <div className="bg-card rounded-2xl shadow-card border border-primary/30 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Pending Join Requests ({joinRequests.length})</h3>
+            {joinRequests.map((req) => (
+              <div key={req.id} className="flex items-center gap-3">
+                {req.profile?.profile_image_url ? (
+                  <img src={req.profile.profile_image_url} className="h-8 w-8 rounded-full object-cover" alt="" />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-muted-foreground">
+                    {getName(req.profile)[0]?.toUpperCase()}
+                  </div>
+                )}
+                <p className="text-sm font-medium text-foreground flex-1">{getName(req.profile)}</p>
+                <Button size="sm" variant="gradient" className="text-xs h-7" onClick={() => handleApproveRequest(req.id, req.user_id)}>
+                  Approve
+                </Button>
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleRejectRequest(req.id)}>
+                  Reject
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Tabs */}
         <Tabs defaultValue="feed" className="w-full">
-          <TabsList className="w-full grid grid-cols-4 h-10">
+          <TabsList className="w-full grid grid-cols-5 h-10">
             <TabsTrigger value="feed" className="text-xs">Feed</TabsTrigger>
+            <TabsTrigger value="chat" className="text-xs">Chat</TabsTrigger>
             <TabsTrigger value="members" className="text-xs">Members</TabsTrigger>
             <TabsTrigger value="events" className="text-xs">Events</TabsTrigger>
             <TabsTrigger value="resources" className="text-xs">Resources</TabsTrigger>
@@ -154,6 +260,10 @@ const CommunityDetail = () => {
 
           <TabsContent value="feed" className="mt-4">
             {id && <CommunityFeed communityId={id} isMember={isMember} />}
+          </TabsContent>
+
+          <TabsContent value="chat" className="mt-4">
+            {id && <CommunityChat communityId={id} isMember={isMember} />}
           </TabsContent>
 
           <TabsContent value="members" className="mt-4">
