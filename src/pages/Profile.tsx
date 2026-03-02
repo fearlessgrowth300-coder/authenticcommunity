@@ -92,6 +92,7 @@ const Profile = () => {
               src={profile.profile_image_url}
               alt="Your profile"
               className="h-24 w-24 rounded-full object-cover mx-auto border-4 border-primary/20"
+              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.querySelector('.fallback')?.classList.remove('hidden'); }}
             />
           ) : (
             <div className="h-24 w-24 rounded-full bg-muted mx-auto border-4 border-primary/20 flex items-center justify-center text-2xl font-bold text-muted-foreground">
