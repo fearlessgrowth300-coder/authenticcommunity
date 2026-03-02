@@ -96,7 +96,7 @@ const EditProfile = () => {
 
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(filePath, file, { upsert: true });
+      .upload(filePath, file, { upsert: true, contentType: file.type, cacheControl: '0' });
 
     if (uploadError) {
       toast.error("Failed to upload photo");
@@ -205,7 +205,7 @@ const EditProfile = () => {
         <div className="flex flex-col items-center">
           <div className="relative">
             {profileImageUrl ? (
-              <img src={profileImageUrl} alt="Profile" className="h-28 w-28 rounded-full object-cover border-4 border-primary/20" />
+              <img src={profileImageUrl} alt="Profile" className="h-28 w-28 rounded-full object-cover border-4 border-primary/20" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             ) : (
               <div className="h-28 w-28 rounded-full bg-muted border-4 border-primary/20 flex items-center justify-center text-3xl font-bold text-muted-foreground">
                 {(firstName[0] || "U").toUpperCase()}
