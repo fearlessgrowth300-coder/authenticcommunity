@@ -60,6 +60,36 @@ export const mockUsers = [
     distance: 8.3,
     online: true,
   },
+  {
+    id: "5",
+    firstName: "Aisha",
+    lastName: "Williams",
+    age: 29,
+    bio: "Dance instructor and wellness advocate. Love salsa nights, farmers markets, and spontaneous road trips.",
+    profileImage: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&h=400&fit=crop&crop=face",
+    city: "San Francisco",
+    state: "CA",
+    interests: ["Dancing", "Wellness", "Travel", "Cooking"],
+    values: ["Joy", "Authenticity", "Community"],
+    matchScore: 89,
+    distance: 3.2,
+    online: true,
+  },
+  {
+    id: "6",
+    firstName: "James",
+    lastName: "Kim",
+    age: 33,
+    bio: "Photographer and coffee snob. Always chasing golden hour. Let's grab a cortado and talk about life.",
+    profileImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
+    city: "Oakland",
+    state: "CA",
+    interests: ["Photography", "Coffee", "Art", "Hiking"],
+    values: ["Creativity", "Curiosity", "Empathy"],
+    matchScore: 83,
+    distance: 4.7,
+    online: false,
+  },
 ];
 
 export const mockCommunities = [
@@ -109,7 +139,7 @@ export const mockEvents = [
   {
     id: "1",
     name: "Sunset Hike at Lands End",
-    date: "Mar 2, 2026",
+    date: "Mar 8, 2026",
     time: "5:00 PM",
     location: "Lands End Trail, SF",
     attendees: 24,
@@ -119,7 +149,7 @@ export const mockEvents = [
   {
     id: "2",
     name: "Korean BBQ Night",
-    date: "Mar 5, 2026",
+    date: "Mar 12, 2026",
     time: "7:00 PM",
     location: "Gogi Time, Oakland",
     attendees: 16,
@@ -129,7 +159,7 @@ export const mockEvents = [
   {
     id: "3",
     name: "Morning Meditation",
-    date: "Mar 8, 2026",
+    date: "Mar 15, 2026",
     time: "7:00 AM",
     location: "Golden Gate Park",
     attendees: 12,
