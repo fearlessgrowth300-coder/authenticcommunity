@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Edit, Share2, MapPin, Users, Calendar, ChevronRight, Loader2, ShieldCheck, Heart, Eye } from "lucide-react";
+import { formatCount } from "@/lib/utils";
 import { StoryHighlights } from "@/components/StoryHighlights";
 import { useFollow } from "@/hooks/useFollow";
 
