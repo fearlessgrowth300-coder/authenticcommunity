@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X, Share2 } from "lucide-react";
+import { formatCount } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import EventChat from "@/components/event/EventChat";
