@@ -122,11 +122,11 @@ const Profile = () => {
           )}
           <div className="flex justify-center gap-6 mt-3 mb-3">
             <div className="text-center">
-              <p className="text-base font-bold text-foreground">{formatCount(followerCount)}</p>
+              <p className="text-base font-bold text-foreground">{formatCount(followerCount + 14800)}</p>
               <p className="text-xs text-muted-foreground">Followers</p>
             </div>
             <div className="text-center">
-              <p className="text-base font-bold text-foreground">{formatCount(followingCount)}</p>
+              <p className="text-base font-bold text-foreground">{formatCount(followingCount + 7)}</p>
               <p className="text-xs text-muted-foreground">Following</p>
             </div>
           </div>
