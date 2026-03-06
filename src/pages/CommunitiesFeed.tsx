@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Search, Plus, MapPin, Users, Loader2, ArrowLeft, Lock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCount } from "@/lib/utils";
 import { toast } from "sonner";
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
