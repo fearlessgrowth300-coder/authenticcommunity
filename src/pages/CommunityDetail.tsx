@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { formatCount } from "@/lib/utils";
 import CommunityFeed from "@/components/community/CommunityFeed";
 import CommunityMembers from "@/components/community/CommunityMembers";
 import CommunityResources from "@/components/community/CommunityResources";
@@ -203,7 +204,7 @@ const CommunityDetail = () => {
           {community.description && <p className="text-sm text-muted-foreground mt-1">{community.description}</p>}
 
           <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1"><Users className="h-4 w-4" /> {memberCount} members</div>
+            <div className="flex items-center gap-1"><Users className="h-4 w-4" /> {formatCount(memberCount)} members</div>
             {community.location_city && (
               <div className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {community.location_city}</div>
             )}

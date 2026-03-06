@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Search, Plus, MapPin, Users, Loader2, ArrowLeft, Lock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCount } from "@/lib/utils";
 import { toast } from "sonner";
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
@@ -235,7 +235,7 @@ const CommunitiesFeed = () => {
                   <div className="flex items-center gap-3 mt-3">
                     {c.category && <Badge variant="outline" className="text-xs">{c.category}</Badge>}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" /> {c.member_count || 0}
+                      <Users className="h-3.5 w-3.5" /> {formatCount(c.member_count || 0)}
                     </div>
                     {c.location_city && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">

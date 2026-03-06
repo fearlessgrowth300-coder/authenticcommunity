@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X, Share2 } from "lucide-react";
+import { formatCount } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import EventChat from "@/components/event/EventChat";
@@ -142,8 +143,8 @@ const EventDetail = () => {
             )}
             <div className="flex items-center gap-2 text-sm text-foreground">
               <Users className="h-4 w-4 text-primary" />
-              {attendeeCount} attending
-              {event.max_attendees ? ` · ${event.max_attendees - attendeeCount} spots left` : ""}
+              {formatCount(attendeeCount)} attending
+              {event.max_attendees ? ` · ${formatCount(event.max_attendees - attendeeCount)} spots left` : ""}
             </div>
           </div>
 

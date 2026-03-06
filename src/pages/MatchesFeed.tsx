@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MatchDialog from "@/components/chat/MatchDialog";
 
 interface ProfileCard {
@@ -25,6 +26,7 @@ interface ProfileCard {
   profile_image_url: string | null;
   location_city: string | null;
   location_state: string | null;
+  gender: string | null;
   interests: string[];
   values: string[];
 }
@@ -41,6 +43,8 @@ const MatchesFeed = () => {
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [showFilter, setShowFilter] = useState(false);
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
+  const [filterGender, setFilterGender] = useState<string>("all");
+  const [filterLocation, setFilterLocation] = useState<string>("all");
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
   const { canInteract, restrictionMessage } = useAccountRestrictions();
   const { hasFeature } = useSubscription();
@@ -52,7 +56,7 @@ const MatchesFeed = () => {
       const [profilesRes, likesRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state")
+          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state, gender")
           .neq("user_id", user.id)
           .eq("is_active", true)
           .eq("account_status", "active"),
@@ -104,6 +108,8 @@ const MatchesFeed = () => {
 
   const filteredProfiles = profiles.filter((p) => {
     if (p.age && (p.age < filterAge[0] || p.age > filterAge[1])) return false;
+    if (filterGender !== "all" && p.gender?.toLowerCase() !== filterGender.toLowerCase()) return false;
+    if (filterLocation !== "all" && p.location_city?.toLowerCase() !== filterLocation.toLowerCase()) return false;
     return true;
   });
 
@@ -371,8 +377,8 @@ const MatchesFeed = () => {
       {/* Filter Dialog */}
       <Dialog open={showFilter} onOpenChange={setShowFilter}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Filter Profiles</DialogTitle></DialogHeader>
-          <div className="space-y-6 py-2">
+          <DialogHeader><DialogTitle>Advanced Filters</DialogTitle></DialogHeader>
+          <div className="space-y-5 py-2">
             <div className="space-y-3">
               <Label>Age Range: {filterAge[0]} - {filterAge[1]}</Label>
               <Slider
@@ -382,6 +388,30 @@ const MatchesFeed = () => {
                 value={filterAge}
                 onValueChange={(v) => setFilterAge(v as [number, number])}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Gender</Label>
+              <Select value={filterGender} onValueChange={setFilterGender}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="non-binary">Non-Binary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select value={filterLocation} onValueChange={setFilterLocation}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {[...new Set(profiles.map((p) => p.location_city).filter(Boolean))].map((city) => (
+                    <SelectItem key={city!} value={city!}>{city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button className="w-full" onClick={() => { setCurrentIndex(0); setShowFilter(false); }}>
               Apply Filters
