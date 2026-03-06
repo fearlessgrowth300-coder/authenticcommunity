@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { formatCount } from "@/lib/utils";
 import CommunityFeed from "@/components/community/CommunityFeed";
 import CommunityMembers from "@/components/community/CommunityMembers";
 import CommunityResources from "@/components/community/CommunityResources";
