@@ -377,8 +377,8 @@ const MatchesFeed = () => {
       {/* Filter Dialog */}
       <Dialog open={showFilter} onOpenChange={setShowFilter}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Filter Profiles</DialogTitle></DialogHeader>
-          <div className="space-y-6 py-2">
+          <DialogHeader><DialogTitle>Advanced Filters</DialogTitle></DialogHeader>
+          <div className="space-y-5 py-2">
             <div className="space-y-3">
               <Label>Age Range: {filterAge[0]} - {filterAge[1]}</Label>
               <Slider
@@ -388,6 +388,30 @@ const MatchesFeed = () => {
                 value={filterAge}
                 onValueChange={(v) => setFilterAge(v as [number, number])}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Gender</Label>
+              <Select value={filterGender} onValueChange={setFilterGender}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="non-binary">Non-Binary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select value={filterLocation} onValueChange={setFilterLocation}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {[...new Set(profiles.map((p) => p.location_city).filter(Boolean))].map((city) => (
+                    <SelectItem key={city!} value={city!}>{city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button className="w-full" onClick={() => { setCurrentIndex(0); setShowFilter(false); }}>
               Apply Filters
