@@ -42,6 +42,8 @@ const MatchesFeed = () => {
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [showFilter, setShowFilter] = useState(false);
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
+  const [filterGender, setFilterGender] = useState<string>("all");
+  const [filterLocation, setFilterLocation] = useState<string>("all");
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
   const { canInteract, restrictionMessage } = useAccountRestrictions();
   const { hasFeature } = useSubscription();
