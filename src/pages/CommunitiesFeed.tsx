@@ -235,7 +235,7 @@ const CommunitiesFeed = () => {
                   <div className="flex items-center gap-3 mt-3">
                     {c.category && <Badge variant="outline" className="text-xs">{c.category}</Badge>}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" /> {c.member_count || 0}
+                      <Users className="h-3.5 w-3.5" /> {formatCount(c.member_count || 0)}
                     </div>
                     {c.location_city && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
