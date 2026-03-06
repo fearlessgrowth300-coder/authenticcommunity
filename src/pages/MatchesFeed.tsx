@@ -26,6 +26,7 @@ interface ProfileCard {
   profile_image_url: string | null;
   location_city: string | null;
   location_state: string | null;
+  gender: string | null;
   interests: string[];
   values: string[];
 }
