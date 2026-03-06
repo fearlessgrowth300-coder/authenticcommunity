@@ -108,9 +108,7 @@ const MatchesFeed = () => {
 
   const filteredProfiles = profiles.filter((p) => {
     if (p.age && (p.age < filterAge[0] || p.age > filterAge[1])) return false;
-    if (filterGender !== "all" && p.location_state !== filterGender) {
-      // Actually filter by gender from profile data - need to check the field
-    }
+    if (filterGender !== "all" && p.gender?.toLowerCase() !== filterGender.toLowerCase()) return false;
     if (filterLocation !== "all" && p.location_city?.toLowerCase() !== filterLocation.toLowerCase()) return false;
     return true;
   });
