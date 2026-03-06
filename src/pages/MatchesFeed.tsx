@@ -56,7 +56,7 @@ const MatchesFeed = () => {
       const [profilesRes, likesRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state")
+          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state, gender")
           .neq("user_id", user.id)
           .eq("is_active", true)
           .eq("account_status", "active"),
