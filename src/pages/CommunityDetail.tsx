@@ -204,7 +204,7 @@ const CommunityDetail = () => {
           {community.description && <p className="text-sm text-muted-foreground mt-1">{community.description}</p>}
 
           <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1"><Users className="h-4 w-4" /> {memberCount} members</div>
+            <div className="flex items-center gap-1"><Users className="h-4 w-4" /> {formatCount(memberCount)} members</div>
             {community.location_city && (
               <div className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {community.location_city}</div>
             )}
