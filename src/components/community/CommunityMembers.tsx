@@ -53,7 +53,7 @@ const CommunityMembers = ({ communityId, totalMemberCount }: CommunityMembersPro
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground mb-3">{members.length} members</p>
+      <p className="text-xs text-muted-foreground mb-3">{totalMemberCount ? formatCount(totalMemberCount) : members.length} members</p>
       {members.map((m) => (
         <button
           key={m.user_id}
