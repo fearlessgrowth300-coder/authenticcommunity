@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Users } from "lucide-react";
 import { format } from "date-fns";
+import { formatCount } from "@/lib/utils";
 
 interface CommunityMembersProps {
   communityId: string;
