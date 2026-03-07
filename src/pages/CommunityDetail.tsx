@@ -43,9 +43,10 @@ const CommunityDetail = () => {
       if (communityRes.data) {
         setCommunity(communityRes.data);
         setIsCreator(communityRes.data.creator_id === user?.id);
+        // Use the stored member_count for display (reflects real scale)
+        setMemberCount(communityRes.data.member_count || membersRes.data?.length || 0);
       }
       setEvents(eventsRes.data || []);
-      setMemberCount(membersRes.data?.length || 0);
 
       if (user) {
         setIsMember(membersRes.data?.some((m) => m.user_id === user.id) || false);
