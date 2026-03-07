@@ -6,6 +6,7 @@ import { format } from "date-fns";
 
 interface CommunityMembersProps {
   communityId: string;
+  totalMemberCount?: number;
 }
 
 interface Member {
