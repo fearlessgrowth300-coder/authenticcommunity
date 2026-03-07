@@ -16,7 +16,7 @@ interface Member {
   profile?: { first_name: string | null; last_name: string | null; profile_image_url: string | null; location_city: string | null };
 }
 
-const CommunityMembers = ({ communityId }: CommunityMembersProps) => {
+const CommunityMembers = ({ communityId, totalMemberCount }: CommunityMembersProps) => {
   const navigate = useNavigate();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
