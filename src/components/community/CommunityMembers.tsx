@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Users } from "lucide-react";
 import { format } from "date-fns";
+import { formatCount } from "@/lib/utils";
 
 interface CommunityMembersProps {
   communityId: string;
+  totalMemberCount?: number;
 }
 
 interface Member {
@@ -15,7 +17,7 @@ interface Member {
   profile?: { first_name: string | null; last_name: string | null; profile_image_url: string | null; location_city: string | null };
 }
 
-const CommunityMembers = ({ communityId }: CommunityMembersProps) => {
+const CommunityMembers = ({ communityId, totalMemberCount }: CommunityMembersProps) => {
   const navigate = useNavigate();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,7 @@ const CommunityMembers = ({ communityId }: CommunityMembersProps) => {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground mb-3">{members.length} members</p>
+      <p className="text-xs text-muted-foreground mb-3">{totalMemberCount ? formatCount(totalMemberCount) : members.length} members</p>
       {members.map((m) => (
         <button
           key={m.user_id}

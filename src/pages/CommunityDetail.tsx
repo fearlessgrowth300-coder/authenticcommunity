@@ -269,7 +269,7 @@ const CommunityDetail = () => {
           </TabsContent>
 
           <TabsContent value="members" className="mt-4">
-            {id && <CommunityMembers communityId={id} />}
+            {id && <CommunityMembers communityId={id} totalMemberCount={memberCount} />}
           </TabsContent>
 
           <TabsContent value="events" className="mt-4">
