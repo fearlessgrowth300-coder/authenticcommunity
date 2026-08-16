@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, Phone, Video, MoreVertical, Send, Smile, Camera, Mic, Loader2, Flag, Ban, BellOff, Timer, Plus, X, MicOff, Search, Image, Palette } from "lucide-react";
@@ -59,6 +59,7 @@ interface Profile {
 
 const DirectMessage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id: recipientId } = useParams();
   const { user } = useAuth();
   const [message, setMessage] = useState("");
@@ -93,6 +94,13 @@ const DirectMessage = () => {
     blockRowId: null,
   });
   const [recipientRestricted, setRecipientRestricted] = useState(false);
+
+  // A match or event can suggest a low-pressure first step. It is intentionally
+  // only a draft: the member stays in control of whether anything is sent.
+  useEffect(() => {
+    const draft = (location.state as { draft?: unknown } | null)?.draft;
+    if (typeof draft === "string" && draft.trim()) setMessage(draft);
+  }, [location.state]);
   
   // Real presence tracking
   const presence = usePresence(recipientId);

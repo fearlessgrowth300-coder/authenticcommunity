@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, MessageCircle, Heart, UserPlus, UserCheck } from "lucide-react";
+import { Loader2, MessageCircle, Heart, UserPlus, UserCheck, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ interface FeedStory {
   content_type: string;
   content_url: string | null;
   text_content: string | null;
+  interest_tags?: string[] | null;
   created_at: string;
   profile: {
     first_name: string | null;
@@ -24,7 +25,7 @@ interface FeedStory {
   isFollowing: boolean;
   commonInterests: number;
   score: number;
-  sourceTag: "following" | "nearby" | "shared" | "discover";
+  sourceTag: "following" | "nearby" | "interests" | "shared" | "discover";
 }
 
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase();
@@ -61,7 +62,7 @@ export function PersonalizedActivityFeed() {
         supabase.from("user_interests").select("interest_name").eq("user_id", user.id),
         supabase
           .from("stories")
-          .select("id, user_id, content_type, content_url, text_content, created_at")
+          .select("id, user_id, content_type, content_url, text_content, interest_tags, created_at")
           .eq("is_deleted", false)
           .gt("expires_at", nowIso)
           .neq("user_id", user.id)
@@ -82,13 +83,14 @@ export function PersonalizedActivityFeed() {
       const storyIds = stories.map((s: any) => s.id);
       const userIds = [...new Set(stories.map((s: any) => s.user_id))];
 
-      const [profilesRes, candidateInterestsRes, likesRes] = await Promise.all([
+      const [profilesRes, candidateInterestsRes, likesRes, dismissalsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, first_name, last_name, profile_image_url, location_city, location_state, location_country")
           .in("user_id", userIds),
         supabase.from("user_interests").select("user_id, interest_name").in("user_id", userIds),
         supabase.from("story_likes").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
+        (supabase as any).from("content_dismissals").select("content_id").eq("user_id", user.id).eq("content_type", "story").in("content_id", storyIds),
       ]);
 
       const myProfile = myProfileRes.data;
@@ -102,15 +104,22 @@ export function PersonalizedActivityFeed() {
       });
 
       const likedSet = new Set((likesRes.data || []).map((l: any) => l.story_id));
+      const dismissedSet = new Set((dismissalsRes.data || []).map((row: any) => row.content_id));
       setLikedStoryIds(likedSet);
 
       const enriched = stories
         .map((story: any) => {
+          if (dismissedSet.has(story.id)) return null;
           const profile = profileMap.get(story.user_id);
           if (!profile) return null;
 
           const candidateInterests = interestMap.get(story.user_id) || new Set();
           const commonInterests = [...myInterests].filter((interest) => candidateInterests.has(interest)).length;
+          // A post or video can be relevant because its own caption mentions an
+          // interest, even when the creator has not completed their profile yet.
+          const contentText = normalize(story.text_content);
+          const taggedInterests = new Set((story.interest_tags || []).map(normalize));
+          const topicMatches = [...myInterests].filter((interest) => interest.length > 2 && (contentText.includes(interest) || taggedInterests.has(interest))).length;
 
           const sameCity = normalize(myProfile?.location_city) && normalize(myProfile?.location_city) === normalize(profile.location_city);
           const sameState = normalize(myProfile?.location_state) && normalize(myProfile?.location_state) === normalize(profile.location_state);
@@ -124,12 +133,15 @@ export function PersonalizedActivityFeed() {
             (isFollowing ? 100 : 0) +
             (sameCity ? 28 : sameState ? 14 : sameCountry ? 7 : 0) +
             Math.min(commonInterests * 6, 24) +
+            Math.min(topicMatches * 18, 36) +
             freshnessBoost;
 
           const sourceTag: FeedStory["sourceTag"] = isFollowing
             ? "following"
             : sameCity || sameState || sameCountry
               ? "nearby"
+            : topicMatches > 0
+              ? "interests"
               : commonInterests > 0
                 ? "shared"
                 : "discover";
@@ -169,6 +181,7 @@ export function PersonalizedActivityFeed() {
     () => ({
       following: "Following",
       nearby: "Nearby",
+      interests: "Your interests",
       shared: "Shared interests",
       discover: "Discover",
     }),
@@ -224,6 +237,13 @@ export function PersonalizedActivityFeed() {
     }
 
     setBusyLikeStoryId(null);
+  };
+
+  const hideStory = async (storyId: string) => {
+    if (!user) return;
+    const { error } = await (supabase as any).from("content_dismissals").upsert({ user_id: user.id, content_type: "story", content_id: storyId }, { onConflict: "user_id,content_type,content_id" });
+    if (error) return;
+    setFeedStories((current) => current.filter((story) => story.id !== storyId));
   };
 
   if (loading) {
@@ -317,6 +337,7 @@ export function PersonalizedActivityFeed() {
               >
                 <MessageCircle className="h-3.5 w-3.5 mr-1" /> Message
               </Button>
+              <Button size="sm" variant="ghost" onClick={() => hideStory(story.id)} title="Not interested"><EyeOff className="h-3.5 w-3.5 mr-1" /> Hide</Button>
 
               <Button
                 size="sm"

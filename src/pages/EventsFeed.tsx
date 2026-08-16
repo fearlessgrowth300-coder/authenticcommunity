@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { EventsMap } from "@/components/EventsMap";
+import { scoreLocalRecommendation } from "@/lib/recommendations";
 
 interface EventRow {
   id: string;
@@ -31,6 +32,7 @@ interface EventRow {
   organizer_id: string | null;
   latitude: number | null;
   longitude: number | null;
+  recommendation?: { score: number; reason: string | null };
 }
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
@@ -76,8 +78,22 @@ const EventsFeed = () => {
       query = query.eq("category", selectedCategory);
     }
 
-    const { data } = await query;
-    setEvents(data || []);
+    const [eventsRes, profileRes, interestsRes] = await Promise.all([
+      query,
+      user ? supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null }),
+      user ? supabase.from("user_interests").select("interest_name").eq("user_id", user.id) : Promise.resolve({ data: [] }),
+    ]);
+    const myInterests = (interestsRes.data || []).map((row: { interest_name: string }) => row.interest_name);
+    setEvents((eventsRes.data || []).map((event: EventRow) => ({
+      ...event,
+      recommendation: scoreLocalRecommendation({
+        itemCity: event.location,
+        itemCategory: event.category,
+        memberCount: event.attendee_count,
+        myCity: profileRes.data?.location_city,
+        myInterests,
+      }),
+    })).sort((a, b) => (b.recommendation?.score || 0) - (a.recommendation?.score || 0)));
     setLoading(false);
   };
 
@@ -261,6 +277,7 @@ const EventsFeed = () => {
                       {format(new Date(event.event_date + "T00:00:00"), "MMM d, yyyy")}
                     </span>
                   )}
+                  {event.recommendation?.reason && <span className="text-[10px] text-primary font-medium">{event.recommendation.reason}</span>}
                 </div>
                 <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
                 {event.description && (

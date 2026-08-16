@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X, Share2 } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Users, CalendarIcon, Loader2, Check, X, Share2, ShieldCheck } from "lucide-react";
 import { formatCount } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import EventChat from "@/components/event/EventChat";
 import EventPhotos from "@/components/event/EventPhotos";
 import EventReviews from "@/components/event/EventReviews";
 import EventAttendees from "@/components/event/EventAttendees";
+import { EventConnectionCheckIn } from "@/components/event/EventConnectionCheckIn";
 
 interface EventRow {
   id: string;
@@ -177,6 +178,20 @@ const EventDetail = () => {
             )}
           </div>
         </div>
+
+        {id && <EventConnectionCheckIn eventId={id} eventDate={event.event_date} isGoing={rsvpStatus === "going"} />}
+
+        {rsvpStatus === "going" && (
+          <section className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex gap-3">
+              <ShieldCheck className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <h2 className="font-semibold text-foreground">A safer first meetup</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Meet in the published public location, tell someone you trust your plan, and leave whenever something feels off. You can report or block anyone from their profile or chat.</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Tabs */}
         <Tabs defaultValue="attendees" className="w-full">

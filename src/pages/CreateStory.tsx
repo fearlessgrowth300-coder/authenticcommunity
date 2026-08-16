@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, X, Type, Image, Video, Smile, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { createTextStory, createImageStory, createVideoStory } from "@/lib/stories";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const bgColors = ["#3b82f6", "#ec4899", "#a855f7", "#10b981", "#f59e0b", "#ef4444", "#1f2937", "#6366f1"];
 
@@ -19,7 +20,17 @@ const CreateStory = () => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: interests } = await supabase.from("user_interests").select("interest_name").eq("user_id", data.user.id);
+      setAvailableTags((interests || []).map((interest) => interest.interest_name));
+    });
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -33,13 +44,13 @@ const CreateStory = () => {
     try {
       if (type === "text") {
         if (!text.trim()) { toast.error("Write something first"); setPosting(false); return; }
-        await createTextStory(text, bgColor);
+        await createTextStory(text, bgColor, selectedTags);
       } else if (type === "image") {
         if (!file) { toast.error("Select an image first"); setPosting(false); return; }
-        await createImageStory(file);
+        await createImageStory(file, selectedTags);
       } else {
         if (!file) { toast.error("Select a video first"); setPosting(false); return; }
-        await createVideoStory(file);
+        await createVideoStory(file, selectedTags);
       }
       toast.success("Story posted!");
       navigate("/dashboard");
@@ -142,6 +153,20 @@ const CreateStory = () => {
                 Change {type}
               </Button>
             )}
+          </div>
+        )}
+
+        {availableTags.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-medium text-foreground">Tag this for the right people</p>
+            <p className="mb-3 text-xs text-muted-foreground">Tagged stories and videos are recommended to members who chose the same interests.</p>
+            <div className="flex flex-wrap gap-2">
+              {availableTags.map((tag) => (
+                <button key={tag} onClick={() => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} className={cn("rounded-full border px-3 py-1.5 text-xs font-medium", selectedTags.includes(tag) ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border")}>
+                  {selectedTags.includes(tag) ? "✓ " : ""}{tag}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

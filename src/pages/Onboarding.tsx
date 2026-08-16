@@ -172,14 +172,7 @@ const Onboarding = () => {
         bio: bio || null,
         gender: gender || null,
         age: age ? parseInt(age) : null,
-        occupation: occupation || null,
-        looking_for: lookingFor || null,
-        target_countries: targetCountries.length > 0 ? targetCountries : null,
-        min_age: ageRange[0],
-        max_age: ageRange[1],
-        max_distance_km: maxDistance,
         onboarding_completed: true,
-        onboarding_step: 6,
         ...(avatarUrl ? { profile_image_url: avatarUrl } : {}),
       };
 
@@ -187,6 +180,24 @@ const Onboarding = () => {
         .from("profiles")
         .upsert(profilePayload, { onConflict: "user_id" });
       if (profileError) throw profileError;
+
+      // Preferences were introduced after the original profiles table. Save
+      // them separately so a newly provisioned project can still complete
+      // onboarding while its schema cache catches up.
+      const { error: preferenceError } = await supabase
+        .from("profiles")
+        .update({
+          occupation: occupation || null,
+          looking_for: lookingFor || null,
+          target_countries: targetCountries.length > 0 ? targetCountries : null,
+          min_age: ageRange[0],
+          max_age: ageRange[1],
+          max_distance_km: maxDistance,
+          onboarding_step: 6,
+        })
+        .eq("user_id", user.id);
+      if (preferenceError && preferenceError.code !== "PGRST204") throw preferenceError;
+      if (preferenceError) console.warn("Optional onboarding preferences will be saved after the database schema refresh.", preferenceError.message);
 
       // Save interests
       await supabase.from("user_interests").delete().eq("user_id", user.id);
@@ -355,17 +366,20 @@ const Onboarding = () => {
                 <Input placeholder="e.g. Software Engineer" value={occupation} onChange={(e) => setOccupation(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Looking for</Label>
+                <Label>What do you want to build?</Label>
                 <Select value={lookingFor} onValueChange={setLookingFor}>
-                  <SelectTrigger><SelectValue placeholder="What are you looking for?" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Choose your connection goal" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="friends">Friends</SelectItem>
-                    <SelectItem value="dating">Dating</SelectItem>
-                    <SelectItem value="community">Community</SelectItem>
-                    <SelectItem value="networking">Networking</SelectItem>
-                    <SelectItem value="all">Open to all</SelectItem>
+                    <SelectItem value="friends">Make new friends</SelectItem>
+                    <SelectItem value="activity-partners">Find activity partners</SelectItem>
+                    <SelectItem value="small-group">Join a consistent small group</SelectItem>
+                    <SelectItem value="new-to-city">Meet people after moving</SelectItem>
+                    <SelectItem value="community">Find a local community</SelectItem>
+                    <SelectItem value="networking">Build a professional network</SelectItem>
+                    <SelectItem value="all">Open to connection</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">We use this to make introductions that fit what you want—not to rank your popularity.</p>
               </div>
             </div>
           </>
@@ -427,7 +441,8 @@ const Onboarding = () => {
         {currentStep === 3 && (
           <>
             <h2 className="text-xl font-bold text-foreground mb-1">What are you into?</h2>
-            <p className="text-muted-foreground text-sm mb-6">Pick up to 5 interests ({selectedInterests.length}/5)</p>
+            <p className="text-muted-foreground text-sm mb-2">Pick up to 5 interests ({selectedInterests.length}/5)</p>
+            <p className="text-xs text-primary mb-6">These choices personalize the posts, videos, stories, people, communities, and events you see. You can change them later.</p>
             <div className="space-y-5">
               {interestCategories.map((cat) => (
                 <div key={cat.name}>

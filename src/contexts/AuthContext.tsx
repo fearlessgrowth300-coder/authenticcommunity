@@ -25,10 +25,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountStatus, setAccountStatus] = useState<string>("active");
   const [accountStatusLoading, setAccountStatusLoading] = useState(true);
 
+  const loadAccountStatus = async (userId: string) => {
+    // Some newly provisioned projects may not yet have the later moderation
+    // columns. That must never make a completed profile look incomplete.
+    const { data } = await supabase
+      .from("profiles")
+      .select("account_status, is_active, suspended_until")
+      .eq("user_id", userId)
+      .maybeSingle();
+    await resolveAccountStatus(data, userId);
+  };
+
   const fetchOnboarding = async (userId: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("onboarding_completed, account_status, is_active, suspended_until")
+      .select("onboarding_completed")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -54,19 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data: createdProfile } = await supabase
         .from("profiles")
-        .select("onboarding_completed, account_status, is_active, suspended_until")
+        .select("onboarding_completed")
         .eq("user_id", userId)
         .maybeSingle();
 
       const completed = Boolean(createdProfile?.onboarding_completed);
       setOnboardingCompleted(completed);
-      resolveAccountStatus(createdProfile, userId);
+      await loadAccountStatus(userId);
       return completed;
     }
 
     const completed = Boolean(data.onboarding_completed);
     setOnboardingCompleted(completed);
-    resolveAccountStatus(data, userId);
+    await loadAccountStatus(userId);
     return completed;
   };
 
@@ -151,7 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         data: { first_name: firstName, last_name: lastName },
-        emailRedirectTo: window.location.origin,
+        // Supabase's default confirmation email uses a secure link. Send it to
+        // the callback route so the session is completed before onboarding.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (error) throw error;

@@ -14,6 +14,7 @@ import { StoriesFeed } from "@/components/StoriesFeed";
 import { PersonalizedActivityFeed } from "@/components/feed/PersonalizedActivityFeed";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { toast } from "sonner";
+import { FirstWeekPlan } from "@/components/FirstWeekPlan";
 
 interface Profile {
   first_name: string | null;
@@ -38,6 +39,7 @@ const Dashboard = () => {
   const [communities, setCommunities] = useState<any[]>([]);
   const [likedProfiles, setLikedProfiles] = useState<LikedProfile[]>([]);
   const [stats, setStats] = useState({ matches: 0, communities: 0, events: 0 });
+  const [interestsCount, setInterestsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
@@ -77,7 +79,7 @@ const Dashboard = () => {
     if (!user) return;
 
     const load = async () => {
-      const [profileRes, eventsRes, communitiesRes, matchesRes, memberRes, attendeeRes, notifsRes, likesRes] = await Promise.all([
+      const [profileRes, eventsRes, communitiesRes, matchesRes, memberRes, attendeeRes, notifsRes, likesRes, interestsRes] = await Promise.all([
         supabase.from("profiles").select("first_name, last_name, location_city, location_state, profile_image_url").eq("user_id", user.id).maybeSingle(),
         supabase.from("events").select("*").eq("is_active", true).order("event_date", { ascending: true }).limit(3),
         supabase.from("communities").select("*").eq("is_active", true).order("member_count", { ascending: false }).limit(3),
@@ -86,6 +88,7 @@ const Dashboard = () => {
         supabase.from("event_attendees").select("id").eq("user_id", user.id),
         supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("is_read", false),
         supabase.from("user_likes").select("liked_id").eq("liker_id", user.id).order("created_at", { ascending: false }).limit(10),
+        supabase.from("user_interests").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
@@ -97,6 +100,7 @@ const Dashboard = () => {
         events: attendeeRes.data?.length || 0,
       });
       setUnreadNotifs(notifsRes.count || 0);
+      setInterestsCount(interestsRes.count || 0);
 
       // Load liked profiles
       const likedIds = (likesRes.data || []).map((l: any) => l.liked_id);
@@ -253,6 +257,14 @@ const Dashboard = () => {
               </div>
             </div>
           )}
+
+          <FirstWeekPlan
+            profile={profile}
+            interestsCount={interestsCount}
+            communityCount={stats.communities}
+            eventCount={stats.events}
+            matchCount={stats.matches}
+          />
 
           {/* Stories */}
           <section>

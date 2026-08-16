@@ -27,9 +27,31 @@ interface ProfileCard {
   location_city: string | null;
   location_state: string | null;
   gender: string | null;
+  looking_for: string | null;
   interests: string[];
   values: string[];
+  matchReasons: string[];
 }
+
+const buildMatchReasons = (profile: Omit<ProfileCard, "matchReasons">, myInterests: Set<string>, myValues: Set<string>, myCity?: string | null) => {
+  const sharedInterests = profile.interests.filter((interest) => myInterests.has(interest)).slice(0, 2);
+  const sharedValues = profile.values.filter((value) => myValues.has(value)).slice(0, 1);
+  const reasons: string[] = [];
+  if (sharedInterests.length) reasons.push(`Both enjoy ${sharedInterests.join(" and ")}`);
+  if (sharedValues.length) reasons.push(`You both value ${sharedValues[0]}`);
+  if (myCity && profile.location_city?.toLowerCase() === myCity.toLowerCase()) reasons.push("You are in the same city");
+  const goalLabels: Record<string, string> = {
+    friends: "make new friends",
+    "activity-partners": "find activity partners",
+    "small-group": "join a consistent small group",
+    "new-to-city": "meet people after moving",
+    community: "find a local community",
+    networking: "build a professional network",
+    all: "stay open to connection",
+  };
+  if (profile.looking_for) reasons.push(`They want to ${goalLabels[profile.looking_for] || profile.looking_for}`);
+  return reasons.slice(0, 3);
+};
 
 const MatchesFeed = () => {
   const navigate = useNavigate();
@@ -45,6 +67,8 @@ const MatchesFeed = () => {
   const [filterAge, setFilterAge] = useState<[number, number]>([18, 80]);
   const [filterGender, setFilterGender] = useState<string>("all");
   const [filterLocation, setFilterLocation] = useState<string>("all");
+  const [planProfile, setPlanProfile] = useState<ProfileCard | null>(null);
+  const [planIdea, setPlanIdea] = useState("Coffee or a short walk this week");
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; name: string; imageUrl: string | null; userId: string }>({ open: false, name: "", imageUrl: null, userId: "" });
   const { canInteract, restrictionMessage } = useAccountRestrictions();
   const { hasFeature } = useSubscription();
@@ -53,10 +77,10 @@ const MatchesFeed = () => {
     if (!user) return;
 
     const load = async () => {
-      const [profilesRes, likesRes] = await Promise.all([
+      const [profilesRes, likesRes, myProfileRes, myInterestsRes, myValuesRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state, gender")
+          .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state, gender, looking_for")
           .neq("user_id", user.id)
           .eq("is_active", true)
           .eq("account_status", "active"),
@@ -64,6 +88,9 @@ const MatchesFeed = () => {
           .from("user_likes")
           .select("liked_id")
           .eq("liker_id", user.id),
+        supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle(),
+        supabase.from("user_interests").select("interest_name").eq("user_id", user.id),
+        supabase.from("user_values").select("value_name").eq("user_id", user.id),
       ]);
 
       const liked = new Set((likesRes.data || []).map((l: any) => l.liked_id));
@@ -93,11 +120,16 @@ const MatchesFeed = () => {
         valuesMap.get(v.user_id)!.push(v.value_name);
       });
 
-      const cards: ProfileCard[] = profilesRes.data.map((p) => ({
-        ...p,
-        interests: interestsMap.get(p.user_id) || [],
-        values: valuesMap.get(p.user_id) || [],
-      }));
+      const myInterests = new Set((myInterestsRes.data || []).map((row) => row.interest_name));
+      const myValues = new Set((myValuesRes.data || []).map((row) => row.value_name));
+      const cards: ProfileCard[] = profilesRes.data.map((p) => {
+        const profile = {
+          ...p,
+          interests: interestsMap.get(p.user_id) || [],
+          values: valuesMap.get(p.user_id) || [],
+        };
+        return { ...profile, matchReasons: buildMatchReasons(profile, myInterests, myValues, myProfileRes.data?.location_city) };
+      });
 
       setProfiles(cards);
       setLoading(false);
@@ -338,6 +370,22 @@ const MatchesFeed = () => {
                     ))}
                   </div>
                 )}
+                {currentProfile.matchReasons.length > 0 && (
+                  <div className="mt-4 rounded-xl bg-primary/5 border border-primary/15 p-3">
+                    <p className="text-xs font-semibold text-foreground">Why this introduction</p>
+                    <ul className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                      {currentProfile.matchReasons.map((reason) => <li key={reason}>• {reason}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-4"
+                  onClick={() => setPlanProfile(currentProfile)}
+                >
+                  <Users className="h-4 w-4 mr-1.5" /> Suggest a simple plan
+                </Button>
               </div>
             </div>
 
@@ -429,6 +477,26 @@ const MatchesFeed = () => {
           navigate(`/messages/${matchDialog.userId}`);
         }}
       />
+      <Dialog open={!!planProfile} onOpenChange={(open) => !open && setPlanProfile(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Make the first step easy</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Choose a low-pressure idea. We will only prepare a draft—you decide whether to send it.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {["Coffee or a short walk this week", "Try a local event together", "Join a small group activity", "Video chat for 15 minutes"].map((idea) => (
+              <Button key={idea} type="button" variant={planIdea === idea ? "default" : "outline"} className="h-auto min-h-12 whitespace-normal text-xs" onClick={() => setPlanIdea(idea)}>{idea}</Button>
+            ))}
+          </div>
+          <Button
+            variant="gradient"
+            onClick={() => {
+              if (!planProfile) return;
+              const name = planProfile.first_name || "there";
+              navigate(`/messages/${planProfile.user_id}`, { state: { draft: `Hi ${name}! We seem to have a few things in common. Would you be open to ${planIdea.toLowerCase()}?` } });
+              setPlanProfile(null);
+            }}
+          >Prepare message draft</Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

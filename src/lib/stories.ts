@@ -1,19 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export async function createTextStory(text: string, backgroundColor: string) {
+export async function createTextStory(text: string, backgroundColor: string, interestTags: string[] = []) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
   const { data, error } = await supabase
     .from("stories")
-    .insert({ user_id: user.id, content_type: "text", text_content: text, background_color: backgroundColor })
+    .insert({ user_id: user.id, content_type: "text", text_content: text, background_color: backgroundColor, interest_tags: interestTags } as any)
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
-export async function createImageStory(imageFile: File) {
+export async function createImageStory(imageFile: File, interestTags: string[] = []) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
@@ -25,14 +25,14 @@ export async function createImageStory(imageFile: File) {
 
   const { data, error } = await supabase
     .from("stories")
-    .insert({ user_id: user.id, content_type: "image", content_url: publicUrl })
+    .insert({ user_id: user.id, content_type: "image", content_url: publicUrl, interest_tags: interestTags } as any)
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
-export async function createVideoStory(videoFile: File) {
+export async function createVideoStory(videoFile: File, interestTags: string[] = []) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
@@ -44,7 +44,7 @@ export async function createVideoStory(videoFile: File) {
 
   const { data, error } = await supabase
     .from("stories")
-    .insert({ user_id: user.id, content_type: "video", content_url: publicUrl })
+    .insert({ user_id: user.id, content_type: "video", content_url: publicUrl, interest_tags: interestTags } as any)
     .select()
     .single();
   if (error) throw error;

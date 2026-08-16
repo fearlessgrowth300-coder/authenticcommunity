@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSubscription, PlanTier } from "@/hooks/useSubscription";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 
@@ -64,26 +63,17 @@ const plans = [
 const Subscription = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { plan: currentPlan, refresh } = useSubscription();
+  const { plan: currentPlan } = useSubscription();
   const [upgrading, setUpgrading] = useState<string | null>(null);
 
   const handleUpgrade = async (targetPlan: PlanTier) => {
     if (!user) return;
+    if (targetPlan === "free") return;
     setUpgrading(targetPlan);
     try {
-      // For now, directly activate the plan (Stripe integration will replace this)
-      const { error } = await supabase.from("user_subscriptions").upsert({
-        user_id: user.id,
-        plan: targetPlan,
-        started_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      }, { onConflict: "user_id" });
-
-      if (error) throw error;
-      await refresh();
-      toast.success(`Upgraded to ${targetPlan === "pro" ? "Pro" : "Premium"}!`);
-    } catch {
-      toast.error("Failed to upgrade. Try again.");
+      // Never grant a paid entitlement from the client. A verified payment
+      // webhook must create the subscription before this is enabled.
+      toast.info(`${targetPlan === "pro" ? "Pro" : "Premium"} billing is coming soon. Your account has not been charged or changed.`);
     } finally {
       setUpgrading(null);
     }

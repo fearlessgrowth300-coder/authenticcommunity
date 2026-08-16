@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Plus, MapPin, Users, Loader2, ArrowLeft, Lock } from "lucide-react";
 import { cn, formatCount } from "@/lib/utils";
 import { toast } from "sonner";
+import { scoreLocalRecommendation } from "@/lib/recommendations";
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
 
@@ -43,8 +44,23 @@ const CommunitiesFeed = () => {
     let query = supabase.from("communities").select("*").eq("is_active", true).order("member_count", { ascending: false });
     if (selectedCategory) query = query.eq("category", selectedCategory);
 
-    const { data } = await query;
-    setCommunities(data || []);
+    const [communitiesRes, profileRes, interestsRes] = await Promise.all([
+      query,
+      user ? supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null }),
+      user ? supabase.from("user_interests").select("interest_name").eq("user_id", user.id) : Promise.resolve({ data: [] }),
+    ]);
+    const myInterests = (interestsRes.data || []).map((row: { interest_name: string }) => row.interest_name);
+    const ranked = (communitiesRes.data || []).map((community: any) => ({
+      ...community,
+      recommendation: scoreLocalRecommendation({
+        itemCity: community.location_city,
+        itemCategory: community.category,
+        memberCount: community.member_count,
+        myCity: profileRes.data?.location_city,
+        myInterests,
+      }),
+    })).sort((a: any, b: any) => b.recommendation.score - a.recommendation.score);
+    setCommunities(ranked);
 
     if (user) {
       const { data: memberships } = await supabase
@@ -241,6 +257,9 @@ const CommunitiesFeed = () => {
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5" /> {c.location_city}
                       </div>
+                    )}
+                    {c.recommendation?.reason && (
+                      <span className="text-[10px] font-medium text-primary">{c.recommendation.reason}</span>
                     )}
                     <Button
                       size="sm"
