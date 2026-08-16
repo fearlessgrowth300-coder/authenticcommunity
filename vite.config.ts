@@ -62,8 +62,15 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   resolve: {
+    dedupe: ["react", "react-dom", "react-router-dom", "lucide-react"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // The UI handoff lives in a subfolder. Pin these shared runtime modules
+      // to the application dependency set so production never bundles React twice.
+      react: path.resolve(__dirname, "./node_modules/react"),
+      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
+      "react-router-dom": path.resolve(__dirname, "./node_modules/react-router-dom"),
+      "lucide-react": path.resolve(__dirname, "./node_modules/lucide-react"),
     },
   },
 }));

@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}", "./ui-handoff/src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
     container: {
@@ -18,6 +18,18 @@ export default {
         display: ['Poppins', 'Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
+        brand: {
+          50: "#EEF2FF",
+          500: "#4F46E5",
+          600: "#4338CA",
+          coral: "#F9736B",
+          sage: "#3BAA7A",
+          amber: "#F6B94A",
+          ink: "#172033",
+          muted: "#64748B",
+          canvas: "#F8FAFC",
+          line: "#E2E8F0",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
