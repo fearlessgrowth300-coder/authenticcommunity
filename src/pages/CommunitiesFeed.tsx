@@ -41,26 +41,32 @@ const CommunitiesFeed = () => {
   const [creating, setCreating] = useState(false);
 
   const loadData = async () => {
+    setLoading(true);
     let query = supabase.from("communities").select("*").eq("is_active", true).order("member_count", { ascending: false });
     if (selectedCategory) query = query.eq("category", selectedCategory);
 
-    const [communitiesRes, profileRes, interestsRes] = await Promise.all([
-      query,
-      user ? supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null }),
-      user ? supabase.from("user_interests").select("interest_name").eq("user_id", user.id) : Promise.resolve({ data: [] }),
-    ]);
-    const myInterests = (interestsRes.data || []).map((row: { interest_name: string }) => row.interest_name);
-    const ranked = (communitiesRes.data || []).map((community: any) => ({
-      ...community,
-      recommendation: scoreLocalRecommendation({
-        itemCity: community.location_city,
-        itemCategory: community.category,
-        memberCount: community.member_count,
-        myCity: profileRes.data?.location_city,
-        myInterests,
-      }),
-    })).sort((a: any, b: any) => b.recommendation.score - a.recommendation.score);
-    setCommunities(ranked);
+    try {
+      const [communitiesRes, profileRes, interestsRes] = await Promise.all([
+        query,
+        user ? supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null }),
+        user ? supabase.from("user_interests").select("interest_name").eq("user_id", user.id) : Promise.resolve({ data: [] }),
+      ]);
+      const myInterests = (interestsRes.data || []).map((row: { interest_name: string }) => row.interest_name);
+      const ranked = (communitiesRes.data || []).map((community: any) => ({
+        ...community,
+        recommendation: scoreLocalRecommendation({
+          itemCity: community.location_city,
+          itemCategory: community.category,
+          memberCount: community.member_count,
+          myCity: profileRes.data?.location_city,
+          myInterests,
+        }),
+      })).sort((a: any, b: any) => b.recommendation.score - a.recommendation.score);
+      setCommunities(ranked);
+    } finally {
+      // Discovery must remain usable even if a secondary membership request is slow.
+      setLoading(false);
+    }
 
     if (user) {
       const { data: memberships } = await supabase
@@ -69,8 +75,6 @@ const CommunitiesFeed = () => {
         .eq("user_id", user.id);
       setJoinedIds(new Set(memberships?.map((m) => m.community_id) || []));
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
