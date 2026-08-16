@@ -144,10 +144,10 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background safe-bottom">
+    <div className="app-page">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-5 py-3 backdrop-blur-lg">
+        <div className="app-content flex items-center justify-between">
           {showSearch ? (
             <div className="flex items-center gap-2 flex-1">
               <Input
@@ -169,7 +169,8 @@ const Dashboard = () => {
                   <AvatarFallback className="text-xs font-semibold">{initials || "?"}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <h1 className="text-lg font-bold text-foreground">Hey, {firstName}! 👋</h1>
+                  <p className="text-xs font-medium text-muted-foreground">Your community snapshot</p>
+                  <h1 className="text-lg font-bold text-foreground">Good morning, {firstName}! 👋</h1>
                   {profile?.location_city && (
                     <p className="text-xs text-muted-foreground">{profile.location_city}{profile.location_state ? `, ${profile.location_state}` : ""}</p>
                   )}
@@ -195,7 +196,7 @@ const Dashboard = () => {
 
       {/* Search Results */}
       {showSearch && (
-        <div className="px-5 max-w-lg mx-auto">
+        <div className="app-content px-5">
           {searching && <div className="py-4 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></div>}
           {searchResults.map((p) => (
             <button
@@ -225,7 +226,7 @@ const Dashboard = () => {
       )}
 
       {!showSearch && (
-        <main className="px-5 py-5 max-w-lg mx-auto space-y-7">
+        <main className="app-content space-y-7 px-5 py-5">
           {/* Push Notification Banner */}
           {showPushBanner && (
             <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
@@ -316,7 +317,7 @@ const Dashboard = () => {
               { label: "Communities", value: stats.communities.toString(), color: "text-secondary" },
               { label: "Events", value: stats.events.toString(), color: "text-tertiary" },
             ].map((s) => (
-              <div key={s.label} className="bg-card rounded-xl p-3 text-center shadow-card border border-border/50">
+              <div key={s.label} className="rounded-2xl border border-border/90 bg-card p-3 text-center shadow-card">
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
               </div>
@@ -337,7 +338,7 @@ const Dashboard = () => {
                   <div
                     key={event.id}
                     onClick={() => navigate(`/events/${event.id}`)}
-                    className="flex gap-3 bg-card rounded-xl shadow-card border border-border/50 overflow-hidden cursor-pointer hover:shadow-card-hover transition-shadow"
+                    className="flex cursor-pointer gap-3 overflow-hidden rounded-2xl border border-border/90 bg-card shadow-card transition-shadow hover:shadow-card-hover"
                   >
                     <img
                       src={event.event_image_url || "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&h=400&fit=crop"}
@@ -376,7 +377,7 @@ const Dashboard = () => {
                   <div
                     key={c.id}
                     onClick={() => navigate(`/communities/${c.id}`)}
-                    className="flex gap-3 bg-card rounded-xl shadow-card border border-border/50 overflow-hidden cursor-pointer hover:shadow-card-hover transition-shadow"
+                    className="flex cursor-pointer gap-3 overflow-hidden rounded-2xl border border-border/90 bg-card shadow-card transition-shadow hover:shadow-card-hover"
                   >
                     <img
                       src={c.profile_image_url || "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&h=400&fit=crop"}

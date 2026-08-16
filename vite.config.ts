@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
+      // Explicitly retire the legacy worker and its stale application shell.
+      // New product releases are served directly by Vercel.
+      selfDestroying: true,
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "pwa-192x192.png", "pwa-512x512.png"],
       workbox: {
@@ -28,11 +31,11 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
-        name: "Commune — Find Your People",
-        short_name: "Commune",
+        name: "Authentic Community Connection — Find Your People",
+        short_name: "Authentic Community",
         description: "Discover meaningful connections, communities, and events near you.",
-        theme_color: "#6366f1",
-        background_color: "#0f0f23",
+        theme_color: "#4F46E5",
+        background_color: "#F8FAFC",
         display: "standalone",
         orientation: "portrait",
         scope: "/",

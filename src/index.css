@@ -4,8 +4,9 @@
 
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 222 20% 10%;
+    /* Authentic Community Connection — mobile design system */
+    --background: 220 33% 98%;
+    --foreground: 222 35% 15%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 20% 10%;
@@ -13,29 +14,29 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 20% 10%;
 
-    --primary: 217 91% 60%;
+    --primary: 243 75% 59%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 330 81% 60%;
+    --secondary: 7 89% 69%;
     --secondary-foreground: 0 0% 100%;
 
-    --tertiary: 271 81% 56%;
+    --tertiary: 153 49% 44%;
     --tertiary-foreground: 0 0% 100%;
 
-    --muted: 220 16% 93%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 230 43% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 271 81% 95%;
-    --accent-foreground: 271 81% 40%;
+    --accent: 230 100% 97%;
+    --accent-foreground: 243 75% 42%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 16% 90%;
-    --input: 220 16% 90%;
-    --ring: 217 91% 60%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 243 75% 59%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -47,12 +48,12 @@
     --sidebar-ring: 217 91% 60%;
 
     /* Custom tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(330 81% 60%));
-    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60%), hsl(271 81% 56%), hsl(330 81% 60%));
-    --gradient-card-hover: linear-gradient(135deg, hsl(217 91% 97%), hsl(271 81% 97%));
-    --shadow-soft: 0 2px 12px -2px hsl(217 91% 60% / 0.12);
-    --shadow-card: 0 1px 3px 0 hsl(222 20% 10% / 0.06), 0 1px 2px -1px hsl(222 20% 10% / 0.06);
-    --shadow-card-hover: 0 8px 25px -5px hsl(271 81% 56% / 0.18);
+    --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    --gradient-hero: linear-gradient(135deg, #4f46e5 0%, #6366f1 55%, #4338ca 100%);
+    --gradient-card-hover: linear-gradient(135deg, #eef2ff, #ffffff);
+    --shadow-soft: 0 6px 16px -6px rgb(79 70 229 / 0.32);
+    --shadow-card: 0 1px 3px rgb(23 32 51 / 0.06), 0 6px 18px -12px rgb(23 32 51 / 0.16);
+    --shadow-card-hover: 0 12px 26px -14px rgb(79 70 229 / 0.38);
     --nav-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 
@@ -100,6 +101,7 @@
     overscroll-behavior-y: contain;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-width: 320px;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Poppins', 'Inter', system-ui, sans-serif;
@@ -139,6 +141,16 @@
   }
   .safe-bottom {
     padding-bottom: var(--nav-height);
+  }
+  .app-page {
+    min-height: 100vh;
+    background: hsl(var(--background));
+    padding-bottom: var(--nav-height);
+  }
+  .app-content {
+    width: 100%;
+    max-width: 34rem;
+    margin-inline: auto;
   }
   .scrollbar-hide {
     -ms-overflow-style: none;

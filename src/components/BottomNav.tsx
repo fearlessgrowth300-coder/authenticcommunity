@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Compass, CalendarDays, MessageCircle, User, Users } from "lucide-react";
+import { Home, Compass, CalendarDays, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Home", badgeKey: null },
   { to: "/matches", icon: Compass, label: "Discover", badgeKey: null },
-  { to: "/communities", icon: Users, label: "Community", badgeKey: null },
   { to: "/events", icon: CalendarDays, label: "Events", badgeKey: null },
   { to: "/messages", icon: MessageCircle, label: "Messages", badgeKey: "messages" as const },
   { to: "/profile", icon: User, label: "Profile", badgeKey: null },
@@ -78,7 +77,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-lg" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-      <div className="mx-auto flex max-w-lg items-center justify-around py-2">
+      <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-2">
         {navItems.map((item) => {
           const badge = getBadge(item.badgeKey);
           return (
@@ -87,7 +86,7 @@ export function BottomNav() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors duration-200 text-muted-foreground",
+                  "relative flex min-w-[58px] flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-colors duration-200 text-muted-foreground",
                   isActive && "text-primary"
                 )
               }

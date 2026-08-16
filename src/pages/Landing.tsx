@@ -23,18 +23,18 @@ const Landing = () => {
       <main className="flex-1 px-6 -mt-8 relative z-10 max-w-lg mx-auto w-full">
         <div className="animate-fade-in">
           <h1 className="text-3xl font-bold tracking-tight mb-2">
-            <span className="text-gradient">Authentic</span>{" "}
-            <span className="text-foreground">Community</span>
+            <span className="text-gradient">Authentic Community</span>{" "}
+            <span className="text-foreground">Connection</span>
           </h1>
           <p className="text-muted-foreground text-base mb-8">
-            Find genuine connections, meaningful friendships, and communities that feel like home.
+            Find your people. Build genuine friendships and communities that feel like home.
           </p>
         </div>
 
         {/* Features */}
         <div className="grid grid-cols-2 gap-3 mb-8 animate-slide-up">
           {[
-            { icon: Sparkles, label: "AI Matching", desc: "Smart compatibility" },
+            { icon: Sparkles, label: "Connection fit", desc: "Clear reasons, not guesswork" },
             { icon: Users, label: "Communities", desc: "Find your tribe" },
             { icon: MapPin, label: "Local", desc: "Near you" },
             { icon: Heart, label: "Authentic", desc: "Real connections" },
