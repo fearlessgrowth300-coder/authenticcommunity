@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { track } from "@/lib/analytics";
 
 export async function createTextStory(text: string, backgroundColor: string, interestTags: string[] = []) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -10,6 +11,7 @@ export async function createTextStory(text: string, backgroundColor: string, int
     .select()
     .single();
   if (error) throw error;
+  void track("first_story_created", { content_type: "text", tag_count: interestTags.length });
   return data;
 }
 
@@ -29,6 +31,7 @@ export async function createImageStory(imageFile: File, interestTags: string[] =
     .select()
     .single();
   if (error) throw error;
+  void track("first_story_created", { content_type: "image", tag_count: interestTags.length });
   return data;
 }
 
@@ -48,6 +51,7 @@ export async function createVideoStory(videoFile: File, interestTags: string[] =
     .select()
     .single();
   if (error) throw error;
+  void track("first_story_created", { content_type: "video", tag_count: interestTags.length });
   return data;
 }
 

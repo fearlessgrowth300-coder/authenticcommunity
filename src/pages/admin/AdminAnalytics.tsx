@@ -91,6 +91,29 @@ export default function AdminAnalytics() {
     },
   });
 
+  // The launch funnel is event-based, so it measures actual member activation
+  // instead of treating account creation as success.
+  const { data: activation } = useQuery({
+    queryKey: ["admin-activation-funnel"],
+    queryFn: async () => {
+      const events = ["profile_completed", "community_joined", "first_story_created", "event_rsvp_going"];
+      const { data } = await (supabase as any).from("analytics_events").select("event_name, user_id").in("event_name", events);
+      return events.map((event_name) => ({
+        name: event_name.replaceAll("_", " "),
+        value: new Set((data || []).filter((event: any) => event.event_name === event_name).map((event: any) => event.user_id)).size,
+      }));
+    },
+  });
+
+  const { data: reliability } = useQuery({
+    queryKey: ["admin-reliability"],
+    queryFn: async () => {
+      const since = subDays(new Date(), 7).toISOString();
+      const { count } = await (supabase as any).from("client_errors").select("*", { count: "exact", head: true }).gte("created_at", since);
+      return count ?? 0;
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -107,6 +130,17 @@ export default function AdminAnalytics() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Client errors (7 days)</p><p className="text-2xl font-bold text-foreground">{reliability ?? 0}</p><p className="mt-1 text-xs text-muted-foreground">Captured by the production error boundary.</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Activation measurement</p><p className="text-sm font-medium text-foreground mt-1">Profile → community → story/message → RSVP</p><p className="mt-1 text-xs text-muted-foreground">Use the funnel below to find where new members drop off.</p></CardContent></Card>
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Invite Cohort Activation Funnel</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {activation?.map((step) => <div key={step.name} className="rounded-lg bg-muted/50 p-3"><p className="text-xs capitalize text-muted-foreground">{step.name}</p><p className="mt-1 text-2xl font-bold">{step.value}</p></div>)}
+            </CardContent>
+          </Card>
           {/* Engagement Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {engagement?.map((e, i) => (

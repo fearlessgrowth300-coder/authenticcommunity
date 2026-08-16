@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Heart, Users, MapPin, Sparkles } from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
@@ -70,7 +71,7 @@ const Landing = () => {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6 mb-8">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+          By continuing, you agree to our <Link className="underline" to="/community-guidelines">Community Guidelines</Link> and <Link className="underline" to="/privacy-policy">Privacy Policy</Link>.
         </p>
       </main>
     </div>

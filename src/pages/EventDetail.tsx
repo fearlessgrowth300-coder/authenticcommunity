@@ -14,6 +14,7 @@ import EventPhotos from "@/components/event/EventPhotos";
 import EventReviews from "@/components/event/EventReviews";
 import EventAttendees from "@/components/event/EventAttendees";
 import { EventConnectionCheckIn } from "@/components/event/EventConnectionCheckIn";
+import { track } from "@/lib/analytics";
 
 interface EventRow {
   id: string;
@@ -63,6 +64,7 @@ const EventDetail = () => {
         setRsvpStatus(null);
         setAttendeeCount((c) => Math.max(0, c - 1));
         await supabase.from("events").update({ attendee_count: Math.max(0, attendeeCount - 1) }).eq("id", id);
+        void track("event_rsvp_cancelled", { event_id: id });
         toast.success("RSVP cancelled");
       } else {
         await supabase.from("event_attendees").update({ rsvp_status: status }).eq("event_id", id).eq("user_id", user.id);
@@ -75,6 +77,7 @@ const EventDetail = () => {
       if (status === "going") {
         setAttendeeCount((c) => c + 1);
         await supabase.from("events").update({ attendee_count: attendeeCount + 1 }).eq("id", id);
+        void track("event_rsvp_going", { event_id: id });
       }
       toast.success(`RSVP'd as ${status}!`);
     }

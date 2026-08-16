@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Plus, MapPin, Users, Loader2, ArrowLeft, Lock } from "lucide-react";
 import { cn, formatCount } from "@/lib/utils";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
 import { scoreLocalRecommendation } from "@/lib/recommendations";
 
 const categories = ["Outdoors", "Food & Drink", "Arts & Culture", "Wellness", "Tech", "Social", "Sports", "Learning"];
@@ -107,6 +108,7 @@ const CommunitiesFeed = () => {
       }
       await supabase.from("community_members").insert({ community_id: communityId, user_id: user.id });
       setJoinedIds((prev) => new Set(prev).add(communityId));
+      void track("community_joined", { community_id: communityId });
       toast.success("Joined community!");
     }
     setJoining(null);

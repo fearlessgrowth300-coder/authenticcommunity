@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { LocationMap } from "@/components/LocationMap";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/constants";
 import { countries, statesByCountry } from "@/lib/countries";
+import { track } from "@/lib/analytics";
 
 const totalSteps = 6;
 const stepLabels = ["Profile", "Location", "Interests", "Values", "Preferences", "Photos"];
@@ -233,6 +234,7 @@ const Onboarding = () => {
 
       // Refresh onboarding state and navigate
       await refreshOnboarding();
+      void track("profile_completed", { interest_count: selectedInterests.length, value_count: selectedValues.length, has_location: Boolean(city || country) });
       navigate("/onboarding/complete", { replace: true });
     } catch (err: any) {
       console.error("Onboarding save error:", err);

@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Users, Calendar, MessageCircle, Share2, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
 import { formatCount } from "@/lib/utils";
 import CommunityFeed from "@/components/community/CommunityFeed";
 import CommunityMembers from "@/components/community/CommunityMembers";
@@ -119,6 +120,7 @@ const CommunityDetail = () => {
       await supabase.from("community_members").insert({ community_id: id, user_id: user.id });
       setIsMember(true);
       setMemberCount((c) => c + 1);
+      void track("community_joined", { community_id: id });
       toast.success("Joined community!");
     }
     setJoining(false);

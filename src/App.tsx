@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { BottomNav } from "@/components/BottomNav";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -44,6 +45,8 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const LikedUsers = lazy(() => import("./pages/LikedUsers"));
 const ProfileViewers = lazy(() => import("./pages/ProfileViewers"));
 const SuspendedAccount = lazy(() => import("./pages/SuspendedAccount"));
+const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 
 const queryClient = new QueryClient();
 
@@ -54,7 +57,7 @@ const PageLoader = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <ErrorBoundary><QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -69,6 +72,8 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/onboarding/complete" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route path="/onboarding/:step" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -105,7 +110,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
-  </QueryClientProvider>
+  </QueryClientProvider></ErrorBoundary>
 );
 
 export default App;
