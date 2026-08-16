@@ -44,6 +44,7 @@ const StoryViewers = lazy(() => import("./pages/StoryViewers"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const LikedUsers = lazy(() => import("./pages/LikedUsers"));
 const ProfileViewers = lazy(() => import("./pages/ProfileViewers"));
+const Connections = lazy(() => import("./pages/Connections"));
 const SuspendedAccount = lazy(() => import("./pages/SuspendedAccount"));
 const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
@@ -89,6 +90,7 @@ const App = () => (
               <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
               <Route path="/profile/liked" element={<ProtectedRoute><LikedUsers /></ProtectedRoute>} />
               <Route path="/profile/viewers" element={<ProtectedRoute><ProfileViewers /></ProtectedRoute>} />
+              <Route path="/profile/connections" element={<ProtectedRoute><Connections /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               <Route path="/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
               <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />

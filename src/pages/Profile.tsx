@@ -121,14 +121,18 @@ const Profile = () => {
             </div>
           )}
           <div className="flex justify-center gap-6 mt-3 mb-3">
-            <div className="text-center">
-              <p className="text-base font-bold text-foreground">{formatCount(followerCount + 14800)}</p>
+            <button className="text-center" onClick={() => navigate("/profile/connections") }>
+              <p className="text-base font-bold text-foreground">{formatCount(followerCount)}</p>
               <p className="text-xs text-muted-foreground">Followers</p>
-            </div>
-            <div className="text-center">
-              <p className="text-base font-bold text-foreground">{formatCount(followingCount + 7)}</p>
+            </button>
+            <button className="text-center" onClick={() => navigate("/profile/connections") }>
+              <p className="text-base font-bold text-foreground">{formatCount(followingCount)}</p>
               <p className="text-xs text-muted-foreground">Following</p>
-            </div>
+            </button>
+            <button className="text-center" onClick={() => navigate("/profile/connections") }>
+              <p className="text-base font-bold text-foreground">{formatCount(stats.connections)}</p>
+              <p className="text-xs text-muted-foreground">Connections</p>
+            </button>
           </div>
           <Button variant="outline" size="sm" onClick={() => navigate("/profile/edit")}>
             <Edit className="h-3.5 w-3.5 mr-1" /> Edit Profile
