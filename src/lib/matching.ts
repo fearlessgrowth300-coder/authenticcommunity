@@ -54,7 +54,10 @@ export function scoreConnection(input: MatchInput): MatchScore {
   const community = Math.min(10, (input.sharedCommunities || 0) * 5);
   const behavior = Math.min(5, Math.round((input.behavioralAffinity || 0) * 5));
   const trust = Math.min(5, Math.max(0, input.candidateTrust ?? 2));
-  const overall = Math.min(100, values + interests + goals + community + location + behavior + trust);
+  // Until members answer availability questions, use a conservative neutral
+  // baseline rather than guessing how social or available they are.
+  const availability = input.myGoal && input.candidateGoal && input.myGoal === input.candidateGoal ? 5 : 3;
+  const overall = Math.min(100, values + interests + goals + community + location + availability + behavior + trust);
   const reasons: string[] = [];
   if (sharedValues.length) reasons.push(`You both value ${sharedValues.slice(0, 2).join(" and ")}`);
   if (interestSimilarity >= 0.65) reasons.push("Your interests strongly overlap");
@@ -62,7 +65,7 @@ export function scoreConnection(input: MatchInput): MatchScore {
   if (sameCity) reasons.push("You are in the same city");
   if ((input.sharedCommunities || 0) > 0) reasons.push(`You share ${input.sharedCommunities} community${input.sharedCommunities === 1 ? "" : "ies"}`.replace("1 communityies", "1 community"));
   if (!reasons.length) reasons.push("A fresh perspective within your preferences");
-  return { overall, reasons: reasons.slice(0, 3), breakdown: { values, interests, social: goals, community, location, behavior, trust }, discovery: interestSimilarity < 0.25 && sharedValues.length > 0 };
+  return { overall, reasons: reasons.slice(0, 3), breakdown: { values, interests, social: goals, community, location, availability, behavior, trust }, discovery: interestSimilarity < 0.25 && sharedValues.length > 0 };
 }
 
 export function diversifyScores<T extends { score: MatchScore; interests: string[] }>(items: T[]) {
