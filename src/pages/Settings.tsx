@@ -58,7 +58,7 @@ const SettingsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background safe-bottom">
+    <div className="app-page">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="flex items-center gap-3 max-w-lg mx-auto">
           <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">

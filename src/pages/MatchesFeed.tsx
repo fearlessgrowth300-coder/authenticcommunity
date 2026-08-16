@@ -254,10 +254,10 @@ const MatchesFeed = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background safe-bottom">
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
-          <h1 className="text-lg font-bold text-foreground">Discover</h1>
+    <div className="app-page">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-5 py-3 backdrop-blur-lg">
+        <div className="app-content flex items-center justify-between">
+          <div><p className="text-xs font-medium text-muted-foreground">People who align with you</p><h1 className="text-lg font-bold text-foreground">Discover matches</h1></div>
           <div className="flex gap-2">
             <button
               onClick={() => navigate("/profile/liked")}
@@ -287,7 +287,7 @@ const MatchesFeed = () => {
 
       {/* AI Suggestions */}
       {aiSuggestions.length > 0 && (
-        <div className="px-5 pt-4 max-w-lg mx-auto">
+        <div className="app-content px-5 pt-4">
           <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-primary" /> AI-Powered Matches
           </h2>
@@ -340,7 +340,7 @@ const MatchesFeed = () => {
         </div>
       )}
 
-      <main className="px-5 py-5 max-w-lg mx-auto">
+      <main className="app-content px-5 py-5">
         {filteredProfiles.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-muted-foreground text-sm">No profiles to discover yet. Check back soon!</p>
@@ -349,7 +349,7 @@ const MatchesFeed = () => {
           <>
             <div
               className={cn(
-                "relative bg-card rounded-2xl shadow-card border border-border/50 overflow-hidden transition-all duration-300",
+                "relative overflow-hidden rounded-3xl border border-border/90 bg-card shadow-card transition-all duration-300",
                 direction === "left" && "opacity-0 -translate-x-16 rotate-[-8deg]",
                 direction === "right" && "opacity-0 translate-x-16 rotate-[8deg]"
               )}

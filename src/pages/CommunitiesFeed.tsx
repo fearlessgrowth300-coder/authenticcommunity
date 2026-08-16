@@ -155,9 +155,9 @@ const CommunitiesFeed = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
-        <div className="flex items-center justify-between max-w-lg mx-auto mb-3">
+    <div className="app-page">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-5 py-3 backdrop-blur-lg">
+        <div className="app-content mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate("/dashboard")} className="text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-5 w-5" />
@@ -197,13 +197,13 @@ const CommunitiesFeed = () => {
             </DialogContent>
           </Dialog>
         </div>
-        <div className="relative max-w-lg mx-auto">
+        <div className="app-content relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search communities..." className="pl-10 bg-muted border-0" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
       </header>
 
-      <main className="px-5 py-4 max-w-lg mx-auto">
+      <main className="app-content px-5 py-4">
         {/* Category pills */}
         <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 no-scrollbar mb-4">
           <button

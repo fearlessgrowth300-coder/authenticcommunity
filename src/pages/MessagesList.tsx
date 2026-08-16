@@ -115,7 +115,7 @@ const MessagesList = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background safe-bottom">
+    <div className="app-page">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="max-w-lg mx-auto">
           <h1 className="text-lg font-bold text-foreground mb-3">Messages</h1>

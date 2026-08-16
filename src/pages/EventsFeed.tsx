@@ -135,9 +135,9 @@ const EventsFeed = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+    <div className="app-page">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-5 py-3 backdrop-blur-lg">
+        <div className="app-content flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-bold text-foreground">Events</h1>
             <div className="flex bg-muted rounded-lg p-0.5">
@@ -219,7 +219,7 @@ const EventsFeed = () => {
       </header>
 
       {/* Category filter */}
-      <div className="px-5 py-3 max-w-lg mx-auto">
+      <div className="app-content px-5 py-3">
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           <button
             onClick={() => setSelectedCategory(null)}
@@ -246,7 +246,7 @@ const EventsFeed = () => {
       </div>
 
       {/* Events content */}
-      <main className="px-5 max-w-lg mx-auto space-y-4">
+      <main className="app-content space-y-4 px-5">
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

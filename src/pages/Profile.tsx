@@ -74,7 +74,7 @@ const Profile = () => {
   const initials = (profile?.first_name?.[0] || "U").toUpperCase();
 
   return (
-    <div className="min-h-screen bg-background safe-bottom">
+    <div className="app-page">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-lg border-b border-border/50 px-5 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <h1 className="text-lg font-bold text-foreground">Profile</h1>
