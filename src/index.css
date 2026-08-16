@@ -152,6 +152,27 @@
     max-width: 34rem;
     margin-inline: auto;
   }
+
+  /* The member product is intentionally phone-first. On a large screen it is
+     presented as a device canvas rather than stretched into a desktop site. */
+  @media (min-width: 640px) {
+    body {
+      background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 48%, #eef2ff 100%);
+    }
+    #root {
+      width: min(100%, 430px);
+      min-height: 100dvh;
+      margin-inline: auto;
+      background: hsl(var(--background));
+      box-shadow: 0 0 0 1px rgb(226 232 240), 0 20px 60px rgb(23 32 51 / 0.14);
+    }
+    #root > nav {
+      left: 50%;
+      right: auto;
+      width: min(100%, 430px);
+      transform: translateX(-50%);
+    }
+  }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
