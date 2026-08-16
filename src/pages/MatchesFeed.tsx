@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MatchDialog from "@/components/chat/MatchDialog";
+import { diversifyScores, scoreConnection, type MatchScore } from "@/lib/matching";
+import { track } from "@/lib/analytics";
 
 interface ProfileCard {
   user_id: string;
@@ -31,9 +33,10 @@ interface ProfileCard {
   interests: string[];
   values: string[];
   matchReasons: string[];
+  score: MatchScore;
 }
 
-const buildMatchReasons = (profile: Omit<ProfileCard, "matchReasons">, myInterests: Set<string>, myValues: Set<string>, myCity?: string | null) => {
+const buildMatchReasons = (profile: Omit<ProfileCard, "matchReasons" | "score">, myInterests: Set<string>, myValues: Set<string>, myCity?: string | null) => {
   const sharedInterests = profile.interests.filter((interest) => myInterests.has(interest)).slice(0, 2);
   const sharedValues = profile.values.filter((value) => myValues.has(value)).slice(0, 1);
   const reasons: string[] = [];
@@ -77,7 +80,7 @@ const MatchesFeed = () => {
     if (!user) return;
 
     const load = async () => {
-      const [profilesRes, likesRes, myProfileRes, myInterestsRes, myValuesRes] = await Promise.all([
+      const [profilesRes, likesRes, myProfileRes, myInterestsRes, myValuesRes, blocksRes, feedbackRes, connectionsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, first_name, last_name, age, bio, profile_image_url, location_city, location_state, gender, looking_for")
@@ -88,9 +91,12 @@ const MatchesFeed = () => {
           .from("user_likes")
           .select("liked_id")
           .eq("liker_id", user.id),
-        supabase.from("profiles").select("location_city").eq("user_id", user.id).maybeSingle(),
+        supabase.from("profiles").select("location_city, looking_for").eq("user_id", user.id).maybeSingle(),
         supabase.from("user_interests").select("interest_name").eq("user_id", user.id),
         supabase.from("user_values").select("value_name").eq("user_id", user.id),
+        supabase.from("blocked_users").select("blocked_id").eq("blocker_id", user.id),
+        (supabase as any).from("recommendation_feedback").select("candidate_id, signal").eq("user_id", user.id).in("signal", ["passed", "not_interested"]),
+        supabase.from("connections").select("user_id_1, user_id_2").or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
       ]);
 
       const liked = new Set((likesRes.data || []).map((l: any) => l.liked_id));
@@ -102,7 +108,13 @@ const MatchesFeed = () => {
         return;
       }
 
-      const userIds = profilesRes.data.map((p) => p.user_id);
+      const excluded = new Set([
+        ...(blocksRes.data || []).map((row: any) => row.blocked_id),
+        ...(feedbackRes.data || []).map((row: any) => row.candidate_id),
+        ...(connectionsRes.data || []).map((row: any) => row.user_id_1 === user.id ? row.user_id_2 : row.user_id_1),
+      ]);
+      const candidateProfiles = profilesRes.data.filter((profile) => !excluded.has(profile.user_id));
+      const userIds = candidateProfiles.map((p) => p.user_id);
       const [interestsRes, valuesRes] = await Promise.all([
         supabase.from("user_interests").select("user_id, interest_name").in("user_id", userIds),
         supabase.from("user_values").select("user_id, value_name").in("user_id", userIds),
@@ -122,16 +134,20 @@ const MatchesFeed = () => {
 
       const myInterests = new Set((myInterestsRes.data || []).map((row) => row.interest_name));
       const myValues = new Set((myValuesRes.data || []).map((row) => row.value_name));
-      const cards: ProfileCard[] = profilesRes.data.map((p) => {
+      const cards = candidateProfiles.map((p) => {
         const profile = {
           ...p,
           interests: interestsMap.get(p.user_id) || [],
           values: valuesMap.get(p.user_id) || [],
         };
-        return { ...profile, matchReasons: buildMatchReasons(profile, myInterests, myValues, myProfileRes.data?.location_city) };
+        const score = scoreConnection({
+          candidateId: p.user_id, candidateInterests: profile.interests, candidateValues: profile.values,
+          candidateCity: p.location_city, candidateGoal: p.looking_for, myInterests: [...myInterests], myValues: [...myValues],
+          myCity: myProfileRes.data?.location_city, myGoal: (myProfileRes.data as any)?.looking_for,
+        });
+        return { ...profile, score, matchReasons: score.reasons.length ? score.reasons : buildMatchReasons(profile, myInterests, myValues, myProfileRes.data?.location_city) };
       });
-
-      setProfiles(cards);
+      setProfiles(diversifyScores(cards));
       setLoading(false);
     };
 
@@ -195,6 +211,11 @@ const MatchesFeed = () => {
     }
     if (action === "like") {
       await handleLike(currentProfile.user_id);
+      void (supabase as any).from("recommendation_feedback").insert({ user_id: user?.id, candidate_id: currentProfile.user_id, signal: "liked" });
+      void track("recommendation_liked", { candidate_id: currentProfile.user_id, score: currentProfile.score.overall });
+    } else {
+      void (supabase as any).from("recommendation_feedback").insert({ user_id: user?.id, candidate_id: currentProfile.user_id, signal: "passed" });
+      void track("recommendation_passed", { candidate_id: currentProfile.user_id, score: currentProfile.score.overall });
     }
     setDirection(action === "like" ? "right" : "left");
     setTimeout(() => {
@@ -378,6 +399,7 @@ const MatchesFeed = () => {
                     </ul>
                   </div>
                 )}
+                <p className="mt-2 text-[11px] text-muted-foreground">Connection fit is based on values, interests, goals, location, and shared community context—not an AI judgment of who is authentic.</p>
                 <Button
                   variant="outline"
                   size="sm"
