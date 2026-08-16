@@ -4,8 +4,25 @@ import "./index.css";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // registration can fail in preview/dev; production still auto-updates via new worker lifecycle
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!reloadingForUpdate) {
+        reloadingForUpdate = true;
+        window.location.reload();
+      }
+    });
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => {
+      registration.update();
+      const activateWaitingWorker = () => registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+      activateWaitingWorker();
+      registration.addEventListener("updatefound", () => {
+        const installing = registration.installing;
+        installing?.addEventListener("statechange", () => {
+          if (installing.state === "installed" && navigator.serviceWorker.controller) activateWaitingWorker();
+        });
+      });
+    }).catch(() => {
+      // Registration can fail in local preview; the app remains usable without offline caching.
     });
   });
 }
