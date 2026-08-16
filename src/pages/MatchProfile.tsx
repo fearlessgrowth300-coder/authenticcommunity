@@ -240,17 +240,12 @@ const MatchProfile = () => {
             </div>
           )}
 
-          {/* Authenticity */}
+          {/* Trust signals are factual account signals, never an AI judgment. */}
           <div className="mb-5">
-            <h3 className="text-sm font-semibold text-foreground mb-2">Authenticity</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Trust & safety</h3>
             <div className="flex items-center gap-2">
-              <div className="flex gap-0.5">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Star key={s} className="h-4 w-4 text-primary fill-primary" />
-                ))}
-              </div>
               <Shield className="h-4 w-4 text-primary ml-auto" />
-              <span className="text-xs text-primary font-medium">Verified</span>
+              <span className="text-xs text-muted-foreground">Trust signals will show verified account and community participation—not an AI authenticity score.</span>
             </div>
           </div>
 
