@@ -12,8 +12,10 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS suspended_until TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
 
-ALTER TABLE public.stories ADD COLUMN IF NOT EXISTS interest_tags TEXT[] DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE public.community_posts ADD COLUMN IF NOT EXISTS interest_tags TEXT[] DEFAULT ARRAY[]::TEXT[];
+-- Some fresh projects are provisioned before the optional social-content tables.
+-- Keep the core profile and moderation migration runnable in that state.
+ALTER TABLE IF EXISTS public.stories ADD COLUMN IF NOT EXISTS interest_tags TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE IF EXISTS public.community_posts ADD COLUMN IF NOT EXISTS interest_tags TEXT[] DEFAULT ARRAY[]::TEXT[];
 
 CREATE TABLE IF NOT EXISTS public.content_dismissals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
