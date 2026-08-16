@@ -49,6 +49,17 @@ serve(async (req) => {
       });
     }
 
+    const { data: aiSettings } = await supabase
+      .from("admin_settings")
+      .select("setting_value")
+      .eq("setting_key", "ai")
+      .maybeSingle();
+    if (aiSettings?.setting_value?.enabled === false) {
+      return new Response(JSON.stringify({ error: "AI features are currently disabled by an administrator" }), {
+        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Get current user's profile, interests, and values
     const [myInterests, myValues, myProfile] = await Promise.all([
       supabase.from("user_interests").select("interest_name, interest_category").eq("user_id", user.id),
@@ -148,10 +159,13 @@ serve(async (req) => {
       values: valuesMap[p.user_id] || [],
     }));
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("AI is not configured by an administrator");
+    const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
 
-    const prompt = `You are a match-making AI for a community app. Given a user's profile and a list of candidates, rank them by compatibility.
+    const prompt = `You are an assistant inside a community app. The deterministic matching system has already filtered candidates for safety and basic preferences. Do not infer sensitive traits, diagnose people, or judge whether someone is authentic. Use only the supplied information. Return JSON only, with this exact shape: {"matches":[{"user_id":"uuid","reason":"short explanation grounded in shared values, interests, location, or goals","conversation_starter":"optional friendly question"}]}.
+
+Do not assign compatibility scores and do not introduce facts not provided.
 
 Current user:
 - Name: ${me?.first_name || "User"}
@@ -165,51 +179,17 @@ Current user:
 Candidates:
 ${profileSummaries.map((p, i) => `${i + 1}. ${p.name} (ID: ${p.user_id}) - Age: ${p.age}, City: ${p.city}, Country: ${p.country}, Distance: ${p.distance_km !== null ? p.distance_km + "km" : "unknown"}, Looking for: ${p.looking_for}, Interests: [${p.interests.join(", ")}], Values: [${p.values.join(", ")}], Bio: "${p.bio}"`).join("\n")}
 
-Consider shared interests, values, location proximity, age compatibility, and what each person is looking for. Return the top 5 most compatible matches with a conversation starter for each.`;
+Create at most five useful explanations and optional conversation starters.`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: "You are a compatibility matching AI. Always respond with valid JSON." },
-          { role: "user", content: prompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "return_matches",
-              description: "Return ranked match suggestions",
-              parameters: {
-                type: "object",
-                properties: {
-                  matches: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        user_id: { type: "string" },
-                        score: { type: "number", description: "Compatibility score 0-100" },
-                        reason: { type: "string", description: "Brief reason for match, 1-2 sentences" },
-                        conversation_starter: { type: "string", description: "A suggested conversation opener" },
-                      },
-                      required: ["user_id", "score", "reason"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["matches"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "return_matches" } },
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.25, maxOutputTokens: 1400 },
       }),
     });
 
@@ -227,20 +207,19 @@ Consider shared interests, values, location proximity, age compatibility, and wh
         });
       }
       const errText = await aiResponse.text();
-      console.error("AI error:", aiResponse.status, errText);
-      throw new Error("AI gateway error");
+      console.error("Gemini error:", aiResponse.status, errText);
+      throw new Error("Gemini request failed");
     }
 
     const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     let matches = [];
-
-    if (toolCall?.function?.arguments) {
+    const responseText = aiData.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("");
+    if (responseText) {
       try {
-        const parsed = JSON.parse(toolCall.function.arguments);
+        const parsed = JSON.parse(responseText);
         matches = parsed.matches || [];
       } catch {
-        console.error("Failed to parse AI response");
+        console.error("Failed to parse Gemini response");
       }
     }
 
@@ -249,6 +228,7 @@ Consider shared interests, values, location proximity, age compatibility, and wh
       const profile = profileSummaries.find((p) => p.user_id === m.user_id);
       return {
         ...m,
+        score: null,
         name: profile?.name || "User",
         interests: profile?.interests || [],
         city: profile?.city || "",

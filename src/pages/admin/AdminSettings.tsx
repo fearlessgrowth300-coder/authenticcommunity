@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Save, Clock, LockKeyhole } from "lucide-react";
+import { Save, Clock, LockKeyhole, BrainCircuit } from "lucide-react";
 import { format } from "date-fns";
 
 type SettingsMap = Record<string, any>;
@@ -220,6 +220,34 @@ function ModerationSettings() {
   );
 }
 
+function AISettings() {
+  const { data: ai } = useAdminSetting("ai", { enabled: false, model: "gemini-2.5-flash", matchInsights: true, conversationStarters: true, moderationAssist: true });
+  const saveMutation = useSaveSetting();
+  const [state, setState] = useState<Record<string, any> | null>(null);
+  const current = state || ai || {};
+  const toggle = (key: string) => setState({ ...current, [key]: !current[key] });
+
+  return <Card>
+    <CardHeader>
+      <CardTitle className="text-base flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Gemini AI</CardTitle>
+      <CardDescription>AI enriches explanations, conversation starters, and moderation flags. It never decides eligibility, bans, or an authenticity score.</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-5">
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+        The API key is intentionally not entered or stored here. Set <code>GEMINI_API_KEY</code> as a Supabase Edge Function secret, then enable Gemini below. This keeps the key off member devices and out of the database.
+      </div>
+      <div className="space-y-2"><Label>Gemini model</Label><Input value={current.model || "gemini-2.5-flash"} onChange={(e) => setState({ ...current, model: e.target.value })} placeholder="gemini-2.5-flash" /></div>
+      {[
+        { key: "enabled", label: "Enable Gemini backend", desc: "Allow server-side AI requests for all members" },
+        { key: "matchInsights", label: "Match explanations", desc: "Generate grounded explanations for already-ranked suggestions" },
+        { key: "conversationStarters", label: "Conversation starters", desc: "Offer optional prompts; never send messages automatically" },
+        { key: "moderationAssist", label: "Moderation assistance", desc: "Flag content for human review; never auto-ban members" },
+      ].map((item) => <div key={item.key} className="flex items-center justify-between gap-4"><div><Label>{item.label}</Label><p className="text-xs text-muted-foreground">{item.desc}</p></div><Switch checked={Boolean(current[item.key])} onCheckedChange={() => toggle(item.key)} /></div>)}
+      <Button onClick={() => saveMutation.mutate({ key: "ai", value: current })} disabled={saveMutation.isPending}><Save className="h-4 w-4 mr-2" />{saveMutation.isPending ? "Saving..." : "Save AI settings"}</Button>
+    </CardContent>
+  </Card>;
+}
+
 function AdminLogs() {
   const { data: logs, isLoading } = useQuery({
     queryKey: ["admin-logs-recent"],
@@ -366,10 +394,11 @@ export default function AdminSettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+        <TabsList className="grid w-full grid-cols-6 max-w-3xl">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
+          <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="logs">Activity</TabsTrigger>
         </TabsList>
@@ -385,6 +414,7 @@ export default function AdminSettingsPage() {
         <TabsContent value="moderation" className="mt-6">
           <ModerationSettings />
         </TabsContent>
+        <TabsContent value="ai" className="mt-6"><AISettings /></TabsContent>
 
         <TabsContent value="security" className="mt-6">
           <AdminSecuritySettings />
