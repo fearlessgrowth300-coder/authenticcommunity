@@ -233,8 +233,10 @@ function AISettings() {
       <CardDescription>AI enriches explanations, conversation starters, and moderation flags. It never decides eligibility, bans, or an authenticity score.</CardDescription>
     </CardHeader>
     <CardContent className="space-y-5">
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-        The API key is intentionally not entered or stored here. Set <code>GEMINI_API_KEY</code> as a Supabase Edge Function secret, then enable Gemini below. This keeps the key off member devices and out of the database.
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-muted-foreground space-y-3">
+        <p><strong className="text-foreground">Add the key securely:</strong> open Supabase Secrets, create a secret named <code>GEMINI_API_KEY</code>, paste your Gemini key there, and save. The key never passes through this app or the database.</p>
+        <Button asChild size="sm" variant="outline"><a href="https://supabase.com/dashboard/project/sqzeghkabqhhhiuidnvd/settings/functions" target="_blank" rel="noreferrer">Open Supabase Edge Function Secrets</a></Button>
+        <p>After saving the secret, deploy the <code>match-suggestions</code> Edge Function, return here, turn on “Enable Gemini backend,” and save these AI settings.</p>
       </div>
       <div className="space-y-2"><Label>Gemini model</Label><Input value={current.model || "gemini-2.5-flash"} onChange={(e) => setState({ ...current, model: e.target.value })} placeholder="gemini-2.5-flash" /></div>
       {[

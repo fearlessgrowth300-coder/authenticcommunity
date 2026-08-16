@@ -24,7 +24,7 @@ export function BottomNav() {
   const isDMRoute = /^\/messages\/[^/]+$/.test(location.pathname);
   const shouldHide = hideOn.some(
     (path) => location.pathname === path
-  ) || isDMRoute || location.pathname.startsWith("/onboarding") || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
+  ) || isDMRoute || location.pathname.startsWith("/admin") || location.pathname.startsWith("/onboarding") || (location.pathname.startsWith("/stories/") && !location.pathname.includes("/replies") && !location.pathname.includes("/viewers") && !location.pathname.includes("/create"));
 
   useEffect(() => {
     if (!user) return;
