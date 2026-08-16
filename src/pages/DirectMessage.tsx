@@ -6,6 +6,7 @@ import { ArrowLeft, Phone, Video, MoreVertical, Send, Smile, Camera, Mic, Loader
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -316,7 +317,7 @@ const DirectMessage = () => {
     if (error) {
       toast.error("Failed to send message");
       if (type === "text") setMessage(content);
-    }
+    } else void track("first_message_sent", { channel: "direct", message_type: type });
     setSending(false);
   };
 

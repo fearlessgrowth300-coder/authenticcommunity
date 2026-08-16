@@ -96,12 +96,30 @@ export default function AdminAnalytics() {
   const { data: activation } = useQuery({
     queryKey: ["admin-activation-funnel"],
     queryFn: async () => {
-      const events = ["profile_completed", "community_joined", "first_story_created", "event_rsvp_going"];
+      const events = ["profile_completed", "community_joined", "first_message_sent", "first_story_created", "event_rsvp_going"];
       const { data } = await (supabase as any).from("analytics_events").select("event_name, user_id").in("event_name", events);
       return events.map((event_name) => ({
         name: event_name.replaceAll("_", " "),
         value: new Set((data || []).filter((event: any) => event.event_name === event_name).map((event: any) => event.user_id)).size,
       }));
+    },
+  });
+
+  const { data: sevenDayReturn } = useQuery({
+    queryKey: ["admin-seven-day-return"],
+    queryFn: async () => {
+      const cutoff = subDays(new Date(), 8).toISOString();
+      const [profilesResult, eventsResult] = await Promise.all([
+        supabase.from("profiles").select("user_id, created_at").lte("created_at", cutoff),
+        (supabase as any).from("analytics_events").select("user_id, created_at").gte("created_at", subDays(new Date(), 90).toISOString()),
+      ]);
+      const eligible = profilesResult.data || [];
+      const returned = eligible.filter((profile) => (eventsResult.data || []).some((event: any) => {
+        const daySeven = new Date(profile.created_at).getTime() + 7 * 24 * 60 * 60 * 1000;
+        const eventTime = new Date(event.created_at).getTime();
+        return event.user_id === profile.user_id && eventTime >= daySeven && eventTime < daySeven + 24 * 60 * 60 * 1000;
+      })).length;
+      return { eligible: eligible.length, returned, rate: eligible.length ? Math.round((returned / eligible.length) * 100) : 0 };
     },
   });
 
@@ -132,7 +150,7 @@ export default function AdminAnalytics() {
         <TabsContent value="overview" className="space-y-6 mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Client errors (7 days)</p><p className="text-2xl font-bold text-foreground">{reliability ?? 0}</p><p className="mt-1 text-xs text-muted-foreground">Captured by the production error boundary.</p></CardContent></Card>
-            <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Activation measurement</p><p className="text-sm font-medium text-foreground mt-1">Profile → community → story/message → RSVP</p><p className="mt-1 text-xs text-muted-foreground">Use the funnel below to find where new members drop off.</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">7-day return rate</p><p className="text-2xl font-bold text-foreground">{sevenDayReturn?.rate ?? 0}%</p><p className="mt-1 text-xs text-muted-foreground">{sevenDayReturn?.returned ?? 0} of {sevenDayReturn?.eligible ?? 0} eligible members returned on day 7.</p></CardContent></Card>
           </div>
 
           <Card>

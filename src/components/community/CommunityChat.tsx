@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
 
 interface CommunityMessage {
   id: string;
@@ -105,7 +106,7 @@ const CommunityChat = ({ communityId, isMember }: CommunityProps) => {
     if (error) {
       toast.error("Failed to send message");
       setNewMessage(content);
-    }
+    } else void track("first_message_sent", { channel: "community", community_id: communityId });
     setSending(false);
   };
 
