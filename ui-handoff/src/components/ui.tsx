@@ -16,7 +16,7 @@ export function Card({ children, className='' }: { children: ReactNode, classNam
   return <div className={`rounded-2xl border border-brand-line bg-white shadow-sm ${className}`}>{children}</div>
 }
 
-export function Chip({ children, tone='indigo', active=false }: { children: ReactNode, tone?: 'indigo'|'green'|'coral'|'amber'|'gray', active?: boolean }) {
+export function Chip({ children, tone='indigo', active=false, onClick, className='' }: { children: ReactNode, tone?: 'indigo'|'green'|'coral'|'amber'|'gray', active?: boolean, onClick?: () => void, className?: string }) {
   const map = {
     indigo: active ? 'bg-brand-500 text-white border-brand-500' : 'bg-brand-50 text-brand-600 border-indigo-100',
     green: 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -24,7 +24,8 @@ export function Chip({ children, tone='indigo', active=false }: { children: Reac
     amber: 'bg-amber-50 text-amber-700 border-amber-100',
     gray: 'bg-slate-50 text-slate-600 border-slate-200'
   }
-  return <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium ${map[tone]}`}>{children}</span>
+  const style = `inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition ${map[tone]} ${onClick ? 'cursor-pointer hover:brightness-95 active:scale-[.98]' : ''} ${className}`
+  return onClick ? <button type="button" onClick={onClick} className={style}>{children}</button> : <span className={style}>{children}</span>
 }
 
 export function Avatar({ src, name, size='md', online=false }: { src?: string, name: string, size?: 'sm'|'md'|'lg'|'xl', online?: boolean }) {

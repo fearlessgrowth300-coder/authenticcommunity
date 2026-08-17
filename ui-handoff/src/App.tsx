@@ -9,8 +9,9 @@ import { CommunityChat, DirectChat, Messages } from './pages/Messages'
 import { Connections, EditProfile, Followers, MyCommunities, Profile } from './pages/Profile'
 import { AccountSettings, NotificationSettings, PrivacySettings, SettingsHome } from './pages/Settings'
 import { CreateHub, CreatePost, Feed, StoriesViewer, Verification, Videos } from './pages/Social'
+import { MockAppProvider } from './lib/mockApp'
 
-export default function App(){return <Routes>
+export default function App(){return <MockAppProvider><Routes>
   <Route path="/" element={<Splash/>}/>
   <Route path="/login" element={<Login/>}/>
   <Route path="/signup" element={<Signup/>}/>
@@ -62,4 +63,4 @@ export default function App(){return <Routes>
   <Route path="/create/post" element={<CreatePost/>}/>
 
   <Route path="*" element={<Navigate to="/home" replace/>}/>
-</Routes>}
+</Routes></MockAppProvider>}
