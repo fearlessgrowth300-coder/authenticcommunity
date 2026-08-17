@@ -78,3 +78,10 @@ export async function sendCommunityMessage(communityId: string, content: string,
   const { error } = await (supabase as any).from('community_messages').insert({ community_id: communityId, channel_id: channelId ?? null, sender_id: auth.user.id, content, message_type: 'text' })
   if (error) throw error
 }
+
+export function subscribeToCommunityMessages(communityId: string, refresh: () => void) {
+  const channel = supabase.channel(`community-chat-${communityId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'community_messages', filter: `community_id=eq.${communityId}` }, refresh)
+    .subscribe()
+  return () => { supabase.removeChannel(channel) }
+}

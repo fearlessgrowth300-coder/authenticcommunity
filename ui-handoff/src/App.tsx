@@ -43,6 +43,7 @@ export default function App(){return <MockAppProvider><Routes>
   <Route path="/messages" element={<Messages/>}/>
   <Route path="/messages/direct" element={<DirectChat/>}/>
   <Route path="/messages/community" element={<CommunityChat/>}/>
+  <Route path="/communities/:id/chat" element={<CommunityChat/>}/>
 
   <Route path="/profile" element={<Profile/>}/>
   <Route path="/profile/edit" element={<EditProfile/>}/>
