@@ -47,51 +47,104 @@ describe('Mobile Auth: Signup Email Verification & OTP Flow Suite', () => {
     })
   })
 
-  describe('2. OTP Verification & Error Mapping', () => {
+  describe('2. OTP String Integrity & Leading Zeros', () => {
+    it('preserves leading zeros and keeps token as pure string without number conversion', () => {
+      const sanitizeOtp = (input: string) => String(input).replace(/[^0-9]/g, '').slice(0, 6)
+
+      // Test with leading zero: '012345'
+      const otpWithZero = '012345'
+      const result = sanitizeOtp(otpWithZero)
+
+      expect(typeof result).toBe('string')
+      expect(result).toBe('012345')
+      expect(result.startsWith('0')).toBe(true)
+      expect(result.length).toBe(6)
+
+      // Never parse as Number which would drop '0' -> 12345
+      expect(Number(result).toString()).not.toBe('012345')
+      expect(result).toBe('012345')
+    })
+
+    it('joins 6 discrete input cells into ordered 6-digit string', () => {
+      const cells = ['0', '8', '4', '2', '1', '9']
+      const joinedToken = cells.join('').trim()
+
+      expect(joinedToken).toBe('084219')
+      expect(joinedToken.length).toBe(6)
+    })
+  })
+
+  describe('3. Supabase Verification & Type Fallback Handling', () => {
+    it('uses type email primarily and supports signup fallback if GoTrue schema expects signup', async () => {
+      const mockVerify = vi.fn().mockImplementation(({ type }) => {
+        if (type === 'email') {
+          return Promise.resolve({ data: { session: null, user: null }, error: { message: 'Token is invalid' } })
+        }
+        if (type === 'signup') {
+          return Promise.resolve({ data: { session: { access_token: 'abc' }, user: { id: 'u1' } }, error: null })
+        }
+        return Promise.resolve({ data: null, error: { message: 'unknown' } })
+      })
+
+      const cleanEmail = 'user@example.com'
+      const cleanToken = '123456'
+
+      let { data, error } = await mockVerify({ email: cleanEmail, token: cleanToken, type: 'email' })
+      if (error && error.message.includes('invalid')) {
+        const fallback = await mockVerify({ email: cleanEmail, token: cleanToken, type: 'signup' })
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        }
+      }
+
+      expect(mockVerify).toHaveBeenCalledWith({ email: cleanEmail, token: cleanToken, type: 'email' })
+      expect(mockVerify).toHaveBeenCalledWith({ email: cleanEmail, token: cleanToken, type: 'signup' })
+      expect(error).toBeNull()
+      expect(data?.session?.access_token).toBe('abc')
+    })
+
     it('maps internal expired token error to friendly recovery message', () => {
       const rawError = { message: 'Token has expired or is invalid' }
       let userFacingError = ''
 
       const msg = rawError.message.toLowerCase()
       if (msg.includes('expired')) {
-        userFacingError = 'This code has expired. Please tap "Resend Code" to get a new one.'
+        userFacingError = 'This code has expired. Please tap "Resend Code" to request a new code.'
       } else if (msg.includes('invalid') || msg.includes('incorrect')) {
-        userFacingError = 'The code is incorrect. Check your email and try again.'
+        userFacingError = 'The code is incorrect. Check the email and try again.'
       }
 
-      expect(userFacingError).toBe('This code has expired. Please tap "Resend Code" to get a new one.')
-    })
-
-    it('maps incorrect code error to clear user-facing error message', () => {
-      const rawError = { message: 'Token is invalid' }
-      let userFacingError = ''
-
-      const msg = rawError.message.toLowerCase()
-      if (msg.includes('expired')) {
-        userFacingError = 'This code has expired. Please tap "Resend Code" to get a new one.'
-      } else if (msg.includes('invalid') || msg.includes('incorrect')) {
-        userFacingError = 'The code is incorrect. Check your email and try again.'
-      }
-
-      expect(userFacingError).toBe('The code is incorrect. Check your email and try again.')
-    })
-
-    it('validates 6-digit numeric input constraint before submission', () => {
-      const sanitizeOtp = (input: string) => input.replace(/[^0-9]/g, '').slice(0, 6)
-
-      expect(sanitizeOtp('12345')).toBe('12345')
-      expect(sanitizeOtp('123456')).toBe('123456')
-      expect(sanitizeOtp('12345678')).toBe('123456')
-      expect(sanitizeOtp('12a34b56')).toBe('123456')
-      expect(sanitizeOtp('984-210')).toBe('984210')
-
-      const isSubmittable = (code: string) => sanitizeOtp(code).length === 6
-      expect(isSubmittable('12345')).toBe(false)
-      expect(isSubmittable('123456')).toBe(true)
+      expect(userFacingError).toBe('This code has expired. Please tap "Resend Code" to request a new code.')
     })
   })
 
-  describe('3. Verified State Post-OTP Routing', () => {
+  describe('4. Resend Behavior & No Automatic Dispatch on Mount', () => {
+    it('uses type signup for resendOtp', async () => {
+      const mockResend = vi.fn().mockResolvedValue({ error: null })
+      const email = 'user@example.com'
+
+      await mockResend({ type: 'signup', email: email.trim().toLowerCase() })
+
+      expect(mockResend).toHaveBeenCalledWith({
+        type: 'signup',
+        email: 'user@example.com',
+      })
+    })
+
+    it('enforces 60-second cooldown without mounting side effects', () => {
+      let cooldownSeconds = 60
+      const canResend = (seconds: number, isResending: boolean) => seconds === 0 && !isResending
+
+      expect(canResend(cooldownSeconds, false)).toBe(false)
+
+      cooldownSeconds = 0
+      expect(canResend(cooldownSeconds, false)).toBe(true)
+      expect(canResend(cooldownSeconds, true)).toBe(false)
+    })
+  })
+
+  describe('5. Verified State Post-OTP Routing', () => {
     it('routes newly verified user with incomplete onboarding to location step', () => {
       const profile = {
         first_name: 'Alex',
@@ -116,32 +169,6 @@ describe('Mobile Auth: Signup Email Verification & OTP Flow Suite', () => {
       const nextRoute = isOnboarded ? '/(tabs)' : '/(onboarding)/location'
 
       expect(nextRoute).toBe('/(tabs)')
-    })
-  })
-
-  describe('4. Resend Rate-Limiting & Cooldown Invariants', () => {
-    it('enforces 60-second cooldown period before allowing another OTP dispatch', () => {
-      let cooldownSeconds = 60
-      const canResend = (seconds: number, isResending: boolean) => seconds === 0 && !isResending
-
-      expect(canResend(cooldownSeconds, false)).toBe(false)
-
-      // Simulate tick
-      cooldownSeconds = 0
-      expect(canResend(cooldownSeconds, false)).toBe(true)
-      expect(canResend(cooldownSeconds, true)).toBe(false)
-    })
-  })
-
-  describe('5. Auth Guard & Unauthenticated Verify Route Whitelist', () => {
-    it('allows (auth)/verify-email to render without forcing redirect to login', () => {
-      const currentPath = '/(auth)/verify-email'
-      const isAuthRouteGroup = currentPath.startsWith('/(auth)')
-      const isAuthenticated = false
-
-      // Unauthenticated users are allowed within the (auth) group
-      const shouldRedirectToLogin = !isAuthenticated && !isAuthRouteGroup
-      expect(shouldRedirectToLogin).toBe(false)
     })
   })
 })

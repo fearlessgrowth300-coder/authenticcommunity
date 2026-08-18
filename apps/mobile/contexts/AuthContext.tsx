@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useMemo } from '
 import type { Session, User, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/services/supabase'
 
+declare const __DEV__: boolean
+
 export type Profile = {
   id: string
   user_id: string
@@ -33,7 +35,19 @@ interface AuthContextType {
   verifyOtp: (
     email: string,
     token: string
-  ) => Promise<{ error: AuthError | Error | null; user: User | null; session: Session | null }>
+  ) => Promise<{
+    error: (AuthError & { code?: string; status?: number }) | Error | null
+    user: User | null
+    session: Session | null
+    debug?: {
+      projectRef: string
+      email: string
+      tokenLength: number
+      verificationType: string
+      errorCode?: string
+      errorMessage?: string
+    }
+  }>
   resendOtp: (email: string) => Promise<{ error: AuthError | Error | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -103,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, pass: string) => {
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: email.trim().toLowerCase(),
       password: pass,
     })
     return { error }
@@ -114,8 +128,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pass: string,
     data?: { firstName?: string; lastName?: string }
   ) => {
+    const cleanEmail = email.trim().toLowerCase()
     const { data: resData, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: cleanEmail,
       password: pass,
       options: {
         data: {
@@ -132,11 +147,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const verifyOtp = async (email: string, token: string) => {
-    const { data: resData, error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: token.trim(),
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanToken = token.trim()
+    const projectRef = 'sqzegh'
+    const maskedEmail = cleanEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
+
+    let usedType = 'email'
+    let { data: resData, error } = await supabase.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanToken,
       type: 'email',
     })
+
+    // If 'email' type fails and error indicates invalid token/type, also attempt 'signup' type
+    if (error && (error.message?.toLowerCase().includes('invalid') || error.message?.toLowerCase().includes('expired'))) {
+      const fallbackRes = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanToken,
+        type: 'signup',
+      })
+
+      if (!fallbackRes.error) {
+        resData = fallbackRes.data
+        error = null
+        usedType = 'signup'
+      } else {
+        // Keep primary error or fallback info
+        error = fallbackRes.error || error
+      }
+    }
+
+    const debug = {
+      projectRef,
+      email: maskedEmail,
+      tokenLength: cleanToken.length,
+      verificationType: usedType,
+      errorCode: (error as any)?.code || (error as any)?.status?.toString() || (error ? 'unknown_error' : undefined),
+      errorMessage: error?.message,
+    }
+
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('OTP DEBUG:', debug)
+    }
 
     if (!error && resData?.session) {
       setSession(resData.session)
@@ -150,13 +202,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       error,
       user: resData?.user ?? null,
       session: resData?.session ?? null,
+      debug,
     }
   }
 
   const resendOtp = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase()
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email: email.trim(),
+      email: cleanEmail,
     })
     return { error }
   }
