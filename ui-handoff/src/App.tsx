@@ -215,10 +215,26 @@ export default function App() {
           }
         />
         <Route
+          path="/messages/direct/:id"
+          element={
+            <ProtectedRoute>
+              <DirectChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/messages/community"
           element={
             <ProtectedRoute>
               <CommunityChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/messages/:id"
+          element={
+            <ProtectedRoute>
+              <DirectChat />
             </ProtectedRoute>
           }
         />

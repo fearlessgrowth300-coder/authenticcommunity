@@ -68,6 +68,16 @@ export function scoreConnection(input: MatchInput): MatchScore {
   return { overall, reasons: reasons.slice(0, 3), breakdown: { values, interests, social: goals, community, location, availability, behavior, trust }, discovery: interestSimilarity < 0.25 && sharedValues.length > 0 };
 }
 
+export function scoreCandidateMatch(input: MatchInput) {
+  const result = scoreConnection(input);
+  return {
+    score: result.overall,
+    reasons: result.reasons,
+    breakdown: result.breakdown,
+    discovery: result.discovery,
+  };
+}
+
 export function diversifyScores<T extends { score: MatchScore; interests: string[] }>(items: T[]) {
   const output: T[] = []; const categoryCounts = new Map<string, number>();
   for (const item of [...items].sort((a, b) => b.score.overall - a.score.overall)) {
@@ -80,3 +90,4 @@ export function diversifyScores<T extends { score: MatchScore; interests: string
   }
   return output;
 }
+
