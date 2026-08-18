@@ -12,7 +12,32 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, title, body, data } = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Verify caller identity
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { user_id, title } = await req.json().catch(() => ({}));
 
     if (!user_id || !title) {
       return new Response(JSON.stringify({ error: "user_id and title required" }), {
@@ -21,12 +46,10 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Get push subscriptions for this user
-    const { data: subscriptions } = await supabase
+    // Get push subscriptions for target user
+    const { data: subscriptions } = await supabaseAdmin
       .from("push_subscriptions")
       .select("*")
       .eq("user_id", user_id);
@@ -37,15 +60,11 @@ serve(async (req) => {
       });
     }
 
-    // Note: In production, you'd use web-push library with VAPID keys
-    // For now, we store subscriptions and the service worker handles display
-    // when notifications come through Supabase Realtime
-    
     return new Response(JSON.stringify({ sent: subscriptions.length, message: "Notifications queued" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error?.message || "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
