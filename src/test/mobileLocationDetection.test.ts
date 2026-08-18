@@ -108,8 +108,8 @@ describe('Mobile Onboarding: Native Location Detection & Privacy Suite', () => {
     })
   })
 
-  describe('4. Discovery Radius Persistence Invariants', () => {
-    it('persists selected discovery radius and coordinates to profiles payload', () => {
+  describe('4. Location Invariants & Persistence', () => {
+    it('persists clean location and coordinates to profiles table matching schema columns', () => {
       const payload = {
         user_id: 'usr-123',
         location_city: 'Lagos',
@@ -117,14 +117,13 @@ describe('Mobile Onboarding: Native Location Detection & Privacy Suite', () => {
         location_country: 'Nigeria',
         latitude: 6.5244,
         longitude: 3.3792,
-        max_distance_km: 50,
-        show_location: true,
+        is_active: true,
       }
 
-      expect(payload.max_distance_km).toBe(50)
       expect(payload.latitude).toBe(6.5244)
       expect(payload.longitude).toBe(3.3792)
-      expect(payload.show_location).toBe(true)
+      expect(payload.location_city).toBe('Lagos')
+      expect(payload.is_active).toBe(true)
     })
   })
 })

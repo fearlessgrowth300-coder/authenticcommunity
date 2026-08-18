@@ -15,27 +15,32 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { AppInput } from '@/components/primitives/AppInput'
 import { Card } from '@/components/primitives/Card'
-import { Mail, Lock, User } from 'lucide-react-native'
+import { Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native'
 
 export default function SignupScreen() {
   const router = useRouter()
   const { signUp } = useAuth()
 
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Password rules validation
+  const hasMinLength = password.length >= 8
+  const hasNumber = /[0-9]/.test(password)
+  const hasSpecial = /[^A-Za-z0-9]/.test(password)
+
   const handleSignup = async () => {
-    if (!firstName.trim() || !email.trim() || !password) {
-      setError('Please fill in your first name, email, and password.')
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Please fill in your name, email, and password.')
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (!hasMinLength) {
+      setError('Password must be at least 8 characters.')
       return
     }
 
@@ -43,10 +48,18 @@ export default function SignupScreen() {
     setLoading(true)
 
     try {
-      const { error: signUpError, session: newSession, user: newUser } = await signUp(email, password, {
-        firstName: firstName.trim(),
-        lastName: lastName.trim() || undefined,
-      })
+      const nameParts = fullName.trim().split(' ')
+      const firstName = nameParts[0] || fullName.trim()
+      const lastName = nameParts.slice(1).join(' ') || undefined
+
+      const { error: signUpError, session: newSession, user: newUser } = await signUp(
+        email.trim(),
+        password,
+        {
+          firstName,
+          lastName,
+        }
+      )
 
       if (signUpError) {
         setError(signUpError.message)
@@ -79,14 +92,11 @@ export default function SignupScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <AppText variant="h1" weight="bold" color={Colors.primary} align="center">
-              🌟 Authentic
-            </AppText>
-            <AppText variant="h2" weight="bold" align="center" style={styles.title}>
+            <AppText variant="h1" weight="bold" style={styles.title}>
               Create your account
             </AppText>
-            <AppText variant="body" color={Colors.textSecondary} align="center">
-              Join people seeking genuine connection
+            <AppText variant="body" color={Colors.textSecondary}>
+              Let's get you started.
             </AppText>
           </View>
 
@@ -100,25 +110,13 @@ export default function SignupScreen() {
               </View>
             )}
 
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <AppInput
-                  label="First Name"
-                  placeholder="Alex"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  leftIcon={<User color={Colors.textMuted} size={18} />}
-                />
-              </View>
-              <View style={styles.col}>
-                <AppInput
-                  label="Last Name"
-                  placeholder="Taylor"
-                  value={lastName}
-                  onChangeText={setLastName}
-                />
-              </View>
-            </View>
+            <AppInput
+              label="Full name"
+              placeholder="Jane Doe"
+              value={fullName}
+              onChangeText={setFullName}
+              leftIcon={<User color={Colors.textMuted} size={18} />}
+            />
 
             <AppInput
               label="Email"
@@ -130,17 +128,97 @@ export default function SignupScreen() {
               leftIcon={<Mail color={Colors.textMuted} size={18} />}
             />
 
-            <AppInput
-              label="Password"
-              placeholder="At least 6 characters"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              leftIcon={<Lock color={Colors.textMuted} size={18} />}
-            />
+            <View style={styles.passwordContainer}>
+              <AppInput
+                label="Password"
+                placeholder="Create a strong password"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                leftIcon={<Lock color={Colors.textMuted} size={18} />}
+                rightIcon={
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    {showPassword ? (
+                      <EyeOff color={Colors.textMuted} size={18} />
+                    ) : (
+                      <Eye color={Colors.textMuted} size={18} />
+                    )}
+                  </TouchableOpacity>
+                }
+              />
+            </View>
+
+            {/* Password Validation Checklist */}
+            <View style={styles.checklist}>
+              <View style={styles.checkItem}>
+                <View
+                  style={[
+                    styles.checkBadge,
+                    hasMinLength ? styles.checkBadgeActive : null,
+                  ]}
+                >
+                  <Check
+                    color={hasMinLength ? Colors.surface : Colors.textMuted}
+                    size={10}
+                    strokeWidth={3}
+                  />
+                </View>
+                <AppText
+                  variant="caption"
+                  color={hasMinLength ? Colors.text : Colors.textMuted}
+                >
+                  At least 8 characters
+                </AppText>
+              </View>
+
+              <View style={styles.checkItem}>
+                <View
+                  style={[
+                    styles.checkBadge,
+                    hasNumber ? styles.checkBadgeActive : null,
+                  ]}
+                >
+                  <Check
+                    color={hasNumber ? Colors.surface : Colors.textMuted}
+                    size={10}
+                    strokeWidth={3}
+                  />
+                </View>
+                <AppText
+                  variant="caption"
+                  color={hasNumber ? Colors.text : Colors.textMuted}
+                >
+                  One number
+                </AppText>
+              </View>
+
+              <View style={styles.checkItem}>
+                <View
+                  style={[
+                    styles.checkBadge,
+                    hasSpecial ? styles.checkBadgeActive : null,
+                  ]}
+                >
+                  <Check
+                    color={hasSpecial ? Colors.surface : Colors.textMuted}
+                    size={10}
+                    strokeWidth={3}
+                  />
+                </View>
+                <AppText
+                  variant="caption"
+                  color={hasSpecial ? Colors.text : Colors.textMuted}
+                >
+                  One special character
+                </AppText>
+              </View>
+            </View>
 
             <AppButton
-              title="Create Account"
+              title="Create my account"
               onPress={handleSignup}
               loading={loading}
               style={styles.submitButton}
@@ -179,21 +257,13 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.xl,
-    alignItems: 'center',
   },
   title: {
-    marginTop: Spacing.md,
     marginBottom: 4,
   },
   card: {
     marginBottom: Spacing.xl,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  col: {
-    flex: 1,
+    paddingVertical: Spacing.xl,
   },
   errorBanner: {
     backgroundColor: Colors.coralLight,
@@ -201,12 +271,40 @@ const styles = StyleSheet.create({
     borderRadius: Radii.sm,
     marginBottom: Spacing.md,
   },
+  passwordContainer: {
+    position: 'relative',
+  },
+  eyeButton: {
+    padding: 4,
+  },
+  checklist: {
+    marginVertical: Spacing.md,
+    gap: 6,
+  },
+  checkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBadgeActive: {
+    backgroundColor: Colors.sage,
+  },
   submitButton: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: Spacing.md,
   },
 })

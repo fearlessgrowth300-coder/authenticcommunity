@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -16,7 +15,7 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { AppInput } from '@/components/primitives/AppInput'
 import { Card } from '@/components/primitives/Card'
-import { Mail, Lock } from 'lucide-react-native'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native'
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -24,11 +23,12 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setError('Please enter both email and password.')
       return
     }
@@ -37,7 +37,7 @@ export default function LoginScreen() {
     setLoading(true)
 
     try {
-      const { error: signInError } = await signIn(email, password)
+      const { error: signInError } = await signIn(email.trim(), password)
       if (signInError) {
         setError(signInError.message)
       } else {
@@ -62,14 +62,11 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <AppText variant="h1" weight="bold" color={Colors.primary} align="center">
-              🌟 Authentic
-            </AppText>
-            <AppText variant="h2" weight="bold" align="center" style={styles.title}>
+            <AppText variant="h1" weight="bold" style={styles.title}>
               Welcome back
             </AppText>
-            <AppText variant="body" color={Colors.textSecondary} align="center">
-              Sign in to your community
+            <AppText variant="body" color={Colors.textSecondary}>
+              Good to see you again.
             </AppText>
           </View>
 
@@ -93,14 +90,28 @@ export default function LoginScreen() {
               leftIcon={<Mail color={Colors.textMuted} size={18} />}
             />
 
-            <AppInput
-              label="Password"
-              placeholder="••••••••"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              leftIcon={<Lock color={Colors.textMuted} size={18} />}
-            />
+            <View style={styles.passwordContainer}>
+              <AppInput
+                label="Password"
+                placeholder="Enter your password"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                leftIcon={<Lock color={Colors.textMuted} size={18} />}
+                rightIcon={
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    {showPassword ? (
+                      <EyeOff color={Colors.textMuted} size={18} />
+                    ) : (
+                      <Eye color={Colors.textMuted} size={18} />
+                    )}
+                  </TouchableOpacity>
+                }
+              />
+            </View>
 
             <TouchableOpacity
               onPress={() => router.push('/(auth)/forgot-password')}
@@ -117,6 +128,36 @@ export default function LoginScreen() {
               loading={loading}
               style={styles.submitButton}
             />
+
+            {/* Social Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <AppText variant="caption" color={Colors.textMuted} style={styles.dividerText}>
+                or continue with
+              </AppText>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Social Buttons */}
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => setError('Social login will be available soon.')}
+            >
+              <AppText variant="body" style={styles.socialIcon}>G</AppText>
+              <AppText variant="bodySm" weight="medium">
+                Continue with Google
+              </AppText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => setError('Social login will be available soon.')}
+            >
+              <AppText variant="body" style={styles.socialIcon}>🐙</AppText>
+              <AppText variant="bodySm" weight="medium">
+                Continue with GitHub
+              </AppText>
+            </TouchableOpacity>
           </Card>
 
           {/* Footer Navigation */}
@@ -151,14 +192,13 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.xl,
-    alignItems: 'center',
   },
   title: {
-    marginTop: Spacing.md,
     marginBottom: 4,
   },
   card: {
     marginBottom: Spacing.xl,
+    paddingVertical: Spacing.xl,
   },
   errorBanner: {
     backgroundColor: Colors.coralLight,
@@ -166,16 +206,52 @@ const styles = StyleSheet.create({
     borderRadius: Radii.sm,
     marginBottom: Spacing.md,
   },
+  passwordContainer: {
+    position: 'relative',
+  },
+  eyeButton: {
+    padding: 4,
+  },
   forgotPassword: {
     alignSelf: 'flex-end',
     marginBottom: Spacing.lg,
+    marginTop: -4,
   },
   submitButton: {
-    marginTop: 4,
+    marginBottom: Spacing.lg,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    marginHorizontal: Spacing.sm,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.md,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  socialIcon: {
+    fontWeight: 'bold',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: Spacing.md,
   },
 })

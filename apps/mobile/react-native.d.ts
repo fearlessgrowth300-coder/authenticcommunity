@@ -93,6 +93,8 @@ declare module 'react-native' {
     style?: any
     children?: React.ReactNode
     accessibilityLabel?: string
+    accessibilityRole?: string
+    accessibilityState?: any
   }
   export const View: React.FC<ViewProps>
 
@@ -145,6 +147,16 @@ declare module 'react-native' {
     behavior?: 'height' | 'position' | 'padding'
   }
   export const KeyboardAvoidingView: React.FC<KeyboardAvoidingViewProps>
+
+  export interface SwitchProps extends ViewProps {
+    value?: boolean
+    onValueChange?: (value: boolean) => void
+    disabled?: boolean
+    trackColor?: { false?: string; true?: string }
+    thumbColor?: string
+    ios_backgroundColor?: string
+  }
+  export const Switch: React.FC<SwitchProps>
 
   export interface ActivityIndicatorProps extends ViewProps {
     size?: 'small' | 'large' | number
@@ -232,6 +244,7 @@ declare module 'expo-image-picker' {
     canceled: boolean
     assets: ImagePickerAsset[]
   }
+  export function requestMediaLibraryPermissionsAsync(): Promise<{ status: string; granted: boolean }>
   export function launchImageLibraryAsync(options?: any): Promise<ImagePickerResult>
   export function launchCameraAsync(options?: any): Promise<ImagePickerResult>
 }
@@ -318,4 +331,25 @@ declare module 'lucide-react-native' {
   export const Navigation: React.FC<IconProps>
   export const ShieldCheck: React.FC<IconProps>
   export const CheckCircle: React.FC<IconProps>
+  export const CheckCircle2: React.FC<IconProps>
+  export const Search: React.FC<IconProps>
+  export const X: React.FC<IconProps>
+  export const Eye: React.FC<IconProps>
+  export const EyeOff: React.FC<IconProps>
+  export const ChevronRight: React.FC<IconProps>
+  export const Palette: React.FC<IconProps>
+  export const Gamepad2: React.FC<IconProps>
+  export const Dumbbell: React.FC<IconProps>
+  export const BookOpen: React.FC<IconProps>
+  export const Laptop: React.FC<IconProps>
+  export const Music2: React.FC<IconProps>
+  export const Plane: React.FC<IconProps>
+  export const Rocket: React.FC<IconProps>
+  export const Heart: React.FC<IconProps>
+  export const TrendingUp: React.FC<IconProps>
+  export const Handshake: React.FC<IconProps>
+  export const Users2: React.FC<IconProps>
+  export const Cross: React.FC<IconProps>
+  export const Activity: React.FC<IconProps>
+  export const Lightbulb: React.FC<IconProps>
 }

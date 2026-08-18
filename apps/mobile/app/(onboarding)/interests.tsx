@@ -3,56 +3,72 @@ import {
   View,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
-import { Colors, Spacing } from '@/constants/theme'
+import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
-import { InterestChip } from '@/components/primitives/InterestChip'
+import { StepIndicator } from '@/components/onboarding/StepIndicator'
 import { Card } from '@/components/primitives/Card'
+import { Check } from 'lucide-react-native'
 
-const AVAILABLE_INTERESTS = [
-  'Hiking & Outdoors',
-  'Coding & Tech',
-  'Startups & Business',
-  'Yoga & Mindfulness',
-  'Photography & Art',
-  'Books & Reading',
-  'Fitness & Running',
-  'Music & Concerts',
-  'Cooking & Food',
-  'Travel & Exploring',
-  'AI & Innovation',
-  'Philosophy & Discussion',
+interface InterestItem {
+  id: string
+  name: string
+  icon: string
+  color: string
+}
+
+const POPULAR_INTERESTS: InterestItem[] = [
+  { id: 'design', name: 'Design', icon: '🎨', color: Colors.primary },
+  { id: 'gaming', name: 'Gaming', icon: '🎮', color: Colors.primary },
+  { id: 'fitness', name: 'Fitness', icon: '🏃', color: Colors.sage },
+  { id: 'books', name: 'Books', icon: '📖', color: Colors.coral },
+  { id: 'tech', name: 'Technology', icon: '💻', color: Colors.primary },
+  { id: 'music', name: 'Music', icon: '🎵', color: Colors.coral },
+  { id: 'travel', name: 'Travel', icon: '✈️', color: Colors.amber },
+  { id: 'startups', name: 'Entrepreneurship', icon: '🚀', color: Colors.amber },
+  { id: 'cooking', name: 'Cooking & Food', icon: '🍳', color: Colors.coral },
+  { id: 'wellness', name: 'Yoga & Wellness', icon: '🧘', color: Colors.sage },
+  { id: 'photo', name: 'Photography', icon: '📸', color: Colors.primary },
+  { id: 'ai', name: 'AI & Innovation', icon: '🧠', color: Colors.primary },
 ]
+
+const PROFICIENCY_OPTIONS = ['Beginner', 'Intermediate', 'Advanced']
 
 export default function OnboardingInterestsScreen() {
   const router = useRouter()
   const { user } = useAuth()
 
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([
+    'Design',
+    'Gaming',
+    'Technology',
+  ])
+  const [selectedProficiency, setSelectedProficiency] = useState<string>('Intermediate')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const toggleInterest = (interest: string) => {
+  const toggleInterest = (name: string) => {
     setSelectedInterests((prev) =>
-      prev.includes(interest)
-        ? prev.filter((i) => i !== interest)
-        : [...prev, interest]
+      prev.includes(name)
+        ? prev.filter((item) => item !== name)
+        : [...prev, name]
     )
   }
 
-  const handleNext = async () => {
-    if (selectedInterests.length < 3) {
-      setError('Please choose at least 3 interests to help us match you with relevant communities.')
+  const handleSave = async (skip: boolean = false) => {
+    if (!user) {
+      setError('Authentication required.')
       return
     }
 
-    if (!user) {
-      setError('Authentication required.')
+    if (!skip && selectedInterests.length === 0) {
+      setError('Please choose at least 1 interest to continue, or tap "Skip for now".')
       return
     }
 
@@ -60,21 +76,22 @@ export default function OnboardingInterestsScreen() {
     setLoading(true)
 
     try {
-      // 1. Clear existing interests
-      await supabase.from('user_interests').delete().eq('user_id', user.id)
+      if (selectedInterests.length > 0) {
+        // Clear previous interests and insert selected
+        await supabase.from('user_interests').delete().eq('user_id', user.id)
 
-      // 2. Insert selected interests
-      const rows = selectedInterests.map((name) => ({
-        user_id: user.id,
-        interest_name: name,
-        interest_category: 'general',
-      }))
+        const rows = selectedInterests.map((name) => ({
+          user_id: user.id,
+          interest_name: name,
+          interest_category: 'general',
+        }))
 
-      const { error: insertError } = await supabase
-        .from('user_interests')
-        .insert(rows)
+        const { error: insertError } = await supabase
+          .from('user_interests')
+          .insert(rows)
 
-      if (insertError) throw insertError
+        if (insertError) throw insertError
+      }
 
       router.push('/(onboarding)/values')
     } catch (err: any) {
@@ -87,55 +104,114 @@ export default function OnboardingInterestsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Progress Indicator */}
-        <View style={styles.progressContainer}>
-          <AppText variant="caption" color={Colors.primary} weight="semibold">
-            Step 2 of 4: Interests
-          </AppText>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: '50%' }]} />
-          </View>
-        </View>
+        {/* Step Indicator Header (✓ ── 2 ── 3 ── 4) */}
+        <StepIndicator currentStep={2} />
 
+        {/* Title & Subtitle */}
         <View style={styles.header}>
           <AppText variant="h2" weight="bold" style={styles.title}>
-            What are your passions?
+            What are you into?
           </AppText>
           <AppText variant="body" color={Colors.textSecondary}>
-            Pick at least 3 topics you love discussing or doing.
+            Select your interests to find your people.
           </AppText>
         </View>
 
-        <Card style={styles.card}>
-          {error && (
-            <View style={styles.errorBanner}>
-              <AppText variant="caption" color={Colors.danger}>
-                {error}
-              </AppText>
-            </View>
-          )}
+        {error && (
+          <View style={styles.errorBanner}>
+            <AppText variant="caption" color={Colors.danger}>
+              {error}
+            </AppText>
+          </View>
+        )}
 
+        {/* Popular Interests Grid */}
+        <View style={styles.section}>
+          <AppText variant="label" weight="medium" style={styles.sectionLabel}>
+            Popular interests
+          </AppText>
           <View style={styles.chipsContainer}>
-            {AVAILABLE_INTERESTS.map((interest) => {
-              const selected = selectedInterests.includes(interest)
+            {POPULAR_INTERESTS.map((interest) => {
+              const isSelected = selectedInterests.includes(interest.name)
               return (
-                <InterestChip
-                  key={interest}
-                  label={interest}
-                  selected={selected}
-                  onPress={() => toggleInterest(interest)}
-                />
+                <TouchableOpacity
+                  key={interest.id}
+                  onPress={() => toggleInterest(interest.name)}
+                  style={[
+                    styles.chip,
+                    isSelected ? styles.chipSelected : null,
+                  ]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isSelected }}
+                >
+                  <AppText variant="bodySm" style={styles.chipEmoji}>
+                    {interest.icon}
+                  </AppText>
+                  <AppText
+                    variant="bodySm"
+                    weight={isSelected ? 'semibold' : 'normal'}
+                    color={isSelected ? Colors.surface : Colors.text}
+                  >
+                    {interest.name}
+                  </AppText>
+                  {isSelected && (
+                    <View style={styles.checkIcon}>
+                      <Check color={Colors.surface} size={14} strokeWidth={3} />
+                    </View>
+                  )}
+                </TouchableOpacity>
               )
             })}
           </View>
+        </View>
 
-          <AppButton
-            title={`Continue (${selectedInterests.length} selected)`}
-            onPress={handleNext}
-            loading={loading}
-            style={styles.submitButton}
-          />
-        </Card>
+        {/* Proficiency Selector */}
+        <View style={styles.section}>
+          <AppText variant="label" weight="medium" style={styles.sectionLabel}>
+            Your proficiency (optional)
+          </AppText>
+          <View style={styles.segmentedContainer}>
+            {PROFICIENCY_OPTIONS.map((level) => {
+              const isSelected = selectedProficiency === level
+              return (
+                <TouchableOpacity
+                  key={level}
+                  onPress={() => setSelectedProficiency(level)}
+                  style={[
+                    styles.segmentedButton,
+                    isSelected ? styles.segmentedButtonActive : null,
+                  ]}
+                >
+                  <AppText
+                    variant="caption"
+                    weight={isSelected ? 'bold' : 'normal'}
+                    color={isSelected ? Colors.surface : Colors.textSecondary}
+                  >
+                    {level}
+                  </AppText>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+
+        {/* Continue Button */}
+        <AppButton
+          title="Continue"
+          onPress={() => handleSave(false)}
+          loading={loading}
+          style={styles.continueButton}
+        />
+
+        {/* Skip For Now Link */}
+        <TouchableOpacity
+          onPress={() => handleSave(true)}
+          style={styles.skipButton}
+        >
+          <AppText variant="bodySm" color={Colors.textSecondary} weight="medium">
+            Skip for now
+          </AppText>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   )
@@ -150,41 +226,76 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: Spacing.lg,
   },
-  progressContainer: {
-    marginBottom: Spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
-    marginTop: 6,
-  },
-  progressFill: {
-    height: 4,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
   header: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
+    alignItems: 'center',
   },
   title: {
     marginBottom: 4,
   },
-  card: {
-    marginBottom: Spacing.xl,
+  errorBanner: {
+    backgroundColor: Colors.coralLight,
+    padding: Spacing.sm,
+    borderRadius: Radii.sm,
+    marginBottom: Spacing.md,
+  },
+  section: {
+    marginBottom: Spacing.lg,
+  },
+  sectionLabel: {
+    marginBottom: Spacing.sm,
   },
   chipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: Spacing.lg,
+    gap: 8,
   },
-  errorBanner: {
-    backgroundColor: Colors.coralLight,
-    padding: Spacing.sm,
-    borderRadius: 6,
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 2,
+  },
+  chipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipEmoji: {
+    marginRight: 6,
+  },
+  checkIcon: {
+    marginLeft: 6,
+  },
+  segmentedContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.full,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  segmentedButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radii.full,
+  },
+  segmentedButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  continueButton: {
+    marginTop: Spacing.md,
     marginBottom: Spacing.md,
   },
-  submitButton: {
-    marginTop: 8,
+  skipButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
 })

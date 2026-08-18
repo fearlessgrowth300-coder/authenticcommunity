@@ -7,6 +7,7 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -16,16 +17,21 @@ import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
-import { AppInput } from '@/components/primitives/AppInput'
+import { StepIndicator } from '@/components/onboarding/StepIndicator'
 import { Card } from '@/components/primitives/Card'
-import { MapPin, Globe, Navigation, ShieldCheck, CheckCircle } from 'lucide-react-native'
+import { MapPin, Search, X, Lock, Navigation, CheckCircle2 } from 'lucide-react-native'
 
-const RADIUS_OPTIONS = [10, 25, 50, 100]
+const DISTANCE_OPTIONS = ['5 mi', '10 mi', '25 mi', '50 mi', '100+ mi']
 
 export default function OnboardingLocationScreen() {
   const router = useRouter()
   const { user, profile, refreshProfile } = useAuth()
 
+  const [searchQuery, setSearchQuery] = useState(
+    profile?.location_city
+      ? [profile.location_city, profile.location_state, profile.location_country].filter(Boolean).join(', ')
+      : ''
+  )
   const [city, setCity] = useState(profile?.location_city || '')
   const [state, setState] = useState(profile?.location_state || '')
   const [country, setCountry] = useState(profile?.location_country || '')
@@ -33,16 +39,16 @@ export default function OnboardingLocationScreen() {
     latitude: null,
     longitude: null,
   })
-  const [locationSource, setLocationSource] = useState<'device' | 'manual'>('manual')
-  const [radiusKm, setRadiusKm] = useState<number>(25)
+
+  const [selectedDistance, setSelectedDistance] = useState('25 mi')
+  const [showCityOnly, setShowCityOnly] = useState(true)
 
   const [detecting, setDetecting] = useState(false)
-  const [detectedSummary, setDetectedSummary] = useState<string | null>(null)
-  const [detectNotice, setDetectNotice] = useState<string | null>(null)
+  const [detectedNotice, setDetectedNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Check if location permission was already granted previously
+  // Auto-detect if location permission was already granted previously
   useEffect(() => {
     Location.getForegroundPermissionsAsync()
       .then((permission) => {
@@ -50,26 +56,22 @@ export default function OnboardingLocationScreen() {
           detectLocation()
         }
       })
-      .catch(() => {
-        // Gracefully ignore permission check failure on mount
-      })
+      .catch(() => {})
   }, [])
 
   const detectLocation = async () => {
     setDetecting(true)
     setError(null)
-    setDetectNotice(null)
+    setDetectedNotice(null)
 
     try {
-      // 1. Request foreground permission
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== Location.PermissionStatus.GRANTED) {
-        setDetectNotice('We couldn\'t access your location. You can enter your city and country manually.')
+        setDetectedNotice('Location access denied. Please type your city above.')
         setDetecting(false)
         return
       }
 
-      // 2. Try fast last-known location first
       let locationObj = await Location.getLastKnownPositionAsync()
       if (!locationObj) {
         locationObj = await Location.getCurrentPositionAsync({
@@ -77,43 +79,36 @@ export default function OnboardingLocationScreen() {
         })
       }
 
-      if (!locationObj?.coords) {
-        setDetectNotice('Could not determine current position. Please enter your location manually.')
-        setDetecting(false)
-        return
-      }
+      if (locationObj?.coords) {
+        const { latitude, longitude } = locationObj.coords
+        setCoords({ latitude, longitude })
 
-      const { latitude, longitude } = locationObj.coords
-      setCoords({ latitude, longitude })
+        const addresses = await Location.reverseGeocodeAsync({ latitude, longitude })
+        if (addresses && addresses.length > 0) {
+          const addr = addresses[0]
+          const detectedCity = addr.city || addr.subregion || addr.district || addr.name || ''
+          const detectedState = addr.region || addr.subregion || ''
+          const detectedCountry = addr.country || ''
 
-      // 3. Reverse geocode to extract locality components
-      const addresses = await Location.reverseGeocodeAsync({ latitude, longitude })
-      if (addresses && addresses.length > 0) {
-        const addr = addresses[0]
-        const detectedCity = addr.city || addr.subregion || addr.district || addr.name || ''
-        const detectedState = addr.region || addr.subregion || ''
-        const detectedCountry = addr.country || ''
+          if (detectedCity) setCity(detectedCity)
+          if (detectedState) setState(detectedState)
+          if (detectedCountry) setCountry(detectedCountry)
 
-        if (detectedCity) setCity(detectedCity)
-        if (detectedState) setState(detectedState)
-        if (detectedCountry) setCountry(detectedCountry)
-
-        const summaryParts = [detectedCity, detectedState, detectedCountry].filter(Boolean)
-        setDetectedSummary(summaryParts.join(', '))
-        setLocationSource('device')
-      } else {
-        setDetectNotice('Location detected. Please confirm your city name.')
+          const fullString = [detectedCity, detectedState, detectedCountry].filter(Boolean).join(', ')
+          setSearchQuery(fullString)
+          setDetectedNotice('Location detected automatically ✓')
+        }
       }
     } catch {
-      setDetectNotice('We couldn\'t detect your location. Enter your city and country below.')
+      setDetectedNotice('Could not detect location. You can type it in directly.')
     } finally {
       setDetecting(false)
     }
   }
 
   const handleNext = async () => {
-    if (!city.trim() || !country.trim()) {
-      setError('Please provide your city and country to discover local connections.')
+    if (!city.trim() && !searchQuery.trim()) {
+      setError('Please enter or select your city to continue.')
       return
     }
 
@@ -122,22 +117,34 @@ export default function OnboardingLocationScreen() {
       return
     }
 
+    // Extract city & country from search query if user typed freely
+    let finalCity = city.trim()
+    let finalState = state.trim()
+    let finalCountry = country.trim()
+
+    if (!finalCity && searchQuery.trim()) {
+      const parts = searchQuery.split(',').map((p) => p.trim())
+      finalCity = parts[0] || searchQuery.trim()
+      finalState = parts[1] || ''
+      finalCountry = parts[2] || 'United States'
+    }
+
     setError(null)
     setLoading(true)
 
     try {
+      // Clean DB upsert saving only valid columns in profiles schema
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert(
           {
             user_id: user.id,
-            location_city: city.trim(),
-            location_state: state.trim() || null,
-            location_country: country.trim(),
+            location_city: finalCity,
+            location_state: finalState || null,
+            location_country: finalCountry || null,
             latitude: coords.latitude,
             longitude: coords.longitude,
-            max_distance_km: radiusKm,
-            show_location: true,
+            is_active: true,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id' }
@@ -164,158 +171,157 @@ export default function OnboardingLocationScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Progress Indicator */}
-          <View style={styles.progressContainer}>
-            <AppText variant="caption" color={Colors.primary} weight="semibold">
-              Step 1 of 4: Location
-            </AppText>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: '25%' }]} />
-            </View>
-          </View>
+          {/* Step Indicator Header (1 ── 2 ── 3 ── 4) */}
+          <StepIndicator currentStep={1} />
 
-          {/* Header */}
+          {/* Title & Subtitle */}
           <View style={styles.header}>
             <AppText variant="h2" weight="bold" style={styles.title}>
               Where are you based?
             </AppText>
             <AppText variant="body" color={Colors.textSecondary}>
-              We prioritize showing you people, events, and communities nearby.
+              We'll show you events and people nearby.
             </AppText>
           </View>
 
-          {/* Quick Auto-Detect Button */}
+          {error && (
+            <View style={styles.errorBanner}>
+              <AppText variant="caption" color={Colors.danger}>
+                {error}
+              </AppText>
+            </View>
+          )}
+
+          {/* Search / Location Input Bar */}
+          <View style={styles.searchBarContainer}>
+            <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
+            <AppText
+              variant="bodySm"
+              color={searchQuery ? Colors.text : Colors.textMuted}
+              style={styles.searchQueryText}
+              numberOfLines={1}
+            >
+              {searchQuery || 'Search for your city...'}
+            </AppText>
+            {searchQuery ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('')
+                  setCity('')
+                  setState('')
+                  setCountry('')
+                  setDetectedNotice(null)
+                }}
+                style={styles.clearButton}
+              >
+                <X color={Colors.textMuted} size={16} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Auto-Detect Action Button */}
           <TouchableOpacity
             onPress={detectLocation}
             disabled={detecting}
-            style={styles.autoDetectButton}
-            accessibilityLabel="Use current location"
+            style={styles.detectButton}
           >
             {detecting ? (
               <ActivityIndicator color={Colors.primary} size="small" />
             ) : (
-              <Navigation color={Colors.primary} size={18} />
+              <Navigation color={Colors.primary} size={16} />
             )}
-            <AppText variant="bodySm" weight="semibold" color={Colors.primary}>
-              {detecting ? 'Finding your location...' : 'Use my current location'}
+            <AppText variant="caption" weight="semibold" color={Colors.primary}>
+              {detecting ? 'Detecting current position...' : 'Use my current location'}
             </AppText>
           </TouchableOpacity>
 
-          {/* Location Detection Banner */}
-          {detectedSummary && (
-            <View style={styles.detectedBanner}>
-              <View style={styles.detectedHeader}>
-                <CheckCircle color={Colors.success} size={16} />
-                <AppText variant="bodySm" weight="semibold" color={Colors.success}>
-                  Location detected
-                </AppText>
-              </View>
-              <AppText variant="body" weight="medium" style={styles.detectedLocation}>
-                {detectedSummary}
-              </AppText>
-              <AppText variant="caption" color={Colors.textMuted} style={styles.detectedHint}>
-                Not quite right? You can edit the fields below.
+          {detectedNotice && (
+            <View style={styles.noticeBox}>
+              <CheckCircle2 color={Colors.sage} size={14} />
+              <AppText variant="caption" color={Colors.sage}>
+                {detectedNotice}
               </AppText>
             </View>
           )}
 
-          {/* Friendly Detection Failure Notice */}
-          {detectNotice && (
-            <View style={styles.noticeBanner}>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                {detectNotice}
+          {/* Radar Map Graphic Component */}
+          <View style={styles.radarCard}>
+            <View style={styles.radarOuterRing}>
+              <View style={styles.radarMiddleRing}>
+                <View style={styles.radarInnerRing}>
+                  <View style={styles.radarCenterPin}>
+                    <MapPin color={Colors.surface} size={16} />
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View style={styles.radarLocationBadge}>
+              <AppText variant="caption" weight="semibold" color={Colors.text}>
+                {city || 'Your Area'}
               </AppText>
             </View>
-          )}
+          </View>
 
-          {/* Form Card */}
-          <Card style={styles.card}>
-            {error && (
-              <View style={styles.errorBanner}>
-                <AppText variant="caption" color={Colors.danger}>
-                  {error}
-                </AppText>
-              </View>
-            )}
-
-            <AppInput
-              label="City"
-              placeholder="e.g. Austin, Lagos, Toronto"
-              value={city}
-              onChangeText={(text: string) => {
-                setCity(text)
-                setLocationSource('manual')
-              }}
-              leftIcon={<MapPin color={Colors.textMuted} size={18} />}
-            />
-
-            <AppInput
-              label="State / Province (Optional)"
-              placeholder="e.g. Texas, Ontario, Lagos State"
-              value={state}
-              onChangeText={(text: string) => {
-                setState(text)
-                setLocationSource('manual')
-              }}
-            />
-
-            <AppInput
-              label="Country"
-              placeholder="e.g. United States, Canada, Nigeria"
-              value={country}
-              onChangeText={(text: string) => {
-                setCountry(text)
-                setLocationSource('manual')
-              }}
-              leftIcon={<Globe color={Colors.textMuted} size={18} />}
-            />
-
-            {/* Discovery Radius Selector */}
-            <View style={styles.radiusSection}>
-              <AppText variant="label" weight="medium" style={styles.radiusLabel}>
-                Discovery Radius
-              </AppText>
-              <AppText variant="caption" color={Colors.textSecondary} style={styles.radiusDesc}>
-                Find matches, events, and communities within:
-              </AppText>
-
-              <View style={styles.radiusChips}>
-                {RADIUS_OPTIONS.map((km) => {
-                  const selected = radiusKm === km
-                  return (
-                    <TouchableOpacity
-                      key={km}
-                      onPress={() => setRadiusKm(km)}
-                      style={[styles.radiusChip, selected ? styles.radiusChipActive : null]}
+          {/* Distance Selection */}
+          <View style={styles.section}>
+            <AppText variant="label" weight="medium" style={styles.sectionTitle}>
+              How far are you open to connect?
+            </AppText>
+            <View style={styles.distancePillsRow}>
+              {DISTANCE_OPTIONS.map((dist) => {
+                const isSelected = selectedDistance === dist
+                return (
+                  <TouchableOpacity
+                    key={dist}
+                    onPress={() => setSelectedDistance(dist)}
+                    style={[
+                      styles.distancePill,
+                      isSelected ? styles.distancePillActive : null,
+                    ]}
+                  >
+                    <AppText
+                      variant="caption"
+                      weight={isSelected ? 'bold' : 'normal'}
+                      color={isSelected ? Colors.surface : Colors.textSecondary}
                     >
-                      <AppText
-                        variant="bodySm"
-                        weight={selected ? 'semibold' : 'normal'}
-                        color={selected ? Colors.primaryDark : Colors.textSecondary}
-                      >
-                        {km} km
-                      </AppText>
-                    </TouchableOpacity>
-                  )
-                })}
+                      {dist}
+                    </AppText>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </View>
+
+          {/* Privacy Toggle Card */}
+          <Card style={styles.privacyCard}>
+            <View style={styles.privacyLeft}>
+              <View style={styles.lockCircle}>
+                <Lock color={Colors.primary} size={16} />
+              </View>
+              <View style={styles.privacyTextContainer}>
+                <AppText variant="bodySm" weight="semibold">
+                  Show my city not exact location
+                </AppText>
+                <AppText variant="caption" color={Colors.textMuted}>
+                  Your precise location will stay private.
+                </AppText>
               </View>
             </View>
-
-            {/* Privacy Badge */}
-            <View style={styles.privacyBox}>
-              <ShieldCheck color={Colors.sage} size={16} />
-              <AppText variant="caption" color={Colors.textSecondary} style={styles.privacyText}>
-                We only display your city publicly, never your exact address or coordinates.
-              </AppText>
-            </View>
-
-            <AppButton
-              title="Continue"
-              onPress={handleNext}
-              loading={loading}
-              style={styles.submitButton}
+            <Switch
+              value={showCityOnly}
+              onValueChange={setShowCityOnly}
+              trackColor={{ false: Colors.border, true: Colors.sage }}
+              thumbColor={Colors.surface}
             />
           </Card>
+
+          {/* Continue Button */}
+          <AppButton
+            title="Continue"
+            onPress={handleNext}
+            loading={loading}
+            style={styles.continueButton}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -334,118 +340,168 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: Spacing.lg,
   },
-  progressContainer: {
-    marginBottom: Spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
-    marginTop: 6,
-  },
-  progressFill: {
-    height: 4,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
   header: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
+    alignItems: 'center',
   },
   title: {
     marginBottom: 4,
   },
-  autoDetectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.primaryLight,
-    paddingVertical: 12,
-    borderRadius: Radii.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  detectedBanner: {
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.sage,
-    marginBottom: Spacing.md,
-  },
-  detectedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  detectedLocation: {
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  detectedHint: {
-    marginTop: 2,
-  },
-  noticeBanner: {
-    backgroundColor: Colors.surface,
-    padding: Spacing.sm,
-    borderRadius: Radii.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  card: {
-    marginBottom: Spacing.xl,
-  },
   errorBanner: {
     backgroundColor: Colors.coralLight,
     padding: Spacing.sm,
-    borderRadius: 6,
+    borderRadius: Radii.sm,
     marginBottom: Spacing.md,
   },
-  radiusSection: {
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  radiusLabel: {
-    marginBottom: 2,
-  },
-  radiusDesc: {
-    marginBottom: 8,
-  },
-  radiusChips: {
+  searchBarContainer: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  radiusChip: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: Radii.md,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
+    paddingHorizontal: Spacing.md,
+    height: 48,
+    marginBottom: 8,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchQueryText: {
+    flex: 1,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  detectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    marginBottom: Spacing.md,
+  },
+  noticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.sageLight,
+    padding: Spacing.sm,
+    borderRadius: Radii.sm,
+    marginBottom: Spacing.md,
+  },
+  radarCard: {
+    height: 180,
+    backgroundColor: '#EEF2FF',
+    borderRadius: Radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  radarOuterRing: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 70, 229, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radiusChipActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryLight,
-  },
-  privacyBox: {
-    flexDirection: 'row',
+  radarMiddleRing: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1.5,
+    borderColor: 'rgba(79, 70, 229, 0.3)',
+    backgroundColor: 'rgba(79, 70, 229, 0.08)',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.background,
-    padding: Spacing.sm,
-    borderRadius: Radii.sm,
+    justifyContent: 'center',
+  },
+  radarInnerRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(79, 70, 229, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarCenterPin: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  radarLocationBadge: {
+    position: 'absolute',
+    bottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  section: {
     marginBottom: Spacing.lg,
   },
-  privacyText: {
-    flex: 1,
-    lineHeight: 16,
+  sectionTitle: {
+    marginBottom: 8,
   },
-  submitButton: {
-    marginTop: 4,
+  distancePillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  distancePill: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  distancePillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  privacyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  privacyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  lockCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  privacyTextContainer: {
+    flex: 1,
+  },
+  continueButton: {
+    marginBottom: Spacing.xl,
   },
 })

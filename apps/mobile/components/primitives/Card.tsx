@@ -3,7 +3,7 @@ import { View, StyleSheet, ViewProps, ViewStyle } from 'react-native'
 import { Colors, Radii, Spacing } from '@/constants/theme'
 
 export interface CardProps extends ViewProps {
-  style?: ViewStyle
+  style?: any
   children: React.ReactNode
   variant?: 'elevated' | 'outlined' | 'flat'
 }
