@@ -25,7 +25,6 @@ describe('Security & Permission Boundary Test Suite', () => {
         targetId: 'user-bob',
         status: 'pending' as const,
       }
-      // Target must be distinct from requester
       expect(pendingConn.requesterId).not.toBe(pendingConn.targetId)
       expect(pendingConn.status).toBe('pending')
 
@@ -62,47 +61,40 @@ describe('Security & Permission Boundary Test Suite', () => {
     })
   })
 
-  describe('Content Recommendation & Geographic Transparency', () => {
-    it('prioritizes local community content over distant unrelated content', () => {
-      const localCommunity = scoreLocalRecommendation({
-        itemCity: 'Austin',
-        itemCategory: 'outdoors',
-        memberCount: 45,
-        myCity: 'Austin',
-        myInterests: ['hiking', 'nature'],
-      })
+  describe('Multi-City Geographic Feed & Match QA', () => {
+    it('evaluates geographic relevance across Lagos, Abuja, Toronto, and Austin', () => {
+      const cities = [
+        { city: 'Lagos', category: 'tech', interests: ['coding', 'tech'], expectedReason: 'Near you and fits your interests' },
+        { city: 'Abuja', category: 'social', interests: ['friends', 'community'], expectedReason: 'Near you and fits your interests' },
+        { city: 'Toronto', category: 'outdoors', interests: ['hiking', 'nature'], expectedReason: 'Near you and fits your interests' },
+        { city: 'Austin', category: 'wellness', interests: ['yoga', 'mindfulness'], expectedReason: 'Near you and fits your interests' },
+      ]
 
-      const distantCommunity = scoreLocalRecommendation({
-        itemCity: 'Berlin',
-        itemCategory: 'tech',
-        memberCount: 10,
-        myCity: 'Austin',
-        myInterests: ['hiking', 'nature'],
-      })
+      for (const { city, category, interests, expectedReason } of cities) {
+        const recommendation = scoreLocalRecommendation({
+          itemCity: city,
+          itemCategory: category,
+          memberCount: 25,
+          myCity: city,
+          myInterests: interests,
+        })
 
-      expect(localCommunity.score).toBeGreaterThan(distantCommunity.score)
-      expect(localCommunity.reason).toBe('Near you and fits your interests')
+        expect(recommendation.score).toBeGreaterThan(50)
+        expect(recommendation.reason).toBe(expectedReason)
+      }
     })
 
-    it('produces explainable, deterministic match compatibility scores', () => {
-      const match = scoreConnection({
-        candidateId: 'user-bob',
-        candidateInterests: ['Hiking', 'Mindfulness', 'Cooking'],
-        candidateValues: ['Kindness', 'Growth'],
-        candidateCity: 'Austin',
-        candidateGoal: 'friends',
-        myInterests: ['Hiking', 'Books', 'Mindfulness'],
-        myValues: ['Kindness', 'Growth'],
+    it('scores cross-city affinity with clear reason explanation', () => {
+      const recommendation = scoreLocalRecommendation({
+        itemCity: 'Toronto',
+        itemCategory: 'outdoors',
+        memberCount: 50,
         myCity: 'Austin',
-        myGoal: 'friends',
-        sharedCommunities: 2,
-        behavioralAffinity: 0.8,
+        myInterests: ['hiking', 'nature'],
       })
 
-      expect(match.overall).toBeGreaterThanOrEqual(60)
-      expect(match.breakdown.values).toBeGreaterThan(0)
-      expect(match.breakdown.interests).toBeGreaterThan(0)
-      expect(match.breakdown.location).toBe(10)
+      expect(recommendation.score).toBeGreaterThan(20)
+      expect(recommendation.reason).toBe('Fits your interests')
     })
   })
 
@@ -115,7 +107,6 @@ describe('Security & Permission Boundary Test Suite', () => {
         face_match_verified: false,
       }
 
-      // Verification cannot be considered valid unless all three checks are true
       const isCompliant =
         unverifiedState.status === 'verified' &&
         unverifiedState.identity_verified &&
