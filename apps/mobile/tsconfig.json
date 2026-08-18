@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
     "allowJs": true,
     "jsx": "react-native",
     "noEmit": true,
@@ -16,12 +20,19 @@
     "types": [],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@authentic/core": ["../../packages/core/src/index.ts"]
+      "@/*": [
+        "./*"
+      ],
+      "@authentic/core": [
+        "../../packages/core/src/index.ts"
+      ]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
-  ]
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "extends": "expo/tsconfig.base"
 }

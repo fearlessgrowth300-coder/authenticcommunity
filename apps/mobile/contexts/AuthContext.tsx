@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
+import type { Session, User, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/services/supabase'
 
 export type Profile = {
@@ -24,8 +24,17 @@ interface AuthContextType {
   loading: boolean
   isOnboarded: boolean
   isSuspended: boolean
-  signIn: (email: string, pass: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, pass: string, data?: { firstName?: string; lastName?: string }) => Promise<{ error: Error | null; user: User | null }>
+  signIn: (email: string, pass: string) => Promise<{ error: AuthError | Error | null }>
+  signUp: (
+    email: string,
+    pass: string,
+    data?: { firstName?: string; lastName?: string }
+  ) => Promise<{ error: AuthError | Error | null; user: User | null; session: Session | null }>
+  verifyOtp: (
+    email: string,
+    token: string
+  ) => Promise<{ error: AuthError | Error | null; user: User | null; session: Session | null }>
+  resendOtp: (email: string) => Promise<{ error: AuthError | Error | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -115,7 +124,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       },
     })
-    return { error, user: resData.user }
+    return {
+      error,
+      user: resData?.user ?? null,
+      session: resData?.session ?? null,
+    }
+  }
+
+  const verifyOtp = async (email: string, token: string) => {
+    const { data: resData, error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: 'email',
+    })
+
+    if (!error && resData?.session) {
+      setSession(resData.session)
+      setUser(resData.user)
+      if (resData.user) {
+        await fetchProfile(resData.user.id)
+      }
+    }
+
+    return {
+      error,
+      user: resData?.user ?? null,
+      session: resData?.session ?? null,
+    }
+  }
+
+  const resendOtp = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+    })
+    return { error }
   }
 
   const signOut = async () => {
@@ -145,6 +188,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSuspended,
         signIn,
         signUp,
+        verifyOtp,
+        resendOtp,
         signOut,
         refreshProfile,
       }}

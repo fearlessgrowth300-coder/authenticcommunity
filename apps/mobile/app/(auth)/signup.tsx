@@ -43,13 +43,20 @@ export default function SignupScreen() {
     setLoading(true)
 
     try {
-      const { error: signUpError } = await signUp(email, password, {
+      const { error: signUpError, session: newSession, user: newUser } = await signUp(email, password, {
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
       })
 
       if (signUpError) {
         setError(signUpError.message)
+      } else if (newSession) {
+        router.replace('/')
+      } else if (newUser) {
+        router.push({
+          pathname: '/(auth)/verify-email',
+          params: { email: email.trim() },
+        })
       } else {
         router.replace('/')
       }

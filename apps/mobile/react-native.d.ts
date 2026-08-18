@@ -113,6 +113,8 @@ declare module 'react-native' {
     keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad' | 'number-pad'
     multiline?: boolean
     numberOfLines?: number
+    maxLength?: number
+    autoFocus?: boolean
     onChangeText?: (text: string) => void
     onFocus?: (e?: any) => void
     onBlur?: (e?: any) => void
@@ -178,12 +180,13 @@ declare module 'expo-router' {
   import * as React from 'react'
 
   export interface Router {
-    push: (href: string) => void
-    replace: (href: string) => void
+    push: (href: string | { pathname: string; params?: Record<string, any> }) => void
+    replace: (href: string | { pathname: string; params?: Record<string, any> }) => void
     back: () => void
   }
 
   export function useRouter(): Router
+  export function useLocalSearchParams<T extends Record<string, any> = Record<string, any>>(): T
 
   export const Stack: React.FC<{
     screenOptions?: any
@@ -258,4 +261,5 @@ declare module 'lucide-react-native' {
   export const Users: React.FC<IconProps>
   export const Calendar: React.FC<IconProps>
   export const LogOut: React.FC<IconProps>
+  export const RefreshCw: React.FC<IconProps>
 }
