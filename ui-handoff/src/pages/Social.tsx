@@ -45,6 +45,7 @@ import {
   submitVerificationCheck,
   type VerificationRecord,
 } from '../lib/verificationApi'
+import { loadActiveStories, loadVideoPosts } from '../lib/communityApi'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/integrations/supabase/client'
 import {
@@ -756,8 +757,17 @@ function Action({
 export function Videos() {
   const navigate = useNavigate()
   const { toast } = useMockApp()
+  const [remoteVideos, setRemoteVideos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const videoItems = [
+  useEffect(() => {
+    loadVideoPosts()
+      .then(res => setRemoteVideos(res))
+      .catch(() => undefined)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const defaultVideoItems = [
     {
       id: 'v1',
       author: 'Maya Patel',
@@ -767,6 +777,7 @@ export function Videos() {
       image: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1000&q=90',
       likes: 142,
       comments: 28,
+      verified: true,
     },
     {
       id: 'v2',
@@ -777,8 +788,11 @@ export function Videos() {
       image: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=1000&q=90',
       likes: 96,
       comments: 14,
+      verified: true,
     },
   ]
+
+  const videoItems = remoteVideos.length > 0 ? remoteVideos : defaultVideoItems
 
   return (
     <AppShell title="Videos" subtitle="Short-form discovery with a path to real connections">
@@ -801,11 +815,11 @@ export function Videos() {
                 <div>
                   <div className="flex items-center gap-1 font-bold">
                     {p.author}
-                    <Verified />
+                    {p.verified && <Verified />}
                   </div>
                   <div className="text-xs text-white/70">{p.community}</div>
                 </div>
-                <Button className="ml-auto py-2">Connect</Button>
+                <Button className="ml-auto py-2" onClick={() => navigate('/matches')}>Connect</Button>
               </div>
               <p className="mt-4 text-sm">{p.text}</p>
               <div className="mt-4 flex items-center gap-4 text-sm text-white/90">
@@ -827,6 +841,7 @@ export function Videos() {
     </AppShell>
   )
 }
+
 
 export function CreateHub() {
   const navigate = useNavigate()
@@ -1629,49 +1644,107 @@ export function Verification() {
 
 export function StoriesViewer() {
   const navigate = useNavigate()
+  const { toast } = useMockApp()
+  const [stories, setStories] = useState<any[]>([])
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [replyText, setReplyText] = useState('')
+
+  useEffect(() => {
+    loadActiveStories()
+      .then(res => setStories(res))
+      .catch(() => undefined)
+  }, [])
+
+  const defaultStories = [
+    {
+      id: 'demo-s1',
+      authorName: 'Maya Patel',
+      authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85',
+      authorVerified: true,
+      imageUrl: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1000&q=90',
+      caption: 'Weekend trail crew 🌿 Anyone joining next Saturday?',
+      timeAgo: '12m · Austin Hikers',
+    },
+    {
+      id: 'demo-s2',
+      authorName: 'Alex Johnson',
+      authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85',
+      authorVerified: true,
+      imageUrl: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=1000&q=90',
+      caption: 'Coffee and founder chats before the weekly meetup ☕️',
+      timeAgo: '1h · Startup Circle',
+    },
+  ]
+
+  const activeStories = stories.length > 0 ? stories : defaultStories
+  const current = activeStories[currentIndex] || activeStories[0]
+
+  const handleReply = () => {
+    if (!replyText.trim()) return
+    toast('Story reply sent!')
+    setReplyText('')
+  }
+
+  const handleNext = () => {
+    if (currentIndex < activeStories.length - 1) {
+      setCurrentIndex(c => c + 1)
+    } else {
+      navigate(-1)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0B1020] text-white">
       <div className="mx-auto flex min-h-screen max-w-lg flex-col">
         <div className="flex gap-1 p-3">
-          {[1, 2, 3, 4].map((n, i) => (
-            <div key={n} className="h-1 flex-1 overflow-hidden rounded-full bg-white/25">
-              <div className={`h-full rounded-full bg-white ${i === 0 ? 'w-2/3' : 'w-0'}`} />
+          {activeStories.map((s, i) => (
+            <div key={s.id || i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/25">
+              <div
+                className={`h-full rounded-full bg-white transition-all duration-300 ${
+                  i < currentIndex ? 'w-full' : i === currentIndex ? 'w-2/3' : 'w-0'
+                }`}
+              />
             </div>
           ))}
         </div>
 
         <div className="flex items-center gap-3 px-4 py-2">
           <Avatar
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85"
-            name="Maya Patel"
+            src={current.authorAvatar || undefined}
+            name={current.authorName}
           />
           <div className="flex-1">
             <div className="flex items-center gap-1 font-bold">
-              Maya Patel
-              <Verified />
+              {current.authorName}
+              {current.authorVerified && <Verified />}
             </div>
-            <div className="text-xs text-white/60">12m · Austin Hikers</div>
+            <div className="text-xs text-white/60">{current.timeAgo || 'Active story'}</div>
           </div>
-          <button onClick={() => navigate(-1)}>
+          <button onClick={() => navigate(-1)} aria-label="Close stories">
             <X className="h-6 w-6 text-white/80" />
           </button>
         </div>
 
-        <div className="relative flex-1 overflow-hidden">
+        <div className="relative flex-1 overflow-hidden cursor-pointer" onClick={handleNext}>
           <img
-            src="https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1000&q=90"
-            className="h-full w-full object-cover"
+            src={current.imageUrl}
+            className="h-full w-full object-cover select-none"
             alt="Story content"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-          <div className="absolute bottom-6 left-5 right-5">
-            <div className="text-2xl font-extrabold">Weekend trail crew 🌿</div>
-            <div className="mt-2 text-sm text-white/80">Anyone joining next Saturday?</div>
+          <div className="absolute bottom-6 left-5 right-5" onClick={e => e.stopPropagation()}>
+            <div className="text-xl font-extrabold text-white drop-shadow-md">{current.caption}</div>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button className="rounded-xl bg-white/20 px-4 py-3 text-sm font-bold backdrop-blur hover:bg-white/30">
+              <button
+                onClick={() => toast("You voted: I'm in!")}
+                className="rounded-xl bg-white/20 px-4 py-3 text-sm font-bold backdrop-blur hover:bg-white/30 transition"
+              >
                 I'm in
               </button>
-              <button className="rounded-xl bg-white/20 px-4 py-3 text-sm font-bold backdrop-blur hover:bg-white/30">
+              <button
+                onClick={() => toast("You voted: Maybe")}
+                className="rounded-xl bg-white/20 px-4 py-3 text-sm font-bold backdrop-blur hover:bg-white/30 transition"
+              >
                 Maybe
               </button>
             </div>
@@ -1680,10 +1753,17 @@ export function StoriesViewer() {
 
         <div className="safe-bottom flex items-center gap-2 p-4">
           <input
+            value={replyText}
+            onChange={e => setReplyText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleReply()}
             className="min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-4 py-3 text-sm outline-none placeholder:text-white/50 text-white"
             placeholder="Reply to story..."
           />
-          <button className="grid h-11 w-11 place-items-center rounded-full bg-white text-brand-600">
+          <button
+            onClick={handleReply}
+            className="grid h-11 w-11 place-items-center rounded-full bg-white text-brand-600 hover:scale-105 transition"
+            aria-label="Send reply"
+          >
             <Send className="h-5 w-5" />
           </button>
         </div>
@@ -1691,3 +1771,4 @@ export function StoriesViewer() {
     </div>
   )
 }
+
