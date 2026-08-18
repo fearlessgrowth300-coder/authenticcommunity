@@ -2,7 +2,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, useLocation } from "react-router-dom";
 
 // Routes that suspended users can still browse (view-only)
-const BROWSE_ONLY_ROUTES = ["/dashboard", "/events", "/communities", "/matches", "/profile", "/settings", "/notifications", "/stories"];
+const BROWSE_ONLY_ROUTES = [
+  "/dashboard",
+  "/home",
+  "/discover",
+  "/events",
+  "/communities",
+  "/matches",
+  "/profile",
+  "/settings",
+  "/notifications",
+  "/stories",
+  "/feed",
+  "/videos",
+  "/quick-start",
+];
 
 function isAllowedForSuspended(pathname: string): boolean {
   return BROWSE_ONLY_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
@@ -14,8 +28,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading || onboardingCompleted === null || accountStatusLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-brand-canvas flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -47,7 +61,46 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // Allow admin routes even if onboarding not completed
   if (!onboardingCompleted && !isOnboarding && !isAdmin) {
-    return <Navigate to="/onboarding/1" replace />;
+    return <Navigate to="/onboarding/location" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, onboardingCompleted, accountStatusLoading } = useAuth();
+
+  if (loading || accountStatusLoading) {
+    return (
+      <div className="min-h-screen bg-brand-canvas flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (user) {
+    if (onboardingCompleted === false) {
+      return <Navigate to="/onboarding/location" replace />;
+    }
+    return <Navigate to="/home" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+export function OnboardingRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, accountStatusLoading } = useAuth();
+
+  if (loading || accountStatusLoading) {
+    return (
+      <div className="min-h-screen bg-brand-canvas flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

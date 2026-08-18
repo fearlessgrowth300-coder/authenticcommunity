@@ -12,6 +12,9 @@ interface AuthContextType {
   refreshOnboarding: () => Promise<boolean>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithOAuth: (provider: "google" | "github") => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -157,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -168,10 +171,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
+    if (data?.user) {
+      await supabase.from("profiles").upsert(
+        {
+          user_id: data.user.id,
+          first_name: firstName,
+          last_name: lastName,
+        },
+        { onConflict: "user_id" }
+      );
+    }
   };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  };
+
+  const signInWithOAuth = async (provider: "google" | "github") => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) throw error;
+  };
+
+  const resetPasswordForEmail = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
   };
 
@@ -181,7 +216,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, onboardingCompleted, accountStatus, accountStatusLoading, refreshOnboarding, signUp, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        loading,
+        onboardingCompleted,
+        accountStatus,
+        accountStatusLoading,
+        refreshOnboarding,
+        signUp,
+        signIn,
+        signInWithOAuth,
+        resetPasswordForEmail,
+        updatePassword,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
