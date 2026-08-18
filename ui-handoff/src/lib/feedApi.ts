@@ -721,3 +721,166 @@ export async function addPostComment(postId: string, content: string): Promise<C
     timeAgo: 'Just now',
   }
 }
+
+export type CreatePostInput = {
+  content?: string
+  mediaFiles?: File[]
+  visibility?: 'public' | 'followers' | 'connections' | 'community' | 'private'
+  communityId?: string | null
+  locationLabel?: string | null
+  interestTags?: string[]
+  onProgress?: (status: string) => void
+}
+
+/**
+ * Validate media, upload to Supabase Storage under {user_id}/{post_id}/,
+ * create post and post_media records, and rollback on failure.
+ */
+export async function createPostWithMedia(input: CreatePostInput): Promise<string> {
+  const { data: auth, error: authError } = await supabase.auth.getUser()
+  if (authError || !auth?.user) {
+    throw new Error('You must be signed in to create a post.')
+  }
+  const userId = auth.user.id
+
+  // 1. Validation
+  const text = (input.content || '').trim()
+  const files = input.mediaFiles || []
+
+  if (!text && files.length === 0) {
+    throw new Error('Please enter text or attach media to post.')
+  }
+
+  // Validate files
+  const allowedImageMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/jpg']
+  const allowedVideoMime = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/ogg']
+  const MAX_IMAGE_SIZE = 15 * 1024 * 1024 // 15MB
+  const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB
+
+  let hasVideo = false
+  let hasImage = false
+
+  for (const file of files) {
+    const isImg = allowedImageMime.includes(file.type.toLowerCase()) || file.type.startsWith('image/')
+    const isVid = allowedVideoMime.includes(file.type.toLowerCase()) || file.type.startsWith('video/')
+
+    if (!isImg && !isVid) {
+      throw new Error(`Unsupported file type: ${file.name}. Please upload JPEG, PNG, WEBP, GIF, or MP4/WebM.`)
+    }
+
+    if (isImg) {
+      hasImage = true
+      if (file.size > MAX_IMAGE_SIZE) {
+        throw new Error(`Image ${file.name} exceeds the 15MB size limit.`)
+      }
+    }
+    if (isVid) {
+      hasVideo = true
+      if (file.size > MAX_VIDEO_SIZE) {
+        throw new Error(`Video ${file.name} exceeds the 100MB size limit.`)
+      }
+    }
+  }
+
+  if (hasVideo && files.length > 1) {
+    throw new Error('Videos must be uploaded individually.')
+  }
+  if (files.length > 8) {
+    throw new Error('You can upload at most 8 images per carousel post.')
+  }
+
+  let contentType: 'text' | 'image' | 'video' | 'carousel' | 'community_share' = 'text'
+  if (hasVideo) contentType = 'video'
+  else if (files.length > 1) contentType = 'carousel'
+  else if (files.length === 1) contentType = 'image'
+
+  input.onProgress?.('Creating post record...')
+
+  // 2. Insert post record with status 'active'
+  const { data: postRecord, error: postError } = await (supabase as any)
+    .from('posts')
+    .insert({
+      user_id: userId,
+      community_id: input.communityId || null,
+      content: text || null,
+      content_type: contentType,
+      visibility: input.visibility || 'public',
+      interest_tags: input.interestTags || ['General', 'Community'],
+      location_label: input.locationLabel || null,
+      status: 'active',
+    })
+    .select('id')
+    .single()
+
+  if (postError || !postRecord) {
+    throw new Error(postError?.message || 'Failed to create post record.')
+  }
+
+  const postId = postRecord.id
+  const uploadedStoragePaths: string[] = []
+
+  // 3. Upload media files if any
+  try {
+    const postMediaRows: Array<{
+      post_id: string
+      media_url: string
+      media_type: 'image' | 'video'
+      sort_order: number
+    }> = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const isVid = file.type.startsWith('video/')
+      const ext = file.name.split('.').pop() || (isVid ? 'mp4' : 'jpg')
+      const safePath = `${userId}/${postId}/media_${i}_${Date.now()}.${ext}`
+
+      input.onProgress?.(`Uploading media ${i + 1} of ${files.length}...`)
+
+      const { error: uploadError } = await supabase.storage
+        .from('community-posts')
+        .upload(safePath, file, {
+          upsert: true,
+          contentType: file.type || (isVid ? 'video/mp4' : 'image/jpeg'),
+        })
+
+      if (uploadError) {
+        throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`)
+      }
+
+      uploadedStoragePaths.push(safePath)
+      const { data: urlData } = supabase.storage.from('community-posts').getPublicUrl(safePath)
+      const publicUrl = urlData?.publicUrl || safePath
+
+      postMediaRows.push({
+        post_id: postId,
+        media_url: publicUrl,
+        media_type: isVid ? 'video' : 'image',
+        sort_order: i,
+      })
+    }
+
+    // 4. Insert post_media rows
+    if (postMediaRows.length > 0) {
+      input.onProgress?.('Linking post media...')
+      const { error: mediaInsertError } = await (supabase as any)
+        .from('post_media')
+        .insert(postMediaRows)
+
+      if (mediaInsertError) {
+        throw new Error(`Failed to save post media: ${mediaInsertError.message}`)
+      }
+    }
+
+    input.onProgress?.('Finished!')
+    return postId
+  } catch (err: any) {
+    // 5. Rollback on failure: clean up post record and uploaded storage items
+    input.onProgress?.('Encountered an error, cleaning up...')
+    await (supabase as any).from('posts').delete().eq('id', postId)
+    if (uploadedStoragePaths.length > 0) {
+      await supabase.storage.from('community-posts').remove(uploadedStoragePaths)
+    }
+    throw err
+  }
+}
+

@@ -25,6 +25,8 @@ import {
   EyeOff,
   Compass,
   CalendarDays,
+  MapPin,
+  Film,
 } from 'lucide-react'
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -42,6 +44,7 @@ import {
   loadPostComments,
   addPostComment,
   recordFeedInteraction,
+  createPostWithMedia,
   type FeedTab,
   type FeedItem,
   type PostFeedItem,
@@ -49,6 +52,7 @@ import {
   type SuggestedCommunityFeedItem,
   type SuggestedEventFeedItem,
   type CommentRecord,
+  type CreatePostInput,
 } from '../lib/feedApi'
 
 export function Feed() {
@@ -848,35 +852,124 @@ export function CreatePost() {
   const { toast } = useMockApp()
 
   const [text, setText] = useState('')
-  const [audience, setAudience] = useState('public')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [filePreview, setFilePreview] = useState<string | null>(null)
+  const [audience, setAudience] = useState<'public' | 'followers' | 'connections' | 'community'>('public')
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string>('')
+  const [locationLabel, setLocationLabel] = useState<string>('')
+  const [showLocationInput, setShowLocationInput] = useState(false)
+  const [showCommunitySelect, setShowCommunitySelect] = useState(false)
+
+  const [mediaFiles, setMediaFiles] = useState<File[]>([])
+  const [mediaPreviews, setMediaPreviews] = useState<Array<{ url: string; type: 'image' | 'video'; name: string }>>([])
   const [submitting, setSubmitting] = useState(false)
+  const [postingStatus, setPostingStatus] = useState<string>('')
+
   const [userProfile, setUserProfile] = useState<any>(null)
+  const [communitiesList, setCommunitiesList] = useState<Array<{ id: string; community_name: string }>>([])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!user) return
+
+    // Load profile
     supabase
       .from('profiles')
-      .select('first_name, last_name, profile_image_url')
+      .select('first_name, last_name, profile_image_url, location_city, location_state')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) setUserProfile(data)
+        if (data) {
+          setUserProfile(data)
+          if (data.location_city) {
+            setLocationLabel(`${data.location_city}${data.location_state ? `, ${data.location_state}` : ''}`)
+          }
+        }
+      })
+
+    // Load communities for tagging
+    ;(supabase as any)
+      .from('communities')
+      .select('id, community_name')
+      .eq('is_active', true)
+      .limit(30)
+      .then(({ data }: any) => {
+        if (data) setCommunitiesList(data)
       })
   }, [user])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    // Check if video was already attached
+    const hasVideo = mediaPreviews.some(m => m.type === 'video')
+    if (hasVideo) {
+      toast('Cannot mix videos and images in a single post. Clear video first.')
+      return
+    }
+
+    if (mediaFiles.length + files.length > 8) {
+      toast('Maximum 8 images allowed per carousel post.')
+      return
+    }
+
+    // Validate size
+    for (const f of files) {
+      if (f.size > 15 * 1024 * 1024) {
+        toast(`Image "${f.name}" exceeds 15MB size limit.`)
+        return
+      }
+    }
+
+    const newFiles = [...mediaFiles, ...files]
+    setMediaFiles(newFiles)
+
+    const newPreviews = files.map(f => ({
+      url: URL.createObjectURL(f),
+      type: 'image' as const,
+      name: f.name,
+    }))
+    setMediaPreviews(curr => [...curr, ...newPreviews])
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setSelectedFile(file)
-    setFilePreview(URL.createObjectURL(file))
+
+    if (mediaPreviews.length > 0) {
+      toast('Videos cannot be combined with other media. Replacing existing attachments.')
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      toast('Video exceeds the 100MB size limit.')
+      return
+    }
+
+    setMediaFiles([file])
+    setMediaPreviews([
+      {
+        url: URL.createObjectURL(file),
+        type: 'video',
+        name: file.name,
+      },
+    ])
+    if (videoInputRef.current) videoInputRef.current.value = ''
+  }
+
+  const removeMedia = (index: number) => {
+    setMediaFiles(curr => curr.filter((_, i) => i !== index))
+    setMediaPreviews(curr => {
+      const removed = curr[index]
+      if (removed) URL.revokeObjectURL(removed.url)
+      return curr.filter((_, i) => i !== index)
+    })
   }
 
   const handlePublish = async () => {
-    if (!text.trim() && !selectedFile) {
-      toast('Write a post or attach media before publishing.')
+    if (!text.trim() && mediaFiles.length === 0) {
+      toast('Please write a caption or attach media before publishing.')
       return
     }
 
@@ -886,59 +979,25 @@ export function CreatePost() {
     }
 
     setSubmitting(true)
+    setPostingStatus('Preparing post...')
+
     try {
-      let mediaUrl: string | null = null
-      let mediaType: 'image' | 'video' = 'image'
+      await createPostWithMedia({
+        content: text.trim(),
+        mediaFiles,
+        visibility: audience,
+        communityId: selectedCommunityId || null,
+        locationLabel: locationLabel.trim() || null,
+        onProgress: status => setPostingStatus(status),
+      })
 
-      if (selectedFile) {
-        const isVideo = selectedFile.type.startsWith('video')
-        mediaType = isVideo ? 'video' : 'image'
-        const ext = selectedFile.name.split('.').pop() || 'jpg'
-        const path = `${user.id}/post_${Date.now()}.${ext}`
-
-        // Upload to post storage bucket
-        const { error: uploadError } = await supabase.storage
-          .from('community-posts')
-          .upload(path, selectedFile, { upsert: true })
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('community-posts').getPublicUrl(path)
-          mediaUrl = urlData?.publicUrl || null
-        }
-      }
-
-      // Insert post
-      const { data: postRecord, error: postError } = await (supabase as any)
-        .from('posts')
-        .insert({
-          user_id: user.id,
-          content: text.trim(),
-          content_type: mediaUrl ? (mediaType === 'video' ? 'video' : 'image') : 'text',
-          visibility: audience,
-          interest_tags: ['General', 'Community'],
-          status: 'active',
-        })
-        .select('id')
-        .single()
-
-      if (postError) throw postError
-
-      // Insert post_media if media was uploaded
-      if (mediaUrl && postRecord?.id) {
-        await (supabase as any).from('post_media').insert({
-          post_id: postRecord.id,
-          media_url: mediaUrl,
-          media_type: mediaType,
-          sort_order: 0,
-        })
-      }
-
-      toast('Your post is now live!')
+      toast('Your post is live in the feed!')
       navigate('/feed')
     } catch (err: any) {
       toast(err?.message || 'Failed to publish post.')
     } finally {
       setSubmitting(false)
+      setPostingStatus('')
     }
   }
 
@@ -950,63 +1009,191 @@ export function CreatePost() {
     <AppShell title="Create Post" subtitle="Share something worth responding to">
       <div className="mx-auto max-w-2xl">
         <Card className="p-6">
+          {/* Header */}
           <div className="flex items-center gap-3">
             <Avatar src={userProfile?.profile_image_url || undefined} name={authorName} />
-            <div>
+            <div className="flex-1">
               <div className="font-bold text-brand-ink">{authorName}</div>
-              <select
-                value={audience}
-                onChange={e => setAudience(e.target.value)}
-                className="mt-1 rounded-lg bg-brand-canvas px-2.5 py-1 text-xs font-semibold border border-brand-line outline-none"
-              >
-                <option value="public">Public</option>
-                <option value="followers">Followers</option>
-                <option value="connections">Connections</option>
-              </select>
+              <div className="flex items-center gap-2 mt-1">
+                <select
+                  value={audience}
+                  onChange={e => setAudience(e.target.value as any)}
+                  className="rounded-lg bg-brand-canvas px-2.5 py-1 text-xs font-semibold border border-brand-line outline-none text-brand-ink"
+                >
+                  <option value="public">Public</option>
+                  <option value="followers">Followers only</option>
+                  <option value="connections">Connections only</option>
+                  <option value="community">Community only</option>
+                </select>
+
+                {locationLabel && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-brand-muted bg-brand-canvas px-2 py-0.5 rounded-md">
+                    <MapPin className="h-3 w-3 text-brand-500" /> {locationLabel}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Caption Area */}
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            rows={6}
-            className="mt-5 w-full resize-none border-none text-base outline-none placeholder:text-slate-400 text-brand-ink"
+            rows={5}
+            className="mt-4 w-full resize-none border-none text-base outline-none placeholder:text-slate-400 text-brand-ink"
             placeholder="What's on your mind? Share an insight, question, or local experience..."
           />
 
+          {/* Hidden File Inputs */}
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
-            onChange={handleFileSelect}
+            accept="image/jpeg,image/png,image/webp,image/gif,image/heic"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
+            onChange={handleVideoSelect}
             className="hidden"
           />
 
-          {filePreview && (
-            <div className="relative mt-3 rounded-2xl overflow-hidden border border-brand-line max-h-72">
-              <img src={filePreview} alt="Preview" className="w-full object-cover" />
-              <button
-                onClick={() => {
-                  setSelectedFile(null)
-                  setFilePreview(null)
-                }}
-                className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white hover:bg-black"
-              >
-                <X className="h-4 w-4" />
-              </button>
+          {/* Media Attachments Preview */}
+          {mediaPreviews.length > 0 && (
+            <div className="mt-3">
+              {mediaPreviews.length === 1 && mediaPreviews[0].type === 'video' ? (
+                <div className="relative rounded-2xl overflow-hidden border border-brand-line bg-black max-h-72">
+                  <video src={mediaPreviews[0].url} controls className="w-full h-full object-contain max-h-72" />
+                  <button
+                    onClick={() => removeMedia(0)}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                    aria-label="Remove video"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : mediaPreviews.length === 1 ? (
+                <div className="relative rounded-2xl overflow-hidden border border-brand-line max-h-72">
+                  <img src={mediaPreviews[0].url} alt="Preview" className="w-full object-cover max-h-72" />
+                  <button
+                    onClick={() => removeMedia(0)}
+                    className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white hover:bg-black"
+                    aria-label="Remove image"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                /* Multi-image carousel previews */
+                <div>
+                  <div className="text-xs font-semibold text-brand-muted mb-2">
+                    Image Carousel ({mediaPreviews.length} of 8 images)
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {mediaPreviews.map((m, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-brand-line group">
+                        <img src={m.url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => removeMedia(idx)}
+                          className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                          aria-label={`Remove image ${idx + 1}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="absolute left-1.5 bottom-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white font-bold">
+                          {idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                    {mediaPreviews.length < 8 && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="grid place-items-center aspect-square rounded-xl border-2 border-dashed border-brand-line text-brand-muted hover:border-brand-500 hover:text-brand-600 transition"
+                      >
+                        <Plus className="h-5 w-5" />
+                        <span className="text-[10px] font-bold mt-1">Add more</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-3 gap-2">
+          {/* Optional Community selector */}
+          {showCommunitySelect && (
+            <div className="mt-4 rounded-xl bg-brand-canvas p-3 border border-brand-line">
+              <label className="text-xs font-bold text-brand-ink block mb-1">Post in a Community (Optional)</label>
+              <select
+                value={selectedCommunityId}
+                onChange={e => setSelectedCommunityId(e.target.value)}
+                className="w-full rounded-lg bg-white px-3 py-2 text-xs font-semibold border border-brand-line outline-none text-brand-ink"
+              >
+                <option value="">General Feed (No specific community)</option>
+                {communitiesList.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.community_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Optional Location Input */}
+          {showLocationInput && (
+            <div className="mt-4 rounded-xl bg-brand-canvas p-3 border border-brand-line">
+              <label className="text-xs font-bold text-brand-ink block mb-1">Location Label (Optional)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={locationLabel}
+                  onChange={e => setLocationLabel(e.target.value)}
+                  placeholder="e.g. Austin, Texas or Zilker Park"
+                  className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-semibold border border-brand-line outline-none text-brand-ink"
+                />
+                {userProfile?.location_city && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="text-xs py-1"
+                    onClick={() =>
+                      setLocationLabel(
+                        `${userProfile.location_city}${userProfile.location_state ? `, ${userProfile.location_state}` : ''}`
+                      )
+                    }
+                  >
+                    Use City
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Action Row */}
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-5 gap-2">
             <Media
               onClick={() => fileInputRef.current?.click()}
               icon={<ImageIcon />}
-              label={selectedFile ? 'Media Attached' : 'Photo / Video'}
+              label={mediaPreviews.some(m => m.type === 'image') ? `${mediaPreviews.length} Photo(s)` : 'Photos'}
             />
             <Media
-              onClick={() => navigate('/communities')}
+              onClick={() => videoInputRef.current?.click()}
+              icon={<Film />}
+              label={mediaPreviews.some(m => m.type === 'video') ? 'Video Ready' : 'Video'}
+            />
+            <Media
+              onClick={() => setShowCommunitySelect(!showCommunitySelect)}
               icon={<UsersRound />}
-              label="Community"
+              label={selectedCommunityId ? 'Community Tagged' : 'Community'}
+            />
+            <Media
+              onClick={() => setShowLocationInput(!showLocationInput)}
+              icon={<MapPin />}
+              label={locationLabel ? 'Location Set' : 'Location'}
             />
             <Media
               onClick={() =>
@@ -1021,10 +1208,19 @@ export function CreatePost() {
             />
           </div>
 
-          <Button className="mt-6 w-full" onClick={handlePublish} disabled={submitting}>
+          {/* Posting Status Feedback */}
+          {submitting && postingStatus && (
+            <div className="mt-4 rounded-xl bg-brand-50 p-3 text-xs text-brand-700 flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
+              <span>{postingStatus}</span>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <Button className="mt-5 w-full py-3" onClick={handlePublish} disabled={submitting}>
             {submitting ? (
               <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Publishing...
+                <Loader2 className="h-4 w-4 animate-spin" /> Publishing Post...
               </span>
             ) : (
               <span className="inline-flex items-center gap-2">
