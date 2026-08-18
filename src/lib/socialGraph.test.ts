@@ -11,7 +11,7 @@ import {
   removeConnection,
   acceptFollowRequest,
   rejectFollowRequest,
-} from '../../ui-handoff/src/lib/socialGraphApi'
+} from '@/features/social/socialGraphApi'
 import { supabase } from '@/integrations/supabase/client'
 
 vi.mock('@/integrations/supabase/client', () => {
