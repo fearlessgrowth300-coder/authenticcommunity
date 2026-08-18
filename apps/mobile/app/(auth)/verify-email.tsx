@@ -140,7 +140,7 @@ export default function VerifyEmailScreen() {
     setError(null)
   }
 
-  const isDev = typeof __DEV__ !== 'undefined' && __DEV__
+  const isDev = Boolean(typeof __DEV__ === 'undefined' || __DEV__)
 
   return (
     <SafeAreaView style={styles.safeArea}>

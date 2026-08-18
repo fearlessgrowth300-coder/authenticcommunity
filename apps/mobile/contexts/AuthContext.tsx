@@ -152,27 +152,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const projectRef = 'sqzegh'
     const maskedEmail = cleanEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
 
-    let usedType = 'email'
+    // For email confirmation after signUp, Supabase GoTrue OTP type is 'signup'
+    let usedType = 'signup'
     let { data: resData, error } = await supabase.auth.verifyOtp({
       email: cleanEmail,
       token: cleanToken,
-      type: 'email',
+      type: 'signup',
     })
 
-    // If 'email' type fails and error indicates invalid token/type, also attempt 'signup' type
-    if (error && (error.message?.toLowerCase().includes('invalid') || error.message?.toLowerCase().includes('expired'))) {
+    // Fallback: if 'signup' is not recognized or returns invalid type, attempt 'email'
+    if (error && error.message?.toLowerCase().includes('type')) {
       const fallbackRes = await supabase.auth.verifyOtp({
         email: cleanEmail,
         token: cleanToken,
-        type: 'signup',
+        type: 'email',
       })
 
       if (!fallbackRes.error) {
         resData = fallbackRes.data
         error = null
-        usedType = 'signup'
+        usedType = 'email'
       } else {
-        // Keep primary error or fallback info
         error = fallbackRes.error || error
       }
     }
