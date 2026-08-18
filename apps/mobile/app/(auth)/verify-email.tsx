@@ -62,8 +62,8 @@ export default function VerifyEmailScreen() {
 
   const handleVerify = async () => {
     const cleanOtp = String(otp).trim()
-    if (cleanOtp.length !== 6) {
-      setError('Please enter the complete 6-digit verification code.')
+    if (cleanOtp.length < 6) {
+      setError('Please enter the complete verification code.')
       return
     }
 
@@ -122,7 +122,7 @@ export default function VerifyEmailScreen() {
       if (resendError) {
         setError('Failed to resend code. Please wait a moment and try again.')
       } else {
-        setResendSuccess('A new 6-digit code has been sent.')
+        setResendSuccess('A new verification code has been sent.')
         setResendCooldown(60)
         setOtp('')
       }
@@ -134,13 +134,16 @@ export default function VerifyEmailScreen() {
   }
 
   const handleOtpChange = (text: string) => {
-    // Strictly preserve string format, numeric only, max 6 characters, preserving leading zeros
-    const numericOnly = String(text).replace(/[^0-9]/g, '').slice(0, 6)
-    setOtp(numericOnly)
+    // Strictly preserve string format, alphanumeric/numeric, up to 8 characters
+    const cleanText = String(text).replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
+    setOtp(cleanText)
     setError(null)
   }
 
   const isDev = Boolean(typeof __DEV__ === 'undefined' || __DEV__)
+
+  // Display 8 cells (split into 4 + 4 for readability)
+  const cellIndices = [0, 1, 2, 3, 4, 5, 6, 7]
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -172,7 +175,7 @@ export default function VerifyEmailScreen() {
               Check your email
             </AppText>
             <AppText variant="body" color={Colors.textSecondary} align="center" style={styles.subtitle}>
-              We sent a 6-digit verification code to:
+              We sent a verification code to:
             </AppText>
             <AppText variant="body" weight="semibold" color={Colors.primary} align="center" style={styles.emailText}>
               {email || 'your email'}
@@ -204,41 +207,76 @@ export default function VerifyEmailScreen() {
                 value={otp}
                 onChangeText={handleOtpChange}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={8}
                 autoFocus
                 style={styles.hiddenInput}
-                accessibilityLabel="6-digit verification code"
+                accessibilityLabel="Verification code"
               />
 
-              {/* 6 Visual Digit Cells */}
+              {/* 8 Visual Digit Cells in 2 groups of 4 */}
               <TouchableOpacity
                 activeOpacity={1}
                 onPress={() => inputRef.current?.focus?.()}
                 style={styles.digitsRow}
               >
-                {[0, 1, 2, 3, 4, 5].map((index) => {
-                  const digit = otp[index] || ''
-                  const isCurrent = index === otp.length || (index === 5 && otp.length === 6)
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.digitCell,
-                        digit ? styles.digitCellFilled : null,
-                        isCurrent && !digit ? styles.digitCellFocused : null,
-                      ]}
-                    >
-                      <AppText
-                        variant="h2"
-                        weight="bold"
-                        color={digit ? Colors.text : Colors.textMuted}
-                        align="center"
+                {/* Group 1: 0..3 */}
+                <View style={styles.digitGroup}>
+                  {[0, 1, 2, 3].map((index) => {
+                    const digit = otp[index] || ''
+                    const isCurrent = index === otp.length
+                    return (
+                      <View
+                        key={index}
+                        style={[
+                          styles.digitCell,
+                          digit ? styles.digitCellFilled : null,
+                          isCurrent && !digit ? styles.digitCellFocused : null,
+                        ]}
                       >
-                        {digit || (isCurrent ? '|' : '•')}
-                      </AppText>
-                    </View>
-                  )
-                })}
+                        <AppText
+                          variant="h3"
+                          weight="bold"
+                          color={digit ? Colors.text : Colors.textMuted}
+                          align="center"
+                        >
+                          {digit || (isCurrent ? '|' : '•')}
+                        </AppText>
+                      </View>
+                    )
+                  })}
+                </View>
+
+                {/* Divider */}
+                <View style={styles.groupDivider}>
+                  <AppText variant="h3" color={Colors.textMuted}>-</AppText>
+                </View>
+
+                {/* Group 2: 4..7 */}
+                <View style={styles.digitGroup}>
+                  {[4, 5, 6, 7].map((index) => {
+                    const digit = otp[index] || ''
+                    const isCurrent = index === otp.length
+                    return (
+                      <View
+                        key={index}
+                        style={[
+                          styles.digitCell,
+                          digit ? styles.digitCellFilled : null,
+                          isCurrent && !digit ? styles.digitCellFocused : null,
+                        ]}
+                      >
+                        <AppText
+                          variant="h3"
+                          weight="bold"
+                          color={digit ? Colors.text : Colors.textMuted}
+                          align="center"
+                        >
+                          {digit || (isCurrent ? '|' : '•')}
+                        </AppText>
+                      </View>
+                    )
+                  })}
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -246,7 +284,7 @@ export default function VerifyEmailScreen() {
               title="Verify Email"
               onPress={handleVerify}
               loading={verifying}
-              disabled={otp.length !== 6 || verifying}
+              disabled={otp.length < 6 || verifying}
               style={styles.submitButton}
             />
 
@@ -366,12 +404,22 @@ const styles = StyleSheet.create({
   },
   digitsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  digitGroup: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  groupDivider: {
+    paddingHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   digitCell: {
-    flex: 1,
-    height: 54,
+    width: 36,
+    height: 48,
     borderWidth: 1.5,
     borderColor: Colors.border,
     borderRadius: Radii.md,

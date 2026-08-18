@@ -65,12 +65,12 @@ describe('Mobile Auth: Signup Email Verification & OTP Flow Suite', () => {
       expect(result).toBe('074508')
     })
 
-    it('joins 6 discrete input cells into ordered 6-digit string', () => {
-      const cells = ['0', '7', '4', '5', '0', '8']
+    it('joins 8 discrete input cells into ordered 8-digit string', () => {
+      const cells = ['0', '7', '4', '5', '0', '8', '9', '2']
       const joinedToken = cells.join('').trim()
 
-      expect(joinedToken).toBe('074508')
-      expect(joinedToken.length).toBe(6)
+      expect(joinedToken).toBe('07450892')
+      expect(joinedToken.length).toBe(8)
     })
   })
 
