@@ -116,8 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async (email: string, pass: string) => {
+    const normalizedEmail = email.trim().toLowerCase()
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       password: pass,
     })
     return { error }
@@ -128,9 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pass: string,
     data?: { firstName?: string; lastName?: string }
   ) => {
-    const cleanEmail = email.trim().toLowerCase()
+    const normalizedEmail = email.trim().toLowerCase()
     const { data: resData, error } = await supabase.auth.signUp({
-      email: cleanEmail,
+      email: normalizedEmail,
       password: pass,
       options: {
         data: {
@@ -147,41 +148,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const verifyOtp = async (email: string, token: string) => {
-    const cleanEmail = email.trim().toLowerCase()
-    const cleanToken = token.trim()
+    const normalizedEmail = email.trim().toLowerCase()
+    const cleanToken = String(token).trim()
     const projectRef = 'sqzegh'
-    const maskedEmail = cleanEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
+    const maskedEmail = normalizedEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
 
-    // For email confirmation after signUp, Supabase GoTrue OTP type is 'signup'
-    let usedType = 'signup'
-    let { data: resData, error } = await supabase.auth.verifyOtp({
-      email: cleanEmail,
+    const { data: resData, error } = await supabase.auth.verifyOtp({
+      email: normalizedEmail,
       token: cleanToken,
-      type: 'signup',
+      type: 'email',
     })
-
-    // Fallback: if 'signup' is not recognized or returns invalid type, attempt 'email'
-    if (error && error.message?.toLowerCase().includes('type')) {
-      const fallbackRes = await supabase.auth.verifyOtp({
-        email: cleanEmail,
-        token: cleanToken,
-        type: 'email',
-      })
-
-      if (!fallbackRes.error) {
-        resData = fallbackRes.data
-        error = null
-        usedType = 'email'
-      } else {
-        error = fallbackRes.error || error
-      }
-    }
 
     const debug = {
       projectRef,
       email: maskedEmail,
       tokenLength: cleanToken.length,
-      verificationType: usedType,
+      verificationType: 'email',
       errorCode: (error as any)?.code || (error as any)?.status?.toString() || (error ? 'unknown_error' : undefined),
       errorMessage: error?.message,
     }
@@ -207,10 +189,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const resendOtp = async (email: string) => {
-    const cleanEmail = email.trim().toLowerCase()
+    const normalizedEmail = email.trim().toLowerCase()
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email: cleanEmail,
+      email: normalizedEmail,
     })
     return { error }
   }

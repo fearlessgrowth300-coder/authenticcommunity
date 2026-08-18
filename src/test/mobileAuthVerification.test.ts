@@ -51,57 +51,53 @@ describe('Mobile Auth: Signup Email Verification & OTP Flow Suite', () => {
     it('preserves leading zeros and keeps token as pure string without number conversion', () => {
       const sanitizeOtp = (input: string) => String(input).replace(/[^0-9]/g, '').slice(0, 6)
 
-      // Test with leading zero: '012345'
-      const otpWithZero = '012345'
+      // Test with leading zero: '074508'
+      const otpWithZero = '074508'
       const result = sanitizeOtp(otpWithZero)
 
       expect(typeof result).toBe('string')
-      expect(result).toBe('012345')
+      expect(result).toBe('074508')
       expect(result.startsWith('0')).toBe(true)
       expect(result.length).toBe(6)
 
-      // Never parse as Number which would drop '0' -> 12345
-      expect(Number(result).toString()).not.toBe('012345')
-      expect(result).toBe('012345')
+      // Never parse as Number which would drop '0' -> 74508
+      expect(Number(result).toString()).not.toBe('074508')
+      expect(result).toBe('074508')
     })
 
     it('joins 6 discrete input cells into ordered 6-digit string', () => {
-      const cells = ['0', '8', '4', '2', '1', '9']
+      const cells = ['0', '7', '4', '5', '0', '8']
       const joinedToken = cells.join('').trim()
 
-      expect(joinedToken).toBe('084219')
+      expect(joinedToken).toBe('074508')
       expect(joinedToken.length).toBe(6)
     })
   })
 
-  describe('3. Supabase Verification & Type Fallback Handling', () => {
-    it('uses type email primarily and supports signup fallback if GoTrue schema expects signup', async () => {
-      const mockVerify = vi.fn().mockImplementation(({ type }) => {
-        if (type === 'email') {
-          return Promise.resolve({ data: { session: null, user: null }, error: { message: 'Token is invalid' } })
-        }
-        if (type === 'signup') {
-          return Promise.resolve({ data: { session: { access_token: 'abc' }, user: { id: 'u1' } }, error: null })
-        }
-        return Promise.resolve({ data: null, error: { message: 'unknown' } })
+  describe('3. Supabase Verification Uses Type Email', () => {
+    it('calls verifyOtp with type: email and normalized credentials', async () => {
+      const mockVerify = vi.fn().mockResolvedValue({
+        data: { session: { access_token: 'abc' }, user: { id: 'u1' } },
+        error: null,
       })
 
-      const cleanEmail = 'user@example.com'
-      const cleanToken = '123456'
+      const rawEmail = '  TestUser@Example.COM '
+      const rawToken = ' 074508 '
 
-      let { data, error } = await mockVerify({ email: cleanEmail, token: cleanToken, type: 'email' })
-      if (error && error.message.includes('invalid')) {
-        const fallback = await mockVerify({ email: cleanEmail, token: cleanToken, type: 'signup' })
-        if (!fallback.error) {
-          data = fallback.data
-          error = null
-        }
-      }
+      const normalizedEmail = rawEmail.trim().toLowerCase()
+      const cleanToken = String(rawToken).trim()
 
-      expect(mockVerify).toHaveBeenCalledWith({ email: cleanEmail, token: cleanToken, type: 'email' })
-      expect(mockVerify).toHaveBeenCalledWith({ email: cleanEmail, token: cleanToken, type: 'signup' })
-      expect(error).toBeNull()
-      expect(data?.session?.access_token).toBe('abc')
+      await mockVerify({
+        email: normalizedEmail,
+        token: cleanToken,
+        type: 'email',
+      })
+
+      expect(mockVerify).toHaveBeenCalledWith({
+        email: 'testuser@example.com',
+        token: '074508',
+        type: 'email',
+      })
     })
 
     it('maps internal expired token error to friendly recovery message', () => {
@@ -119,16 +115,20 @@ describe('Mobile Auth: Signup Email Verification & OTP Flow Suite', () => {
     })
   })
 
-  describe('4. Resend Behavior & No Automatic Dispatch on Mount', () => {
-    it('uses type signup for resendOtp', async () => {
+  describe('4. Resend Behavior Remains Type Signup', () => {
+    it('uses type: signup for resendOtp', async () => {
       const mockResend = vi.fn().mockResolvedValue({ error: null })
-      const email = 'user@example.com'
+      const rawEmail = ' TestUser@Example.COM '
+      const normalizedEmail = rawEmail.trim().toLowerCase()
 
-      await mockResend({ type: 'signup', email: email.trim().toLowerCase() })
+      await mockResend({
+        type: 'signup',
+        email: normalizedEmail,
+      })
 
       expect(mockResend).toHaveBeenCalledWith({
         type: 'signup',
-        email: 'user@example.com',
+        email: 'testuser@example.com',
       })
     })
 
