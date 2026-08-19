@@ -378,4 +378,8 @@ declare module 'lucide-react-native' {
   export const Star: React.FC<IconProps>
   export const Award: React.FC<IconProps>
   export const ArrowUpDown: React.FC<IconProps>
+  export const Share2: React.FC<IconProps>
+  export const UploadCloud: React.FC<IconProps>
+  export const ChevronDown: React.FC<IconProps>
+  export const MessageSquare: React.FC<IconProps>
 }
