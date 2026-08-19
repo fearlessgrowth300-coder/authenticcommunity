@@ -391,4 +391,7 @@ declare module 'lucide-react-native' {
   export const CheckCheck: React.FC<IconProps>
   export const Reply: React.FC<IconProps>
   export const Clock: React.FC<IconProps>
+  export const Edit3: React.FC<IconProps>
+  export const UserPlus: React.FC<IconProps>
+  export const UserCheck: React.FC<IconProps>
 }

@@ -22,14 +22,21 @@ import {
   Star,
   MessageCircle,
   ChevronRight,
+  UserPlus,
+  UserCheck,
+  Clock,
+  MapPin,
 } from 'lucide-react-native'
 
 export default function MatchProfileDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const [isConnected, setIsConnected] = useState(false)
 
-  // Demo profile data matching Maya in reference Screen 2
+  // Relationship states
+  const [followState, setFollowState] = useState<'not_following' | 'following' | 'requested'>('not_following')
+  const [connectionState, setConnectionState] = useState<'none' | 'pending_outgoing' | 'connected'>('none')
+
+  // Profile data
   const profile = {
     name: 'Maya',
     age: 28,
@@ -61,8 +68,22 @@ export default function MatchProfileDetailScreen() {
     },
   }
 
-  const handleConnect = () => {
-    setIsConnected(!isConnected)
+  const handleToggleFollow = () => {
+    if (followState === 'not_following') {
+      setFollowState('following')
+    } else {
+      setFollowState('not_following')
+    }
+  }
+
+  const handleToggleConnect = () => {
+    if (connectionState === 'none') {
+      setConnectionState('pending_outgoing')
+    } else if (connectionState === 'pending_outgoing') {
+      setConnectionState('none')
+    } else if (connectionState === 'connected') {
+      setConnectionState('none')
+    }
   }
 
   return (
@@ -101,60 +122,102 @@ export default function MatchProfileDetailScreen() {
               {profile.name}, {profile.age}
             </AppText>
             {profile.isVerified && (
-              <CheckCircle2 color="#22C55E" fill="#22C55E" size={20} />
+              <CheckCircle2 color={Colors.primary} size={20} />
             )}
           </View>
-
-          <AppText variant="bodySm" color={Colors.textSecondary} style={styles.locationText}>
-            {profile.location} · {profile.distance}
-          </AppText>
-
+          <View style={styles.locationRow}>
+            <MapPin color={Colors.textSecondary} size={14} />
+            <AppText variant="bodySm" color={Colors.textSecondary}>
+              {profile.location} · {profile.distance}
+            </AppText>
+          </View>
           <AppText variant="body" color={Colors.text} style={styles.bioText}>
             {profile.bio}
           </AppText>
+
+          {/* Follow & Message Quick Actions */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              onPress={handleToggleFollow}
+              style={[
+                styles.followBtn,
+                followState === 'following' ? styles.followingBtn : null,
+              ]}
+            >
+              <AppText
+                variant="bodySm"
+                weight="bold"
+                color={followState === 'following' ? Colors.textSecondary : Colors.surface}
+              >
+                {followState === 'following' ? 'Following ✓' : 'Follow'}
+              </AppText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push('/chat/jane-doe')}
+              style={styles.messageBtn}
+            >
+              <MessageCircle color={Colors.primary} size={18} />
+              <AppText variant="bodySm" weight="bold" color={Colors.primary}>
+                Message
+              </AppText>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Trust Signals (4 Icons Grid) */}
+        {/* Trust Signals Grid (2x2) */}
         <View style={styles.section}>
           <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
             Trust Signals
           </AppText>
-          <View style={styles.trustSignalsGrid}>
-            <View style={styles.trustItem}>
-              <View style={[styles.trustIconCircle, { backgroundColor: '#EEF2FF' }]}>
+          <View style={styles.trustGrid}>
+            <Card style={styles.trustCard}>
+              <View style={styles.trustIconWrap}>
                 <Shield color={Colors.primary} size={18} />
               </View>
-              <AppText variant="caption" color={Colors.textSecondary} align="center">
-                Verified{'\n'}Profile
+              <AppText variant="caption" weight="bold">
+                Verified Profile
               </AppText>
-            </View>
+              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
+                ID & photo confirmed
+              </AppText>
+            </Card>
 
-            <View style={styles.trustItem}>
-              <View style={[styles.trustIconCircle, { backgroundColor: '#FEF3C7' }]}>
-                <Zap color="#D97706" size={18} />
+            <Card style={styles.trustCard}>
+              <View style={styles.trustIconWrap}>
+                <Zap color={Colors.primary} size={18} />
               </View>
-              <AppText variant="caption" color={Colors.textSecondary} align="center">
-                Active{'\n'}This Week
+              <AppText variant="caption" weight="bold">
+                Active This Week
               </AppText>
-            </View>
+              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
+                Usually replies in 1h
+              </AppText>
+            </Card>
 
-            <View style={styles.trustItem}>
-              <View style={[styles.trustIconCircle, { backgroundColor: '#E0F2FE' }]}>
-                <Users color="#0284C7" size={18} />
+            <Card style={styles.trustCard}>
+              <View style={styles.trustIconWrap}>
+                <Users color={Colors.primary} size={18} />
               </View>
-              <AppText variant="caption" color={Colors.textSecondary} align="center">
-                Community{'\n'}Contributor
+              <AppText variant="caption" weight="bold">
+                Community Member
               </AppText>
-            </View>
+              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
+                3 mutual communities
+              </AppText>
+            </Card>
 
-            <View style={styles.trustItem}>
-              <View style={[styles.trustIconCircle, { backgroundColor: '#FEF9C3' }]}>
-                <Star color="#CA8A04" size={18} />
+            <Card style={styles.trustCard}>
+              <View style={styles.trustIconWrap}>
+                <Star color={Colors.primary} size={18} />
               </View>
-              <AppText variant="caption" color={Colors.textSecondary} align="center">
-                Positive{'\n'}Reviews
+              <AppText variant="caption" weight="bold">
+                Positive Reviews
               </AppText>
-            </View>
+              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
+                5 community vouches
+              </AppText>
+            </Card>
           </View>
         </View>
 
@@ -163,11 +226,11 @@ export default function MatchProfileDetailScreen() {
           <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
             Interests
           </AppText>
-          <View style={styles.pillsWrap}>
-            {profile.interests.map((int, idx) => (
-              <View key={idx} style={styles.interestPill}>
-                <AppText variant="caption" color={Colors.text}>
-                  {int}
+          <View style={styles.chipsContainer}>
+            {profile.interests.map((interest, idx) => (
+              <View key={idx} style={styles.interestChip}>
+                <AppText variant="bodySm" color={Colors.text}>
+                  {interest}
                 </AppText>
               </View>
             ))}
@@ -179,11 +242,11 @@ export default function MatchProfileDetailScreen() {
           <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
             Values
           </AppText>
-          <View style={styles.pillsWrap}>
-            {profile.values.map((val, idx) => (
-              <View key={idx} style={styles.valuePill}>
-                <AppText variant="caption" color={Colors.primaryDark}>
-                  {val}
+          <View style={styles.chipsContainer}>
+            {profile.values.map((value, idx) => (
+              <View key={idx} style={styles.valueChip}>
+                <AppText variant="bodySm" color={Colors.primaryDark}>
+                  {value}
                 </AppText>
               </View>
             ))}
@@ -199,14 +262,13 @@ export default function MatchProfileDetailScreen() {
             {profile.conversationStarters.map((starter, idx) => (
               <TouchableOpacity
                 key={idx}
+                onPress={() => router.push('/chat/jane-doe')}
                 style={styles.starterCard}
-                onPress={() => router.push('/(tabs)/messages')}
               >
-                <MessageCircle color={Colors.primary} size={18} />
                 <AppText variant="bodySm" color={Colors.text} style={styles.starterText}>
-                  {starter}
+                  "{starter}"
                 </AppText>
-                <ChevronRight color={Colors.textMuted} size={18} />
+                <ChevronRight color={Colors.textMuted} size={16} />
               </TouchableOpacity>
             ))}
           </View>
@@ -217,46 +279,40 @@ export default function MatchProfileDetailScreen() {
           <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
             Mutual Communities
           </AppText>
-          <Card style={styles.mutualCard}>
+          <TouchableOpacity
+            onPress={() => router.push('/community/austin-trail-buddies')}
+            style={styles.mutualCommunityCard}
+          >
             <Image
               source={{ uri: profile.mutualCommunity.image }}
-              style={styles.mutualImage}
+              style={styles.communityThumb}
             />
-            <View style={styles.mutualInfo}>
+            <View style={styles.communityInfo}>
               <AppText variant="bodySm" weight="bold">
                 {profile.mutualCommunity.name}
               </AppText>
-              <AppText variant="caption" color={Colors.textMuted}>
+              <AppText variant="caption" color={Colors.textSecondary}>
                 {profile.mutualCommunity.members}
               </AppText>
             </View>
-            <View style={styles.stackedAvatars}>
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&fit=crop&q=80',
-                }}
-                style={styles.smallAvatar}
-              />
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&fit=crop&q=80',
-                }}
-                style={[styles.smallAvatar, { marginLeft: -8 }]}
-              />
-              <AppText variant="caption" color={Colors.textSecondary} style={styles.moreAvatars}>
-                +18
-              </AppText>
-            </View>
-          </Card>
+            <ChevronRight color={Colors.textMuted} size={16} />
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Fixed Bottom Connect Button */}
+      {/* Fixed Bottom Connection Bar */}
       <View style={styles.bottomBar}>
         <AppButton
-          title={isConnected ? 'Connected ✓' : 'Connect'}
-          onPress={handleConnect}
-          style={[styles.connectButton, isConnected ? styles.connectedButton : null]}
+          title={
+            connectionState === 'connected'
+              ? '✓ Connected'
+              : connectionState === 'pending_outgoing'
+              ? 'Request Sent · Tap to Cancel'
+              : 'Connect'
+          }
+          variant={connectionState === 'connected' ? 'secondary' : 'primary'}
+          onPress={handleToggleConnect}
+          style={styles.connectButton}
         />
       </View>
     </SafeAreaView>
@@ -282,11 +338,11 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   scrollContent: {
-    paddingBottom: 90,
+    paddingBottom: 100,
   },
   photoContainer: {
     width: '100%',
-    height: 320,
+    height: 340,
     position: 'relative',
     backgroundColor: Colors.border,
   },
@@ -296,30 +352,29 @@ const styles = StyleSheet.create({
   },
   matchScoreBadge: {
     position: 'absolute',
-    bottom: -20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    top: 16,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#C7D2FE',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 3,
   },
   matchLabel: {
-    fontSize: 9,
+    fontSize: 8,
     marginTop: -2,
   },
   infoSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    padding: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   nameRow: {
     flexDirection: 'row',
@@ -327,11 +382,44 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  locationText: {
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginBottom: Spacing.md,
   },
   bioText: {
-    lineHeight: 20,
+    lineHeight: 22,
+    marginBottom: Spacing.md,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  followBtn: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    borderRadius: Radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followingBtn: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  messageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.primaryLight,
+    paddingVertical: 10,
+    borderRadius: Radii.full,
   },
   section: {
     paddingHorizontal: Spacing.lg,
@@ -340,43 +428,44 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: Spacing.sm,
   },
-  trustSignalsGrid: {
+  trustGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  trustCard: {
+    width: '48%',
     padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    alignItems: 'flex-start',
+    gap: 2,
   },
-  trustItem: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 4,
-  },
-  trustIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  trustIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  pillsWrap: {
+  trustSub: {
+    fontSize: 10,
+  },
+  chipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  interestPill: {
-    paddingHorizontal: 12,
+  interestChip: {
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: Radii.full,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  valuePill: {
-    paddingHorizontal: 12,
+  valueChip: {
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: Radii.full,
     backgroundColor: '#EEF2FF',
@@ -384,12 +473,12 @@ const styles = StyleSheet.create({
     borderColor: '#C7D2FE',
   },
   startersList: {
-    gap: 10,
+    gap: 8,
   },
   starterCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
     backgroundColor: Colors.surface,
     padding: Spacing.md,
     borderRadius: Radii.md,
@@ -398,36 +487,26 @@ const styles = StyleSheet.create({
   },
   starterText: {
     flex: 1,
+    marginRight: 8,
   },
-  mutualCard: {
+  mutualCommunityCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: Colors.surface,
     padding: Spacing.md,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 12,
   },
-  mutualImage: {
+  communityThumb: {
     width: 44,
     height: 44,
-    borderRadius: Radii.md,
-    marginRight: 12,
+    borderRadius: Radii.sm,
     backgroundColor: Colors.border,
   },
-  mutualInfo: {
+  communityInfo: {
     flex: 1,
-  },
-  stackedAvatars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  smallAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.surface,
-  },
-  moreAvatars: {
-    marginLeft: 6,
-    fontSize: 11,
   },
   bottomBar: {
     position: 'absolute',
@@ -442,8 +521,5 @@ const styles = StyleSheet.create({
   },
   connectButton: {
     width: '100%',
-  },
-  connectedButton: {
-    backgroundColor: Colors.sage,
   },
 })
