@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Switch,
+  Image,
+  TextInput,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -40,7 +42,7 @@ export default function OnboardingLocationScreen() {
     longitude: null,
   })
 
-  const [selectedDistance, setSelectedDistance] = useState('25 mi')
+  const [selectedDistance, setSelectedDistance] = useState('10 mi')
   const [showCityOnly, setShowCityOnly] = useState(true)
 
   const [detecting, setDetecting] = useState(false)
@@ -117,7 +119,6 @@ export default function OnboardingLocationScreen() {
       return
     }
 
-    // Extract city & country from search query if user typed freely
     let finalCity = city.trim()
     let finalState = state.trim()
     let finalCountry = country.trim()
@@ -133,7 +134,6 @@ export default function OnboardingLocationScreen() {
     setLoading(true)
 
     try {
-      // Clean DB upsert saving only valid columns in profiles schema
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert(
@@ -195,14 +195,17 @@ export default function OnboardingLocationScreen() {
           {/* Search / Location Input Bar */}
           <View style={styles.searchBarContainer}>
             <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
-            <AppText
-              variant="bodySm"
-              color={searchQuery ? Colors.text : Colors.textMuted}
-              style={styles.searchQueryText}
-              numberOfLines={1}
-            >
-              {searchQuery || 'Search for your city...'}
-            </AppText>
+            <TextInput
+              value={searchQuery}
+              onChangeText={(text: string) => {
+                setSearchQuery(text)
+                setCity(text.split(',')[0]?.trim() || '')
+              }}
+              placeholder="Search for your city"
+              placeholderTextColor={Colors.textMuted}
+              style={styles.searchInput}
+              autoCapitalize="words"
+            />
             {searchQuery ? (
               <TouchableOpacity
                 onPress={() => {
@@ -244,20 +247,26 @@ export default function OnboardingLocationScreen() {
             </View>
           )}
 
-          {/* Radar Map Graphic Component */}
-          <View style={styles.radarCard}>
-            <View style={styles.radarOuterRing}>
-              <View style={styles.radarMiddleRing}>
-                <View style={styles.radarInnerRing}>
-                  <View style={styles.radarCenterPin}>
-                    <MapPin color={Colors.surface} size={16} />
-                  </View>
-                </View>
+          {/* Map Card with City Map Image & Translucent Radius Overlay matching reference */}
+          <View style={styles.mapCard}>
+            <Image
+              source={require('../../assets/city_map.jpg')}
+              style={styles.mapBackgroundImage}
+              resizeMode="cover"
+            />
+
+            {/* Discovery Radius Translucent Circle Overlay */}
+            <View style={styles.mapRadiusCircle}>
+              {/* Center Map Pin Badge */}
+              <View style={styles.centerPinBadge}>
+                <MapPin color="#FFFFFF" size={18} />
               </View>
             </View>
-            <View style={styles.radarLocationBadge}>
-              <AppText variant="caption" weight="semibold" color={Colors.text}>
-                {city || 'Your Area'}
+
+            {/* Street/District watermark labels matching reference style */}
+            <View style={styles.mapLabelContainer}>
+              <AppText variant="caption" weight="semibold" color="#4B5563" style={styles.mapAreaLabel}>
+                {city ? `${city.toUpperCase()} AREA` : 'EAST AUSTIN'}
               </AppText>
             </View>
           </View>
@@ -296,7 +305,7 @@ export default function OnboardingLocationScreen() {
           <Card style={styles.privacyCard}>
             <View style={styles.privacyLeft}>
               <View style={styles.lockCircle}>
-                <Lock color={Colors.primary} size={16} />
+                <Lock color={Colors.sage} size={16} />
               </View>
               <View style={styles.privacyTextContainer}>
                 <AppText variant="bodySm" weight="semibold">
@@ -367,8 +376,11 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: 8,
   },
-  searchQueryText: {
+  searchInput: {
     flex: 1,
+    fontSize: 14,
+    color: Colors.text,
+    height: '100%',
   },
   clearButton: {
     padding: 4,
@@ -390,9 +402,8 @@ const styles = StyleSheet.create({
     borderRadius: Radii.sm,
     marginBottom: Spacing.md,
   },
-  radarCard: {
-    height: 180,
-    backgroundColor: '#EEF2FF',
+  mapCard: {
+    height: 190,
     borderRadius: Radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -400,57 +411,50 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: Colors.border,
+    backgroundColor: '#E5E7EB',
   },
-  radarOuterRing: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 70, 229, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  mapBackgroundImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0.9,
   },
-  radarMiddleRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+  mapRadiusCircle: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(79, 70, 229, 0.22)',
     borderWidth: 1.5,
-    borderColor: 'rgba(79, 70, 229, 0.3)',
-    backgroundColor: 'rgba(79, 70, 229, 0.08)',
+    borderColor: 'rgba(79, 70, 229, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radarInnerRing: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(79, 70, 229, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radarCenterPin: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  centerPinBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
     elevation: 4,
   },
-  radarLocationBadge: {
+  mapLabelContainer: {
     position: 'absolute',
     bottom: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    right: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  mapAreaLabel: {
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   section: {
     marginBottom: Spacing.lg,
@@ -467,7 +471,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radii.full,
+    borderRadius: Radii.md,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -494,7 +498,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: Colors.sageLight,
     alignItems: 'center',
     justifyContent: 'center',
   },

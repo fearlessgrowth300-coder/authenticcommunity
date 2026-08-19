@@ -124,8 +124,9 @@ declare module 'react-native' {
   export const TextInput: React.ForwardRefExoticComponent<TextInputProps & React.RefAttributes<any>>
 
   export interface ImageProps extends ViewProps {
-    source: { uri: string } | number
+    source: any
     style?: any
+    resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center'
   }
   export const Image: React.FC<ImageProps>
 
