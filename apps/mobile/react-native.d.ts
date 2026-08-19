@@ -134,6 +134,9 @@ declare module 'react-native' {
     contentContainerStyle?: any
     keyboardShouldPersistTaps?: 'always' | 'never' | 'handled'
     refreshControl?: React.ReactElement
+    horizontal?: boolean
+    showsHorizontalScrollIndicator?: boolean
+    showsVerticalScrollIndicator?: boolean
   }
   export const ScrollView: React.FC<ScrollViewProps>
 
@@ -307,6 +310,7 @@ declare module 'lucide-react-native' {
   import * as React from 'react'
   export interface IconProps {
     color?: string
+    fill?: string
     size?: number
     strokeWidth?: number
     style?: any
@@ -353,4 +357,9 @@ declare module 'lucide-react-native' {
   export const Cross: React.FC<IconProps>
   export const Activity: React.FC<IconProps>
   export const Lightbulb: React.FC<IconProps>
+  export const Menu: React.FC<IconProps>
+  export const SlidersHorizontal: React.FC<IconProps>
+  export const Settings: React.FC<IconProps>
+  export const ArrowRight: React.FC<IconProps>
+  export const Filter: React.FC<IconProps>
 }
