@@ -61,7 +61,7 @@ export default function TabsLayout() {
               <MessageCircle color={color} size={size || 22} />
               <View style={styles.badge}>
                 <AppText variant="caption" weight="bold" color="#FFFFFF" style={styles.badgeText}>
-                  3
+                  7
                 </AppText>
               </View>
             </View>

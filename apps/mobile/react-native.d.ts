@@ -382,4 +382,12 @@ declare module 'lucide-react-native' {
   export const UploadCloud: React.FC<IconProps>
   export const ChevronDown: React.FC<IconProps>
   export const MessageSquare: React.FC<IconProps>
+  export const SquarePen: React.FC<IconProps>
+  export const Mic: React.FC<IconProps>
+  export const Smile: React.FC<IconProps>
+  export const Send: React.FC<IconProps>
+  export const Pin: React.FC<IconProps>
+  export const Plus: React.FC<IconProps>
+  export const CheckCheck: React.FC<IconProps>
+  export const Reply: React.FC<IconProps>
 }
