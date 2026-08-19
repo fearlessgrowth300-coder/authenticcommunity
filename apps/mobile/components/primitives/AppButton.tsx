@@ -16,7 +16,7 @@ export interface AppButtonProps extends TouchableOpacityProps {
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
-  style?: ViewStyle
+  style?: any
   textStyle?: TextStyle
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode

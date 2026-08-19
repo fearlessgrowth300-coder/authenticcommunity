@@ -162,6 +162,15 @@ declare module 'react-native' {
   }
   export const Switch: React.FC<SwitchProps>
 
+  export interface ModalProps extends ViewProps {
+    visible?: boolean
+    transparent?: boolean
+    animationType?: 'none' | 'slide' | 'fade'
+    presentationStyle?: 'fullScreen' | 'pageSheet' | 'formSheet' | 'overFullScreen'
+    onRequestClose?: () => void
+  }
+  export const Modal: React.FC<ModalProps>
+
   export interface ActivityIndicatorProps extends ViewProps {
     size?: 'small' | 'large' | number
     color?: string
@@ -362,4 +371,11 @@ declare module 'lucide-react-native' {
   export const Settings: React.FC<IconProps>
   export const ArrowRight: React.FC<IconProps>
   export const Filter: React.FC<IconProps>
+  export const Bookmark: React.FC<IconProps>
+  export const MoreHorizontal: React.FC<IconProps>
+  export const Shield: React.FC<IconProps>
+  export const Zap: React.FC<IconProps>
+  export const Star: React.FC<IconProps>
+  export const Award: React.FC<IconProps>
+  export const ArrowUpDown: React.FC<IconProps>
 }
