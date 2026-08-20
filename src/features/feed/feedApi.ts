@@ -328,64 +328,7 @@ export async function loadFeedPage(params: {
     })
   }
 
-  // 5. Seed fallback posts if feed in development database is currently sparse
-  if (postItems.length === 0 && tab !== 'Following') {
-    postItems.push(
-      {
-        id: 'seed-post-1',
-        type: 'post',
-        contentType: 'image',
-        authorId: 'seed-author-maya',
-        authorName: 'Maya Patel',
-        authorAvatar: fallbackAvatar,
-        isVerified: true,
-        createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-        timeAgo: '2h ago',
-        tag: 'Austin Hikers',
-        text: 'Perfect Saturday with the Austin Trail Crew 🌿 Great views, even better conversations. Local community really matters.',
-        media: [
-          {
-            url: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1100&q=85',
-            type: 'image',
-          },
-        ],
-        communityName: 'Austin Hikers',
-        communityId: 'seed-comm-1',
-        likesCount: 24,
-        commentsCount: 6,
-        isLiked: false,
-        isSaved: false,
-        isFollowingAuthor: followSet.has('seed-author-maya'),
-        locationLabel: 'Austin, Texas',
-        score: 95,
-      },
-      {
-        id: 'seed-post-2',
-        type: 'post',
-        contentType: 'text',
-        authorId: 'seed-author-alex',
-        authorName: 'Alex Johnson',
-        authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85',
-        isVerified: true,
-        createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-        timeAgo: '5h ago',
-        tag: 'Startup Circle',
-        text: "Tonight's founder coffee meetup starts at 7 PM. First-timers are very welcome! Come curious, leave with at least one new person you know.",
-        media: [],
-        communityName: 'Startup Circle',
-        communityId: 'seed-comm-2',
-        likesCount: 18,
-        commentsCount: 4,
-        isLiked: false,
-        isSaved: false,
-        isFollowingAuthor: followSet.has('seed-author-alex'),
-        locationLabel: 'Austin, Texas',
-        score: 80,
-      }
-    )
-  }
-
-  // 6. Sort post items based on tab
+  // 5. Sort post items based on tab
   if (tab === 'Following') {
     postItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   } else if (tab === 'Nearby') {

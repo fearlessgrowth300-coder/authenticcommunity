@@ -177,27 +177,7 @@ export function Messages() {
 
           setConversations(list)
         } else {
-          // Fallback conversations
-          setConversations([
-            {
-              userId: 'maya',
-              name: 'Maya Patel',
-              avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85',
-              text: 'Same here. Do you have a favorite trail around Austin?',
-              time: '10:42 AM',
-              unread: 1,
-              online: true,
-            },
-            {
-              userId: 'liam',
-              name: 'Liam Chen',
-              avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=900&q=85',
-              text: 'Are you going to the mindfulness meetup this weekend?',
-              time: 'Yesterday',
-              unread: 0,
-              online: false,
-            },
-          ])
+          setConversations([])
         }
 
         // 3. Fetch joined communities
@@ -217,25 +197,11 @@ export function Messages() {
             }))
           )
         } else {
-          setCommunitiesList([
-            {
-              id: 'mindful-living',
-              name: 'Mindful Living Austin',
-              image: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?auto=format&fit=crop&w=1000&q=85',
-              members: 248,
-              lastMessage: 'Alex: Friday meditation session at 7:00 AM!',
-            },
-            {
-              id: 'hill-country-hikers',
-              name: 'Hill Country Hikers',
-              image: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1000&q=85',
-              members: 412,
-              lastMessage: 'Marcus: Meet at Barton Creek Greenbelt trail head.',
-            },
-          ])
+          setCommunitiesList([])
         }
       } catch {
-        // Fallback demo data
+        setConversations([])
+        setCommunitiesList([])
       } finally {
         setLoading(false)
       }

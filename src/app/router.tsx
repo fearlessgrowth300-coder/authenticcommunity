@@ -70,6 +70,16 @@ const StoriesViewer = lazy(() => import('@/features/stories/StoriesViewerPage').
 const Verification = lazy(() => import('@/features/verification/VerificationPage').then(m => ({ default: m.Verification })))
 const SuspendedAccount = lazy(() => import('@/features/moderation/SuspendedAccountPage').then(m => ({ default: m.SuspendedAccount })))
 
+// Admin Panel Modules
+const AdminHome = lazy(() => import('@/pages/admin/AdminHome'))
+const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
+const AdminCommunities = lazy(() => import('@/pages/admin/AdminCommunities'))
+const AdminEvents = lazy(() => import('@/pages/admin/AdminEvents'))
+const AdminReports = lazy(() => import('@/pages/admin/AdminReports'))
+const AdminAnalytics = lazy(() => import('@/pages/admin/AdminAnalytics'))
+const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'))
+const AdminMessages = lazy(() => import('@/pages/admin/AdminMessages'))
+
 export function AppRouter() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -440,6 +450,72 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <SuspendedAccount />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin Dashboard */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminHome />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute>
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/communities"
+          element={
+            <ProtectedRoute>
+              <AdminCommunities />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/events"
+          element={
+            <ProtectedRoute>
+              <AdminEvents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <ProtectedRoute>
+              <AdminReports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute>
+              <AdminAnalytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <ProtectedRoute>
+              <AdminSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/messages"
+          element={
+            <ProtectedRoute>
+              <AdminMessages />
             </ProtectedRoute>
           }
         />

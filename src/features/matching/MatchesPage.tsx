@@ -48,27 +48,58 @@ export function Matches() {
     const loadCandidates = async () => {
       setLoading(true)
       try {
-        const [myProfileRes, myInterestsRes, myValuesRes, profilesRes, interestsRes, valuesRes] =
-          await Promise.all([
-            supabase
-              .from('profiles')
-              .select('location_city, latitude, longitude')
-              .eq('user_id', user.id)
-              .maybeSingle(),
-            supabase.from('user_interests').select('interest_name').eq('user_id', user.id),
-            supabase.from('user_values').select('value_name').eq('user_id', user.id),
-            supabase
-              .from('profiles')
-              .select('user_id, first_name, last_name, profile_image_url, location_city, bio, looking_for')
-              .neq('user_id', user.id)
-              .eq('is_active', true)
-              .limit(20),
-            supabase.from('user_interests').select('user_id, interest_name'),
-            supabase.from('user_values').select('user_id, value_name'),
-          ])
+        const [
+          myProfileRes,
+          myInterestsRes,
+          myValuesRes,
+          myCommunitiesRes,
+          profilesRes,
+          interestsRes,
+          valuesRes,
+          communityMembersRes,
+          blockedRes,
+          connectionsRes,
+        ] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('location_city, latitude, longitude, looking_for, max_distance_km')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase.from('user_interests').select('interest_name').eq('user_id', user.id),
+          supabase.from('user_values').select('value_name').eq('user_id', user.id),
+          supabase.from('community_members').select('community_id').eq('user_id', user.id),
+          supabase
+            .from('profiles')
+            .select('user_id, first_name, last_name, profile_image_url, location_city, latitude, longitude, bio, looking_for, is_verified, is_active')
+            .neq('user_id', user.id)
+            .eq('is_active', true)
+            .limit(50),
+          supabase.from('user_interests').select('user_id, interest_name'),
+          supabase.from('user_values').select('user_id, value_name'),
+          supabase.from('community_members').select('user_id, community_id'),
+          supabase
+            .from('blocked_users')
+            .select('blocked_id, blocker_id')
+            .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`),
+          supabase
+            .from('connections')
+            .select('user_id_1, user_id_2')
+            .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`),
+        ])
+
+        const blockedSet = new Set<string>()
+        ;(blockedRes.data || []).forEach((b: any) => {
+          blockedSet.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id)
+        })
+
+        const connectedSet = new Set<string>()
+        ;(connectionsRes.data || []).forEach((c: any) => {
+          connectedSet.add(c.user_id_1 === user.id ? c.user_id_2 : c.user_id_1)
+        })
 
         const myInterests = (myInterestsRes.data || []).map(r => r.interest_name)
         const myValues = (myValuesRes.data || []).map(r => r.value_name)
+        const myCommunityIds = new Set((myCommunitiesRes.data || []).map((c: any) => c.community_id))
 
         const interestMap = new Map<string, string[]>()
         ;(interestsRes.data || []).forEach((r: any) => {
@@ -82,58 +113,76 @@ export function Matches() {
           valueMap.get(r.user_id)!.push(r.value_name)
         })
 
-        const list = (profilesRes.data || []).map((p: any) => {
-          const theirInterests = interestMap.get(p.user_id) || ['Community', 'Growth']
-          const theirValues = valueMap.get(p.user_id) || ['Kindness', 'Learning']
-
-          const scored = scoreCandidateMatch({
-            candidateId: p.user_id,
-            candidateCity: p.location_city,
-            candidateInterests: theirInterests,
-            candidateValues: theirValues,
-            myCity: myProfileRes.data?.location_city,
-            myInterests,
-            myValues,
-          })
-
-          return {
-            id: p.user_id,
-            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Community Member',
-            age: 28,
-            city: p.location_city || 'Local area',
-            distance:
-              p.location_city && myProfileRes.data?.location_city === p.location_city
-                ? 'Nearby'
-                : 'In your region',
-            match: scored.score,
-            verified: true,
-            role: p.bio || 'Authentic community member',
-            interests: theirInterests,
-            values: theirValues,
-            image: p.profile_image_url || fallbackAvatar,
-          }
+        const communityMap = new Map<string, Set<string>>()
+        ;(communityMembersRes.data || []).forEach((cm: any) => {
+          if (!communityMap.has(cm.user_id)) communityMap.set(cm.user_id, new Set())
+          communityMap.get(cm.user_id)!.add(cm.community_id)
         })
+
+        const myLat = myProfileRes.data?.latitude
+        const myLon = myProfileRes.data?.longitude
+
+        const list = (profilesRes.data || [])
+          .filter((p: any) => !blockedSet.has(p.user_id) && !connectedSet.has(p.user_id))
+          .map((p: any) => {
+            const theirInterests = interestMap.get(p.user_id) || []
+            const theirValues = valueMap.get(p.user_id) || []
+            const theirCommunities = communityMap.get(p.user_id) || new Set()
+
+            let sharedCommunities = 0
+            theirCommunities.forEach(cId => {
+              if (myCommunityIds.has(cId)) sharedCommunities++
+            })
+
+            // Calculate distance
+            let distanceStr = 'Local'
+            if (myLat && myLon && p.latitude && p.longitude) {
+              const dLat = ((p.latitude - myLat) * Math.PI) / 180
+              const dLon = ((p.longitude - myLon) * Math.PI) / 180
+              const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos((myLat * Math.PI) / 180) *
+                  Math.cos((p.latitude * Math.PI) / 180) *
+                  Math.sin(dLon / 2) *
+                  Math.sin(dLon / 2)
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+              const dMiles = Math.round(3958.8 * c)
+              distanceStr = dMiles <= 1 ? '1 mi' : `${dMiles} mi`
+            } else if (p.location_city && myProfileRes.data?.location_city === p.location_city) {
+              distanceStr = 'Same city'
+            }
+
+            const scored = scoreCandidateMatch({
+              candidateId: p.user_id,
+              candidateCity: p.location_city,
+              candidateInterests: theirInterests,
+              candidateValues: theirValues,
+              candidateGoal: p.looking_for,
+              candidateTrust: p.is_verified ? 5 : 2,
+              myCity: myProfileRes.data?.location_city,
+              myInterests,
+              myValues,
+              myGoal: myProfileRes.data?.looking_for,
+              sharedCommunities,
+            })
+
+            return {
+              id: p.user_id,
+              name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Community Member',
+              age: 28,
+              city: p.location_city || 'Local area',
+              distance: distanceStr,
+              match: scored.score,
+              verified: Boolean(p.is_verified),
+              role: p.bio || 'Authentic community member',
+              interests: theirInterests,
+              values: theirValues,
+              image: p.profile_image_url || fallbackAvatar,
+            }
+          })
 
         // Sort by match score
         list.sort((a, b) => b.match - a.match)
-
-        // Seed realistic candidates if DB is currently sparse
-        if (list.length === 0) {
-          list.push({
-            id: 'maya',
-            name: 'Maya Patel',
-            age: 28,
-            city: 'Austin, Texas',
-            distance: '1.2 mi',
-            match: 94,
-            verified: true,
-            role: 'Community builder, nature lover and lifelong learner.',
-            interests: ['Hiking', 'Books', 'Mindfulness', 'Travel'],
-            values: ['Kindness', 'Growth', 'Community', 'Honesty'],
-            image:
-              'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85',
-          })
-        }
 
         setCandidates(list)
       } catch (err: any) {
