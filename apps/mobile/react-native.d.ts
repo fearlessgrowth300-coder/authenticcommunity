@@ -177,8 +177,18 @@ declare module 'react-native' {
   }
   export const ActivityIndicator: React.FC<ActivityIndicatorProps>
 
+  export interface TouchableWithoutFeedbackProps extends ViewProps {
+    onPress?: () => void
+  }
+  export const TouchableWithoutFeedback: React.FC<TouchableWithoutFeedbackProps>
+
+  export const Dimensions: {
+    get: (dim: 'window' | 'screen') => { width: number; height: number; scale: number; fontScale: number }
+  }
+
   export const StyleSheet: {
     create: <T extends Record<string, any>>(styles: T) => T
+    absoluteFillObject: ViewStyle
   }
 
   export const Platform: {
@@ -394,4 +404,34 @@ declare module 'lucide-react-native' {
   export const Edit3: React.FC<IconProps>
   export const UserPlus: React.FC<IconProps>
   export const UserCheck: React.FC<IconProps>
+  export const House: React.FC<IconProps>
+  export const User: React.FC<IconProps>
+  export const UserRound: React.FC<IconProps>
+  export const Crown: React.FC<IconProps>
+  export const CircleHelp: React.FC<IconProps>
+  export const Info: React.FC<IconProps>
+  export const BadgeCheck: React.FC<IconProps>
+  export const MailCheck: React.FC<IconProps>
+  export const RefreshCw: React.FC<IconProps>
+  export const ChevronLeft: React.FC<IconProps>
+  export const LocateFixed: React.FC<IconProps>
+  export const Video: React.FC<IconProps>
+  export const Flame: React.FC<IconProps>
+  export const Globe: React.FC<IconProps>
+  export const Lock: React.FC<IconProps>
+  export const ShieldCheck: React.FC<IconProps>
+  export const CheckCircle2: React.FC<IconProps>
+  export const FileText: React.FC<IconProps>
+  export const Volume2: React.FC<IconProps>
+  export const VolumeX: React.FC<IconProps>
+  export const Play: React.FC<IconProps>
+  export const Pause: React.FC<IconProps>
+  export const Eye: React.FC<IconProps>
+  export const EyeOff: React.FC<IconProps>
+  export const Trash2: React.FC<IconProps>
+  export const Flag: React.FC<IconProps>
+  export const Ban: React.FC<IconProps>
+  export const HelpCircle: React.FC<IconProps>
+  export const Hash: React.FC<IconProps>
+  export const UserX: React.FC<IconProps>
 }

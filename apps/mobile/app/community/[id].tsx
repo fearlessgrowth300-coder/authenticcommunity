@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  TextInput,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -12,285 +13,348 @@ import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
+import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+import { PostCard, PostItem } from '@/components/feed/PostCard'
+import { EventCard, EventItem } from '@/components/events/EventCard'
 import {
   ArrowLeft,
   Share2,
   MoreHorizontal,
-  ShieldCheck,
-  Heart,
-  MapPin,
-  Globe,
-  Calendar,
   Users,
+  ShieldCheck,
+  Calendar,
   MessageSquare,
+  Lock,
+  Globe,
+  Settings,
+  Plus,
+  Hash,
 } from 'lucide-react-native'
 
-const SUB_TABS = ['About', 'Chat', 'Events', 'Members']
+const COMMUNITY_TABS = ['Feed', 'Chat', 'Events', 'Members', 'About'] as const
+type CommunityTab = (typeof COMMUNITY_TABS)[number]
+
+const COMMUNITY_CHANNELS = [
+  'general',
+  'introductions',
+  'events',
+  'opportunities',
+  'resources',
+  'off-topic',
+]
+
+const SAMPLE_POST: PostItem = {
+  id: 'cp-1',
+  authorId: 'maya-patel',
+  authorName: 'Maya Patel (Admin)',
+  authorAvatar:
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+  isVerified: true,
+  location: 'Lagos Creators Hub',
+  topic: 'Announcement',
+  timeAgo: '1h ago',
+  text: '📌 Welcome all new members to Lagos Creators & Builders! Check out the #introductions channel to say hello and share what you are working on!',
+  likesCount: 42,
+  commentsCount: 15,
+  isLiked: true,
+  isSaved: true,
+  isFollowing: true,
+}
+
+const SAMPLE_EVENT: EventItem = {
+  id: 'e2',
+  title: 'Tech Founders Coffee & Hike',
+  host: 'Lagos Creators & Builders',
+  dateMonth: 'JUN',
+  dateDay: '16',
+  dateDayOfWeek: 'SUN',
+  dateTimeFormatted: 'Sun, Jun 16 · 9:00 AM',
+  distance: '1.4 km away',
+  imageUrl:
+    'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&fit=crop&q=80',
+  attendeesCount: 28,
+}
 
 export default function CommunityDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const [activeTab, setActiveTab] = useState('About')
+  const [activeTab, setActiveTab] = useState<CommunityTab>('Feed')
   const [isJoined, setIsJoined] = useState(false)
-  const [isLiked, setIsLiked] = useState(false)
+  const [activeChannel, setActiveChannel] = useState('general')
 
-  // Demo community data matching Sunrise Hikers Austin in reference Screen 2
   const community = {
-    name: 'Sunrise Hikers Austin',
-    membersCount: 320,
-    isTrusted: true,
-    tags: ['Outdoors', 'Local', 'Active'],
-    heroImage:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&fit=crop&q=80',
+    name: 'Lagos Creators & Builders',
+    membersCount: 420,
+    onlineCount: 38,
+    type: 'Hybrid (Local & Online)',
+    privacy: 'Public',
+    category: 'Design & Technology',
+    coverImage:
+      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=900&fit=crop&q=80',
+    avatarUrl:
+      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=200&fit=crop&q=80',
     description:
-      "We're a welcoming group that loves exploring Austin's trails, staying active, and giving back to our beautiful city. All experience levels welcome!",
-    location: 'Austin, Texas, USA',
-    distance: '2.4 miles away',
-    privacy: 'Public Community · Anyone can find and join',
-    creator: {
-      name: 'Sarah M.',
-      joinedDate: 'Member since May 2023',
-      avatarUrl:
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    },
-    upcomingEvent: {
-      title: 'Sunrise Hike at Mount Bonnell',
-      date: 'Sat, May 18 · 7:00 AM',
-      location: 'Mount Bonnell, Austin',
-      attendees: 24,
-      imageUrl:
-        'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=300&fit=crop&q=80',
-    },
+      'A collaborative collective of software engineers, designers, startup founders, and creative technologists based in Lagos building world-class products and lifelong friendships.',
+    rules: [
+      'Be respectful, inclusive, and constructive.',
+      'No unsolicited spam or hard selling.',
+      'Help each other grow through knowledge sharing.',
+    ],
+    creatorName: 'Maya Patel',
+    createdDate: 'January 2026',
+    isAdmin: true,
   }
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Cover Image & Header Navigation */}
+        {/* Cover Image & Header */}
         <View style={styles.heroContainer}>
-          <Image source={{ uri: community.heroImage }} style={styles.heroImage} />
-          <SafeAreaView style={styles.heroOverlayNav}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.navCircleButton}
-            >
+          <Image source={{ uri: community.coverImage }} style={styles.coverImage} />
+          <View style={styles.heroOverlay} />
+
+          <SafeAreaView style={styles.heroNav}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.navCircleBtn}>
               <ArrowLeft color="#FFFFFF" size={20} />
             </TouchableOpacity>
 
-            <View style={styles.rightNavButtons}>
-              <TouchableOpacity style={styles.navCircleButton}>
+            <View style={styles.heroRightActions}>
+              <TouchableOpacity style={styles.navCircleBtn}>
                 <Share2 color="#FFFFFF" size={18} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.navCircleButton}>
-                <MoreHorizontal color="#FFFFFF" size={18} />
-              </TouchableOpacity>
+              {community.isAdmin && (
+                <TouchableOpacity
+                  onPress={() => router.push(`/community/admin/${id}`)}
+                  style={styles.navCircleBtn}
+                  accessibilityLabel="Community Admin"
+                >
+                  <Settings color="#FFFFFF" size={18} />
+                </TouchableOpacity>
+              )}
             </View>
           </SafeAreaView>
         </View>
 
-        {/* Community Info Header */}
+        {/* Community Info Card */}
         <View style={styles.infoCard}>
+          <View style={styles.avatarRow}>
+            <Image source={{ uri: community.avatarUrl }} style={styles.communityAvatar} />
+            <View style={styles.trustBadgeWrap}>
+              <ShieldCheck color={Colors.primary} size={16} />
+              <AppText variant="caption" weight="bold" color={Colors.primary}>
+                Trusted Space
+              </AppText>
+            </View>
+          </View>
+
           <AppText variant="h1" weight="bold">
             {community.name}
           </AppText>
 
           <View style={styles.metaRow}>
-            <AppText variant="bodySm" color={Colors.textSecondary}>
-              {community.membersCount} members
+            <AppText variant="caption" color={Colors.textSecondary}>
+              {community.membersCount} members · {community.onlineCount} online · {community.type}
             </AppText>
-            {community.isTrusted && (
-              <View style={styles.trustedBadge}>
-                <ShieldCheck color="#166534" size={14} />
-                <AppText variant="caption" weight="bold" color="#166534" style={styles.trustedLabel}>
-                  Trusted Community
-                </AppText>
-              </View>
-            )}
           </View>
 
-          {/* Tags */}
-          <View style={styles.tagsRow}>
-            {community.tags.map((tag, idx) => (
-              <View key={idx} style={styles.tagPill}>
-                <AppText variant="caption" color={Colors.textSecondary}>
-                  {tag}
-                </AppText>
-              </View>
-            ))}
-          </View>
-
-          {/* Action Row */}
+          {/* Action Buttons: Join, Invite, Share */}
           <View style={styles.actionRow}>
             <AppButton
               title={isJoined ? 'Joined ✓' : 'Join Community'}
+              variant={isJoined ? 'secondary' : 'primary'}
               onPress={() => setIsJoined(!isJoined)}
-              style={[styles.joinButton, isJoined ? styles.joinButtonActive : null]}
+              style={styles.joinBtn}
             />
-            <TouchableOpacity
-              onPress={() => setIsLiked(!isLiked)}
-              style={[styles.heartButton, isLiked ? styles.heartButtonActive : null]}
-            >
-              <Heart
-                color={isLiked ? '#EF4444' : Colors.textMuted}
-                fill={isLiked ? '#EF4444' : 'transparent'}
-                size={22}
-              />
+            <TouchableOpacity style={styles.iconBtn}>
+              <Share2 color={Colors.text} size={18} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Sub-Tabs Bar */}
-        <View style={styles.subTabsContainer}>
-          {SUB_TABS.map((tab) => {
-            const isSelected = activeTab === tab
-            return (
-              <TouchableOpacity
-                key={tab}
-                onPress={() => setActiveTab(tab)}
-                style={[
-                  styles.subTabItem,
-                  isSelected ? styles.subTabItemActive : null,
-                ]}
-              >
-                <AppText
-                  variant="bodySm"
-                  weight={isSelected ? 'bold' : 'medium'}
-                  color={isSelected ? Colors.primary : Colors.textSecondary}
+        {/* 5 Sub-Tabs (Feed, Chat, Events, Members, About) */}
+        <View style={styles.tabsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContainer}
+          >
+            {COMMUNITY_TABS.map((tab) => {
+              const isSelected = activeTab === tab
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  onPress={() => setActiveTab(tab)}
+                  style={[
+                    styles.tabItem,
+                    isSelected ? styles.tabItemActive : null,
+                  ]}
                 >
-                  {tab}
-                </AppText>
-              </TouchableOpacity>
-            )
-          })}
+                  <AppText
+                    variant="bodySm"
+                    weight={isSelected ? 'bold' : 'medium'}
+                    color={isSelected ? Colors.primary : Colors.textSecondary}
+                  >
+                    {tab}
+                  </AppText>
+                  {isSelected && <View style={styles.activeTabUnderline} />}
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
         </View>
 
-        {/* Tab 1: About Content */}
-        {activeTab === 'About' && (
+        {/* Tab Views */}
+        {activeTab === 'Feed' && (
           <View style={styles.tabContent}>
-            {/* Description */}
-            <AppText variant="body" color={Colors.text} style={styles.descriptionText}>
-              {community.description}
-            </AppText>
-
-            {/* Info List */}
-            <View style={styles.infoList}>
-              <View style={styles.infoItem}>
-                <MapPin color={Colors.textMuted} size={18} />
-                <View style={styles.infoItemContent}>
-                  <AppText variant="bodySm" weight="medium">
-                    {community.location}
-                  </AppText>
-                  <AppText variant="caption" color={Colors.textSecondary}>
-                    {community.distance}
-                  </AppText>
-                </View>
-              </View>
-
-              <View style={styles.infoItem}>
-                <Globe color={Colors.textMuted} size={18} />
-                <View style={styles.infoItemContent}>
-                  <AppText variant="bodySm" weight="medium">
-                    Public Community
-                  </AppText>
-                  <AppText variant="caption" color={Colors.textSecondary}>
-                    Anyone can find and join
-                  </AppText>
-                </View>
-              </View>
-
-              {/* Creator Info */}
-              <View style={styles.infoItem}>
-                <Image
-                  source={{ uri: community.creator.avatarUrl }}
-                  style={styles.creatorAvatar}
-                />
-                <View style={styles.infoItemContent}>
-                  <AppText variant="bodySm" weight="medium">
-                    Created by {community.creator.name}
-                  </AppText>
-                  <AppText variant="caption" color={Colors.textSecondary}>
-                    {community.creator.joinedDate}
-                  </AppText>
-                </View>
-              </View>
-            </View>
-
-            {/* Upcoming Event */}
-            <View style={styles.upcomingEventSection}>
-              <AppText variant="label" weight="semibold" style={styles.sectionHeading}>
-                Upcoming Event
+            {/* Compose Box */}
+            <TouchableOpacity
+              onPress={() => router.push('/post/create')}
+              style={styles.composeBox}
+            >
+              <Image source={{ uri: community.avatarUrl }} style={styles.composeAvatar} />
+              <AppText variant="bodySm" color={Colors.textMuted}>
+                Share with the community...
               </AppText>
-              <Card style={styles.eventCard}>
-                <Image
-                  source={{ uri: community.upcomingEvent.imageUrl }}
-                  style={styles.eventThumbnail}
-                />
-                <View style={styles.eventInfo}>
-                  <AppText variant="bodySm" weight="bold" numberOfLines={1}>
-                    {community.upcomingEvent.title}
+            </TouchableOpacity>
+
+            <PostCard post={SAMPLE_POST} />
+          </View>
+        )}
+
+        {activeTab === 'Chat' && (
+          <View style={styles.tabContent}>
+            {/* Channels Bar */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.channelsBar}
+            >
+              {COMMUNITY_CHANNELS.map((ch) => (
+                <TouchableOpacity
+                  key={ch}
+                  onPress={() => setActiveChannel(ch)}
+                  style={[
+                    styles.channelChip,
+                    activeChannel === ch ? styles.channelChipActive : null,
+                  ]}
+                >
+                  <Hash color={activeChannel === ch ? '#FFFFFF' : Colors.textSecondary} size={14} />
+                  <AppText
+                    variant="caption"
+                    weight={activeChannel === ch ? 'bold' : 'normal'}
+                    color={activeChannel === ch ? '#FFFFFF' : Colors.text}
+                  >
+                    {ch}
                   </AppText>
-                  <AppText variant="caption" color={Colors.textSecondary}>
-                    {community.upcomingEvent.date}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Card style={styles.chatShortcutCard}>
+              <View style={styles.chatShortcutInfo}>
+                <AppText variant="bodySm" weight="bold">
+                  #{activeChannel} Channel
+                </AppText>
+                <AppText variant="caption" color={Colors.textSecondary}>
+                  Tap below to open full real-time group chat
+                </AppText>
+              </View>
+              <AppButton
+                title="Open Chat"
+                size="sm"
+                onPress={() => router.push(`/community-chat/${id}`)}
+              />
+            </Card>
+          </View>
+        )}
+
+        {activeTab === 'Events' && (
+          <View style={styles.tabContent}>
+            <View style={styles.eventsHeader}>
+              <AppText variant="bodySm" weight="bold">
+                Upcoming Community Events
+              </AppText>
+              <TouchableOpacity onPress={() => router.push('/event/create')}>
+                <AppText variant="caption" weight="bold" color={Colors.primary}>
+                  + Host Event
+                </AppText>
+              </TouchableOpacity>
+            </View>
+            <EventCard event={SAMPLE_EVENT} onPress={() => router.push('/event/e2')} />
+          </View>
+        )}
+
+        {activeTab === 'Members' && (
+          <View style={styles.tabContent}>
+            <Card style={styles.memberCard}>
+              <Image
+                source={{
+                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                }}
+                style={styles.memberAvatar}
+              />
+              <View style={styles.memberInfo}>
+                <View style={styles.memberNameRow}>
+                  <AppText variant="bodySm" weight="bold">
+                    Maya Patel
                   </AppText>
-                  <AppText variant="caption" color={Colors.textMuted}>
-                    {community.upcomingEvent.location}
-                  </AppText>
-                  <View style={styles.attendeesRow}>
-                    <Users color={Colors.textMuted} size={12} />
-                    <AppText variant="caption" color={Colors.textSecondary} style={styles.attendeesCount}>
-                      {community.upcomingEvent.attendees} going
+                  <View style={styles.adminRoleBadge}>
+                    <AppText variant="caption" weight="bold" color={Colors.primary} style={styles.adminRoleText}>
+                      Admin
                     </AppText>
                   </View>
                 </View>
-                <TouchableOpacity
-                  onPress={() => router.push('/(tabs)/events')}
-                  style={styles.viewEventButton}
-                >
-                  <AppText variant="caption" weight="bold" color={Colors.primary}>
-                    View Event
-                  </AppText>
-                </TouchableOpacity>
-              </Card>
+                <AppText variant="caption" color={Colors.textSecondary}>
+                  Product Designer · Lagos
+                </AppText>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push('/profile/maya-patel')}
+                style={styles.viewMemberBtn}
+              >
+                <AppText variant="caption" weight="bold" color={Colors.primary}>
+                  View
+                </AppText>
+              </TouchableOpacity>
+            </Card>
+          </View>
+        )}
+
+        {activeTab === 'About' && (
+          <View style={styles.aboutContainer}>
+            <View style={styles.aboutSection}>
+              <AppText variant="label" weight="bold">
+                About Community
+              </AppText>
+              <AppText variant="bodySm" color={Colors.text} style={styles.aboutText}>
+                {community.description}
+              </AppText>
             </View>
-          </View>
-        )}
 
-        {/* Tab 2: Chat */}
-        {activeTab === 'Chat' && (
-          <View style={styles.emptyTabContent}>
-            <MessageSquare color={Colors.primary} size={40} />
-            <AppText variant="body" weight="semibold" align="center" style={styles.tabMessage}>
-              Community Chat
-            </AppText>
-            <AppText variant="caption" color={Colors.textSecondary} align="center">
-              Join this community to start discussing hikes and trail meetups!
-            </AppText>
-          </View>
-        )}
+            <View style={styles.aboutSection}>
+              <AppText variant="label" weight="bold">
+                Community Rules
+              </AppText>
+              {community.rules.map((rule, idx) => (
+                <View key={idx} style={styles.ruleRow}>
+                  <AppText variant="caption" weight="bold" color={Colors.primary}>
+                    {idx + 1}.
+                  </AppText>
+                  <AppText variant="bodySm" color={Colors.textSecondary} style={styles.ruleText}>
+                    {rule}
+                  </AppText>
+                </View>
+              ))}
+            </View>
 
-        {/* Tab 3: Events */}
-        {activeTab === 'Events' && (
-          <View style={styles.emptyTabContent}>
-            <Calendar color={Colors.primary} size={40} />
-            <AppText variant="body" weight="semibold" align="center" style={styles.tabMessage}>
-              Community Events
-            </AppText>
-            <AppText variant="caption" color={Colors.textSecondary} align="center">
-              Browse upcoming weekend hikes and RSVP with fellow members.
-            </AppText>
-          </View>
-        )}
-
-        {/* Tab 4: Members */}
-        {activeTab === 'Members' && (
-          <View style={styles.emptyTabContent}>
-            <Users color={Colors.primary} size={40} />
-            <AppText variant="body" weight="semibold" align="center" style={styles.tabMessage}>
-              320 Members
-            </AppText>
-            <AppText variant="caption" color={Colors.textSecondary} align="center">
-              Connect with fellow Austin outdoor and trail enthusiasts.
-            </AppText>
+            <View style={styles.aboutSection}>
+              <AppText variant="label" weight="bold">
+                Details
+              </AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Type: {community.type} · Privacy: {community.privacy} · Created: {community.createdDate}
+              </AppText>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -304,30 +368,35 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   scrollContent: {
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.xxl,
   },
   heroContainer: {
     width: '100%',
-    height: 240,
+    height: 220,
     position: 'relative',
     backgroundColor: Colors.border,
   },
-  heroImage: {
+  coverImage: {
     width: '100%',
     height: '100%',
   },
-  heroOverlayNav: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  heroNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xs,
   },
-  navCircleButton: {
+  heroRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  navCircleBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -335,62 +404,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rightNavButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   infoCard: {
     backgroundColor: Colors.surface,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
   },
-  metaRow: {
+  avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 4,
-    marginBottom: Spacing.sm,
+    justifyContent: 'space-between',
+    marginTop: -38,
+    marginBottom: 4,
   },
-  trustedBadge: {
+  communityAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 3,
+    borderColor: Colors.surface,
+    backgroundColor: Colors.border,
+  },
+  trustBadgeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#DCFCE7',
+    backgroundColor: Colors.primaryLight,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radii.full,
-  },
-  trustedLabel: {
-    fontSize: 10,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: Spacing.md,
-  },
-  tagPill: {
-    backgroundColor: Colors.background,
-    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  },
+  metaRow: {
+    marginBottom: 4,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    marginTop: 4,
   },
-  joinButton: {
+  joinBtn: {
     flex: 1,
   },
-  joinButtonActive: {
-    backgroundColor: Colors.sage,
-  },
-  heartButton: {
-    width: 48,
-    height: 48,
+  iconBtn: {
+    width: 44,
+    height: 44,
     borderRadius: Radii.md,
     backgroundColor: Colors.background,
     borderWidth: 1,
@@ -398,97 +459,143 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heartButtonActive: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FCA5A5',
-  },
-  subTabsContainer: {
-    flexDirection: 'row',
+  tabsWrapper: {
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  subTabItem: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tabsContainer: {
+    paddingHorizontal: Spacing.lg,
+    gap: 16,
   },
-  subTabItemActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.primary,
+  tabItem: {
+    paddingVertical: 12,
+    position: 'relative',
+  },
+  tabItemActive: {},
+  activeTabUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
   },
   tabContent: {
     padding: Spacing.lg,
+    gap: Spacing.md,
   },
-  descriptionText: {
-    lineHeight: 22,
-    marginBottom: Spacing.lg,
-  },
-  infoList: {
-    gap: 14,
-    marginBottom: Spacing.xl,
-  },
-  infoItem: {
+  composeBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    backgroundColor: Colors.surface,
+    padding: 12,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  infoItemContent: {
-    flex: 1,
-  },
-  creatorAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  composeAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Colors.border,
   },
-  upcomingEventSection: {
-    marginTop: Spacing.sm,
-  },
-  sectionHeading: {
+  channelsBar: {
+    gap: 8,
     marginBottom: Spacing.sm,
   },
-  eventCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    gap: 10,
-  },
-  eventThumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: Radii.md,
-    backgroundColor: Colors.border,
-  },
-  eventInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  attendeesRow: {
+  channelChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
-  },
-  attendeesCount: {
-    fontSize: 10,
-  },
-  viewEventButton: {
+    backgroundColor: Colors.surface,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Radii.full,
     borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  channelChipActive: {
+    backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  emptyTabContent: {
-    padding: Spacing.xl,
+  chatShortcutCard: {
+    padding: Spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 30,
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  tabMessage: {
-    marginTop: 8,
+  chatShortcutInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  eventsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  memberCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.border,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  adminRoleBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radii.full,
+  },
+  adminRoleText: {
+    fontSize: 9,
+  },
+  viewMemberBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  aboutContainer: {
+    padding: Spacing.lg,
+    gap: Spacing.lg,
+  },
+  aboutSection: {
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 6,
+  },
+  aboutText: {
+    lineHeight: 20,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginVertical: 2,
+  },
+  ruleText: {
+    flex: 1,
+    lineHeight: 18,
   },
 })
