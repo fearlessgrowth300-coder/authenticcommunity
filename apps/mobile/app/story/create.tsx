@@ -25,6 +25,7 @@ import {
 export default function CreateStoryScreen() {
   const router = useRouter()
   const [photoUri, setPhotoUri] = useState<string | null>(null)
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
   const [uploading, setUploading] = useState(false)
 
@@ -34,9 +35,11 @@ export default function CreateStoryScreen() {
       allowsEditing: true,
       aspect: [9, 16],
       quality: 0.85,
+      base64: true,
     })
     if (!res.canceled && res.assets[0]) {
       setPhotoUri(res.assets[0].uri)
+      setPhotoBase64((res.assets[0] as any)?.base64 || null)
     }
   }
 
@@ -48,6 +51,7 @@ export default function CreateStoryScreen() {
       const uploadRes = await uploadMediaFile({
         bucket: 'stories',
         localUri: photoUri,
+        base64: photoBase64,
         type: 'image',
       })
 

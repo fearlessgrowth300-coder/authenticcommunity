@@ -10,15 +10,30 @@ const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
 const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024 // 50MB
 
 /**
- * Upload an image file or URI to Supabase Storage ('post_media' or 'stories' bucket).
+ * Base64 string to ArrayBuffer helper for React Native
+ */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64)
+  const len = binaryString.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
+/**
+ * Upload an image or video file to Supabase Storage.
+ * Uses 'community-posts' bucket for post media, 'stories' for stories, 'avatars' for profile pictures.
  */
 export async function uploadMediaFile(params: {
-  bucket: 'post_media' | 'stories' | 'avatars' | 'events'
+  bucket?: 'community-posts' | 'stories' | 'avatars' | 'event-photos'
   localUri: string
+  base64?: string | null
   type: 'image' | 'video'
   mimeType?: string
 }): Promise<UploadResult> {
-  const { bucket, localUri, type, mimeType } = params
+  const { bucket = 'community-posts', localUri, base64, type, mimeType } = params
 
   try {
     const { data: auth } = await supabase.auth.getUser()
@@ -30,27 +45,43 @@ export async function uploadMediaFile(params: {
     const cleanMime = mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg')
     const fileName = `${auth.user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`
 
-    // Fetch local file as blob/arrayBuffer in React Native / Expo
-    const response = await fetch(localUri)
-    const blob = await response.blob()
+    let fileBody: any
 
-    // Validate size
-    if (type === 'image' && blob.size > MAX_IMAGE_SIZE_BYTES) {
-      return { url: '', path: '', error: new Error('Image exceeds 10MB limit.') }
-    }
-    if (type === 'video' && blob.size > MAX_VIDEO_SIZE_BYTES) {
-      return { url: '', path: '', error: new Error('Video exceeds 50MB limit.') }
+    if (base64) {
+      fileBody = base64ToArrayBuffer(base64)
+    } else {
+      // In React Native / Expo, FormData is the most reliable native multipart upload method
+      const formData = new FormData()
+      formData.append('file', {
+        uri: localUri,
+        name: fileName.split('/').pop() || `media.${ext}`,
+        type: cleanMime,
+      } as any)
+      fileBody = formData
     }
 
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(fileName, blob, {
+      .upload(fileName, fileBody, {
         contentType: cleanMime,
-        upsert: false,
+        upsert: true,
       })
 
     if (uploadError) {
-      return { url: '', path: '', error: uploadError }
+      // If error occurred with FormData, try fetch arrayBuffer fallback
+      try {
+        const fetchRes = await fetch(localUri)
+        const arrayBuf = await fetchRes.arrayBuffer()
+        const retry = await supabase.storage
+          .from(bucket)
+          .upload(fileName, arrayBuf, {
+            contentType: cleanMime,
+            upsert: true,
+          })
+        if (retry.error) throw retry.error
+      } catch (retryErr: any) {
+        return { url: '', path: '', error: new Error(uploadError.message || retryErr.message) }
+      }
     }
 
     const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fileName)

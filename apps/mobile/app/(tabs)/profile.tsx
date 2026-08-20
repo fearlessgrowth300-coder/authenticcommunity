@@ -17,6 +17,8 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+import { PostCard } from '@/components/feed/PostCard'
+import { MobilePostItem } from '@/services/feed'
 import {
   MapPin,
   LogOut,
@@ -34,6 +36,7 @@ export default function ProfileScreen() {
   const router = useRouter()
   const { user, profile, signOut } = useAuth()
   const [refreshing, setRefreshing] = useState(false)
+  const [userPosts, setUserPosts] = useState<MobilePostItem[]>([])
   const [stats, setStats] = useState<SocialProfileStats>({
     followersCount: 142,
     followingCount: 89,
@@ -58,9 +61,16 @@ export default function ProfileScreen() {
       const socialStats = await getProfileSocialStats(user.id)
       setStats(socialStats)
 
-      const [intRes, valRes] = await Promise.all([
+      const [intRes, valRes, postsRes] = await Promise.all([
         supabase.from('user_interests').select('interest_name').eq('user_id', user.id),
         supabase.from('user_values').select('value_name').eq('user_id', user.id),
+        (supabase as any)
+          .from('posts')
+          .select('id, user_id, content, visibility, location_label, interest_tags, created_at, status')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(20),
       ])
 
       if (intRes.data && intRes.data.length > 0) {
@@ -68,6 +78,57 @@ export default function ProfileScreen() {
       }
       if (valRes.data && valRes.data.length > 0) {
         setValues(valRes.data.map((v) => v.value_name))
+      }
+
+      if (postsRes.data && postsRes.data.length > 0) {
+        const postIds = postsRes.data.map((p: any) => p.id)
+        const [mediaRes, likesRes, commentsRes] = await Promise.all([
+          (supabase as any).from('post_media').select('post_id, media_url, media_type').in('post_id', postIds),
+          (supabase as any).from('post_likes').select('post_id').in('post_id', postIds),
+          (supabase as any).from('post_comments').select('post_id').in('post_id', postIds),
+        ])
+
+        const mediaMap = new Map<string, { images: string[]; videoUrl?: string }>()
+        ;(mediaRes.data || []).forEach((m: any) => {
+          if (!mediaMap.has(m.post_id)) mediaMap.set(m.post_id, { images: [] })
+          if (m.media_type === 'video') mediaMap.get(m.post_id)!.videoUrl = m.media_url
+          else mediaMap.get(m.post_id)!.images.push(m.media_url)
+        })
+
+        const likesMap = new Map<string, number>()
+        ;(likesRes.data || []).forEach((l: any) => {
+          likesMap.set(l.post_id, (likesMap.get(l.post_id) || 0) + 1)
+        })
+
+        const commentsMap = new Map<string, number>()
+        ;(commentsRes.data || []).forEach((c: any) => {
+          commentsMap.set(c.post_id, (commentsMap.get(c.post_id) || 0) + 1)
+        })
+
+        const mapped: MobilePostItem[] = postsRes.data.map((p: any) => {
+          const m = mediaMap.get(p.id)
+          return {
+            id: p.id,
+            authorId: user.id,
+            authorName: `${profile?.first_name || 'You'} ${profile?.last_name || ''}`.trim(),
+            authorAvatar: profile?.profile_image_url || null,
+            isVerified: Boolean(profile?.is_verified),
+            location: p.location_label || profile?.location_city || 'Local',
+            topic: (p.interest_tags && p.interest_tags[0]) || 'General',
+            timeAgo: 'Recently',
+            text: p.content || '',
+            images: m?.images || [],
+            videoUrl: m?.videoUrl,
+            likesCount: likesMap.get(p.id) || 0,
+            commentsCount: commentsMap.get(p.id) || 0,
+            isLiked: false,
+            isSaved: false,
+            isFollowing: true,
+          }
+        })
+        setUserPosts(mapped)
+      } else {
+        setUserPosts([])
       }
     } catch {
       // Graceful fallback
@@ -275,6 +336,36 @@ export default function ProfileScreen() {
           </Card>
         </View>
 
+        {/* My Posts Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
+              My Posts ({userPosts.length})
+            </AppText>
+            <TouchableOpacity onPress={() => router.push('/post/create')}>
+              <AppText variant="caption" weight="bold" color={Colors.primary}>
+                + New Post
+              </AppText>
+            </TouchableOpacity>
+          </View>
+
+          {userPosts.length === 0 ? (
+            <Card style={styles.emptyPostsCard}>
+              <AppText variant="caption" color={Colors.textSecondary} align="center">
+                You haven't posted anything yet. Share your first update!
+              </AppText>
+            </Card>
+          ) : (
+            userPosts.map((p) => (
+              <PostCard
+                key={p.id}
+                post={p}
+                onPostDismissed={(id) => setUserPosts((prev) => prev.filter((item) => item.id !== id))}
+              />
+            ))
+          )}
+        </View>
+
         {/* Log Out Action */}
         <View style={styles.logoutSection}>
           <AppButton
@@ -430,6 +521,16 @@ const styles = StyleSheet.create({
   },
   trustHeaderText: {
     flex: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  emptyPostsCard: {
+    padding: Spacing.lg,
+    backgroundColor: Colors.surface,
   },
   logoutSection: {
     marginTop: Spacing.md,

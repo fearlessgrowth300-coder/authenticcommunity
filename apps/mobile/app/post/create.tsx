@@ -50,6 +50,7 @@ export default function CreatePostScreen() {
 
   const [text, setText] = useState('')
   const [mediaUri, setMediaUri] = useState<string | null>(null)
+  const [mediaBase64, setMediaBase64] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<'photo' | 'video'>('photo')
   const [selectedAudience, setSelectedAudience] = useState(AUDIENCES[0])
   const [audienceModalVisible, setAudienceModalVisible] = useState(false)
@@ -63,9 +64,11 @@ export default function CreatePostScreen() {
       mediaTypes: mediaTypeToPick === 'photo' ? ['images'] : ['videos'],
       allowsEditing: true,
       quality: 0.85,
+      base64: mediaTypeToPick === 'photo',
     })
     if (!res.canceled && res.assets[0]) {
       setMediaUri(res.assets[0].uri)
+      setMediaBase64((res.assets[0] as any)?.base64 || null)
       setMediaType(mediaTypeToPick)
     }
   }
@@ -80,8 +83,9 @@ export default function CreatePostScreen() {
       // Upload media to storage bucket if attached
       if (mediaUri) {
         const uploadRes = await uploadMediaFile({
-          bucket: 'post_media',
+          bucket: 'community-posts',
           localUri: mediaUri,
+          base64: mediaBase64,
           type: mediaType === 'video' ? 'video' : 'image',
         })
         if (uploadRes.error) {

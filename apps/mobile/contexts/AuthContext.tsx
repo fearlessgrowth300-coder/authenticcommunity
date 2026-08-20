@@ -206,7 +206,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isOnboarded = useMemo(() => {
     if (!profile) return false
-    return Boolean(profile.first_name && profile.location_city && profile.age)
+    return Boolean(
+      (profile as any).onboarding_completed === true ||
+      Boolean(profile.first_name && (profile.location_city || profile.bio))
+    )
   }, [profile])
 
   const isSuspended = useMemo(() => {

@@ -155,7 +155,7 @@ export async function fetchFeedPosts(params: {
     authorIds.length > 0
       ? (supabase as any)
           .from('profiles')
-          .select('user_id, first_name, last_name, profile_image_url, location_city, location_country, is_verified, is_active, account_status')
+          .select('id, user_id, first_name, last_name, profile_image_url, location_city, location_country, is_verified, is_active, account_status')
           .in('user_id', authorIds)
       : Promise.resolve({ data: [] }),
     currentUserId
@@ -182,7 +182,8 @@ export async function fetchFeedPosts(params: {
   const authorMap = new Map<string, any>()
   ;(authorsRes.data || []).forEach((a: any) => {
     if (a.is_active !== false && a.account_status !== 'suspended') {
-      authorMap.set(a.user_id, a)
+      if (a.user_id) authorMap.set(a.user_id, a)
+      if (a.id) authorMap.set(a.id, a)
     }
   })
 
@@ -197,10 +198,12 @@ export async function fetchFeedPosts(params: {
   const posts: MobilePostItem[] = []
 
   for (const post of filteredPosts) {
-    const author = authorMap.get(post.user_id)
-    if (!author) continue
+    const isMe = Boolean(currentUserId && post.user_id === currentUserId)
+    const author = authorMap.get(post.user_id) || (isMe ? myProfile : null) || {}
 
-    const authorName = `${author.first_name || ''} ${author.last_name || ''}`.trim() || 'Member'
+    const authorName =
+      `${author.first_name || ''} ${author.last_name || ''}`.trim() ||
+      (isMe ? 'You' : 'Community Member')
     const postMedia = mediaMap.get(post.id)
     const isLiked = myLikedPostIds.has(post.id)
     const isSaved = mySavedPostIds.has(post.id)
@@ -216,10 +219,10 @@ export async function fetchFeedPosts(params: {
     const isSameCity = Boolean(myProfile?.location_city && myProfile.location_city.toLowerCase() === postCity.toLowerCase())
 
     // Score for geographic ordering
-    const score = (isSameCity ? 50 : 0) + (isFollowing ? 30 : 0)
+    const score = (isMe ? 100 : 0) + (isSameCity ? 50 : 0) + (isFollowing ? 30 : 0)
 
-    // Filter Nearby stream strictly by local proximity
-    if (stream === 'Nearby' && !isSameCity) {
+    // Filter Nearby stream strictly by local proximity (or author's own posts)
+    if (stream === 'Nearby' && !isSameCity && !isMe) {
       continue
     }
 
@@ -239,7 +242,7 @@ export async function fetchFeedPosts(params: {
       commentsCount: commentCountMap.get(post.id) || 0,
       isLiked,
       isSaved,
-      isFollowing,
+      isFollowing: isMe ? true : isFollowing,
       score,
     })
   }
