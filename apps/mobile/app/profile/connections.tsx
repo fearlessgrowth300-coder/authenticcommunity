@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -7,196 +7,120 @@ import {
   TouchableOpacity,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
-import { AppButton } from '@/components/primitives/AppButton'
+import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import {
   ArrowLeft,
   Search,
   MessageCircle,
-  Check,
-  X,
   Users,
 } from 'lucide-react-native'
 
 interface ConnectionItem {
   id: string
   name: string
-  avatarUrl: string
+  avatarUrl: string | null
   city: string
   isVerified: boolean
-  connectedDate: string
 }
-
-interface ConnectionRequestItem {
-  id: string
-  name: string
-  avatarUrl: string
-  city: string
-  isVerified: boolean
-  type: 'incoming' | 'outgoing'
-  time: string
-}
-
-const SAMPLE_CONNECTIONS: ConnectionItem[] = [
-  {
-    id: 'c1',
-    name: 'Maya Patel',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: true,
-    connectedDate: 'Connected May 2026',
-  },
-  {
-    id: 'c2',
-    name: 'David Chen',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: false,
-    connectedDate: 'Connected Apr 2026',
-  },
-]
-
-const SAMPLE_REQUESTS: ConnectionRequestItem[] = [
-  {
-    id: 'r1',
-    name: 'Marcus Brody',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: false,
-    type: 'incoming',
-    time: '2h ago',
-  },
-  {
-    id: 'r2',
-    name: 'Elena Rostova',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    city: 'Round Rock, TX',
-    isVerified: true,
-    type: 'outgoing',
-    time: '1d ago',
-  },
-]
 
 export default function ConnectionsScreen() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'connected' | 'requests'>('connected')
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
-  const [connections, setConnections] = useState<ConnectionItem[]>(SAMPLE_CONNECTIONS)
-  const [requests, setRequests] = useState<ConnectionRequestItem[]>(SAMPLE_REQUESTS)
+  const [connections, setConnections] = useState<ConnectionItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  const loadConnections = async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      const { data: conns } = await supabase
+        .from('connections')
+        .select('user_id_1, user_id_2')
+        .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`)
+
+      if (conns && conns.length > 0) {
+        const partnerIds = conns.map((c: any) =>
+          c.user_id_1 === user.id ? c.user_id_2 : c.user_id_1
+        )
+        const { data: profs } = await (supabase as any)
+          .from('profiles')
+          .select('user_id, first_name, last_name, profile_image_url, location_city, is_verified')
+          .in('user_id', partnerIds)
+
+        if (profs) {
+          setConnections(
+            profs.map((p: any) => ({
+              id: p.user_id,
+              name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Community Member',
+              avatarUrl: p.profile_image_url || null,
+              city: p.location_city || 'Local area',
+              isVerified: Boolean(p.is_verified),
+            }))
+          )
+        }
+      } else {
+        setConnections([])
+      }
+    } catch {
+      setConnections([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadConnections()
+  }, [user])
 
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 500)
+    await loadConnections()
+    setRefreshing(false)
   }
 
-  const handleAccept = (req: ConnectionRequestItem) => {
-    setRequests((prev) => prev.filter((r) => r.id !== req.id))
-    setConnections((prev) => [
-      ...prev,
-      {
-        id: req.id,
-        name: req.name,
-        avatarUrl: req.avatarUrl,
-        city: req.city,
-        isVerified: req.isVerified,
-        connectedDate: 'Connected just now',
-      },
-    ])
-  }
-
-  const handleDecline = (id: string) => {
-    setRequests((prev) => prev.filter((r) => r.id !== id))
-  }
-
-  const handleRemoveConnection = (id: string) => {
-    setConnections((prev) => prev.filter((c) => c.id !== id))
-  }
-
-  const filteredConnections = connections.filter(
-    (c) =>
+  const filtered = connections.filter(
+    (item) =>
       searchQuery.trim() === '' ||
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.city.toLowerCase().includes(searchQuery.toLowerCase())
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.city.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  const incomingRequests = requests.filter((r) => r.type === 'incoming')
-  const outgoingRequests = requests.filter((r) => r.type === 'outgoing')
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft color={Colors.text} size={22} />
         </TouchableOpacity>
         <AppText variant="h3" weight="bold">
-          Connections
+          Connections ({connections.length})
         </AppText>
-        <View style={styles.placeholder} />
+        <View style={styles.headerRightPlaceholder} />
       </View>
 
-      {/* Segmented Control */}
-      <View style={styles.tabBarWrapper}>
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            onPress={() => setActiveTab('connected')}
-            style={[
-              styles.tabBtn,
-              activeTab === 'connected' ? styles.tabBtnActive : null,
-            ]}
-          >
-            <AppText
-              variant="bodySm"
-              weight={activeTab === 'connected' ? 'bold' : 'medium'}
-              color={activeTab === 'connected' ? Colors.surface : Colors.textSecondary}
-            >
-              Connected ({connections.length})
-            </AppText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setActiveTab('requests')}
-            style={[
-              styles.tabBtn,
-              activeTab === 'requests' ? styles.tabBtnActive : null,
-            ]}
-          >
-            <AppText
-              variant="bodySm"
-              weight={activeTab === 'requests' ? 'bold' : 'medium'}
-              color={activeTab === 'requests' ? Colors.surface : Colors.textSecondary}
-            >
-              Requests ({requests.length})
-            </AppText>
-          </TouchableOpacity>
+      <View style={styles.searchSection}>
+        <View style={styles.searchBar}>
+          <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search connections..."
+            placeholderTextColor={Colors.textMuted}
+            style={styles.searchInput}
+          />
         </View>
       </View>
 
-      {/* Search when on connected tab */}
-      {activeTab === 'connected' && (
-        <View style={styles.searchSection}>
-          <View style={styles.searchBar}>
-            <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search connections"
-              placeholderTextColor={Colors.textMuted}
-              style={styles.searchInput}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* Content */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -207,140 +131,62 @@ export default function ConnectionsScreen() {
           />
         }
       >
-        {activeTab === 'connected' ? (
-          /* Active Connections List */
-          filteredConnections.map((item) => (
-            <View key={item.id} style={styles.connectionRow}>
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : filtered.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Users color={Colors.textMuted} size={40} />
+            <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+              No mutual connections yet
+            </AppText>
+            <AppText
+              variant="caption"
+              color={Colors.textSecondary}
+              align="center"
+              style={{ marginTop: 4 }}
+            >
+              When you and another member accept a connection request, you can chat and view mutual stories here!
+            </AppText>
+          </Card>
+        ) : (
+          filtered.map((item) => (
+            <View key={item.id} style={styles.itemCard}>
               <TouchableOpacity
                 onPress={() => router.push(`/profile/${item.id}`)}
-                style={styles.profileClick}
+                style={styles.userClick}
               >
-                <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-                <View style={styles.nameSection}>
+                <Image
+                  source={{
+                    uri:
+                      item.avatarUrl ||
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.infoCol}>
                   <View style={styles.nameRow}>
                     <AppText variant="bodySm" weight="bold">
                       {item.name}
                     </AppText>
-                    {item.isVerified && <VerifiedBadge size={14} />}
+                    {item.isVerified && <VerifiedBadge size={13} />}
                   </View>
                   <AppText variant="caption" color={Colors.textSecondary}>
-                    {item.city} · {item.connectedDate}
+                    {item.city}
                   </AppText>
                 </View>
               </TouchableOpacity>
 
-              <View style={styles.actionGroup}>
-                <TouchableOpacity
-                  onPress={() => router.push('/(tabs)/messages')}
-                  style={styles.msgBtn}
-                  accessibilityLabel="Message connection"
-                >
-                  <MessageCircle color={Colors.primary} size={18} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => handleRemoveConnection(item.id)}
-                  style={styles.removeBtn}
-                  accessibilityLabel="Remove connection"
-                >
-                  <X color={Colors.textMuted} size={16} />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={() => router.push(`/chat/${item.id}`)}
+                style={styles.chatBtn}
+                accessibilityLabel="Message connection"
+              >
+                <MessageCircle color={Colors.primary} size={18} />
+              </TouchableOpacity>
             </View>
           ))
-        ) : (
-          /* Connection Requests List */
-          <View style={styles.requestsSection}>
-            {incomingRequests.length > 0 && (
-              <View style={styles.requestSubSection}>
-                <AppText variant="caption" weight="bold" color={Colors.textMuted} style={styles.sectionHeader}>
-                  Incoming Requests
-                </AppText>
-                {incomingRequests.map((req) => (
-                  <View key={req.id} style={styles.connectionRow}>
-                    <TouchableOpacity
-                      onPress={() => router.push(`/profile/${req.id}`)}
-                      style={styles.profileClick}
-                    >
-                      <Image source={{ uri: req.avatarUrl }} style={styles.avatar} />
-                      <View style={styles.nameSection}>
-                        <View style={styles.nameRow}>
-                          <AppText variant="bodySm" weight="bold">
-                            {req.name}
-                          </AppText>
-                          {req.isVerified && <VerifiedBadge size={14} />}
-                        </View>
-                        <AppText variant="caption" color={Colors.textSecondary}>
-                          {req.city} · {req.time}
-                        </AppText>
-                      </View>
-                    </TouchableOpacity>
-
-                    <View style={styles.actionGroup}>
-                      <TouchableOpacity
-                        onPress={() => handleAccept(req)}
-                        style={styles.acceptBtn}
-                      >
-                        <Check color={Colors.surface} size={16} strokeWidth={3} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDecline(req.id)}
-                        style={styles.declineBtn}
-                      >
-                        <X color={Colors.textMuted} size={16} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {outgoingRequests.length > 0 && (
-              <View style={styles.requestSubSection}>
-                <AppText variant="caption" weight="bold" color={Colors.textMuted} style={styles.sectionHeader}>
-                  Sent Requests
-                </AppText>
-                {outgoingRequests.map((req) => (
-                  <View key={req.id} style={styles.connectionRow}>
-                    <TouchableOpacity
-                      onPress={() => router.push(`/profile/${req.id}`)}
-                      style={styles.profileClick}
-                    >
-                      <Image source={{ uri: req.avatarUrl }} style={styles.avatar} />
-                      <View style={styles.nameSection}>
-                        <View style={styles.nameRow}>
-                          <AppText variant="bodySm" weight="bold">
-                            {req.name}
-                          </AppText>
-                          {req.isVerified && <VerifiedBadge size={14} />}
-                        </View>
-                        <AppText variant="caption" color={Colors.textSecondary}>
-                          {req.city} · {req.time}
-                        </AppText>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleDecline(req.id)}
-                      style={styles.cancelOutgoingBtn}
-                    >
-                      <AppText variant="caption" color={Colors.textSecondary}>
-                        Cancel
-                      </AppText>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {requests.length === 0 && (
-              <View style={styles.emptyState}>
-                <AppText variant="bodySm" color={Colors.textSecondary} align="center">
-                  No pending connection requests.
-                </AppText>
-              </View>
-            )}
-          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -356,8 +202,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -365,35 +211,12 @@ const styles = StyleSheet.create({
   backBtn: {
     padding: 4,
   },
-  placeholder: {
+  headerRightPlaceholder: {
     width: 30,
   },
-  tabBarWrapper: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radii.full,
-  },
-  tabBtnActive: {
-    backgroundColor: Colors.primary,
-  },
   searchSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -402,105 +225,71 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 14,
+    borderRadius: Radii.md,
+    paddingHorizontal: 12,
     height: 40,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: 0,
   },
   scrollContent: {
-    paddingVertical: Spacing.xs,
+    padding: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
-  connectionRow: {
+  loadingContainer: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  emptyCard: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    marginTop: Spacing.md,
+  },
+  itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 12,
+    padding: 12,
     backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderRadius: Radii.md,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  profileClick: {
+  userClick: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     flex: 1,
   },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.border,
-    marginRight: 12,
   },
-  nameSection: {
+  infoCol: {
     flex: 1,
+    gap: 2,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  actionGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  msgBtn: {
-    padding: 8,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.primaryLight,
-  },
-  removeBtn: {
-    padding: 6,
-  },
-  requestsSection: {
-    gap: Spacing.md,
-  },
-  requestSubSection: {
-    gap: 2,
-  },
-  sectionHeader: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 6,
-    textTransform: 'uppercase',
-  },
-  acceptBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.sage,
+  chatBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  declineBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelOutgoingBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  emptyState: {
-    padding: Spacing.xl,
-    alignItems: 'center',
   },
 })

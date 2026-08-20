@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -24,17 +24,32 @@ import {
   ChevronRight,
 } from 'lucide-react-native'
 
+import { supabase } from '@/services/supabase'
+
 export default function CommunityAdminScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
+  const [communityName, setCommunityName] = useState('your community')
 
-  const adminSections = [
-    { id: 'requests', label: 'Join Requests', badge: '3', icon: <Users color={Colors.primary} size={20} /> },
+  useEffect(() => {
+    if (!id) return
+    supabase
+      .from('communities')
+      .select('community_name')
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.community_name) setCommunityName(data.community_name)
+      })
+  }, [id])
+
+  const adminSections: { id: string; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: 'requests', label: 'Join Requests', icon: <Users color={Colors.primary} size={20} /> },
     { id: 'members', label: 'Members & Roles', icon: <Shield color={Colors.sage} size={20} /> },
-    { id: 'channels', label: 'Channels', badge: '6', icon: <Hash color={Colors.amber} size={20} /> },
+    { id: 'channels', label: 'Channels', icon: <Hash color={Colors.amber} size={20} /> },
     { id: 'rules', label: 'Community Rules', icon: <FileText color={Colors.primary} size={20} /> },
     { id: 'announcements', label: 'Announcements', icon: <Bell color={Colors.coral} size={20} /> },
-    { id: 'reports', label: 'Reports & Flagged Content', badge: '1', icon: <Flag color={Colors.coral} size={20} /> },
+    { id: 'reports', label: 'Reports & Flagged Content', icon: <Flag color={Colors.coral} size={20} /> },
     { id: 'muted', label: 'Muted Users', icon: <VolumeX color={Colors.textSecondary} size={20} /> },
     { id: 'banned', label: 'Banned Users', icon: <Ban color="#DC2626" size={20} /> },
     { id: 'events', label: 'Community Events', icon: <Calendar color={Colors.amber} size={20} /> },
@@ -56,7 +71,7 @@ export default function CommunityAdminScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <AppText variant="caption" color={Colors.textSecondary} style={styles.subText}>
-          Manage members, channel permissions, rules, and moderation settings for Lagos Creators & Builders.
+          Manage members, channel permissions, rules, and moderation settings for {communityName}.
         </AppText>
 
         <View style={styles.menuContainer}>

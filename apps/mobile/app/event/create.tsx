@@ -24,8 +24,13 @@ import {
 
 const EVENT_TYPES = ['Wellness', 'Social', 'Learning', 'Volunteer']
 
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
+import { uploadMediaFile } from '@/services/mediaUpload'
+
 export default function CreateEventScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const [coverPhoto, setCoverPhoto] = useState<string | null>(
     'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
   )
@@ -37,6 +42,7 @@ export default function CreateEventScreen() {
   const [attendeeLimit, setAttendeeLimit] = useState('50')
   const [community, setCommunity] = useState('')
   const [selectedType, setSelectedType] = useState<string>('Wellness')
+  const [loading, setLoading] = useState(false)
 
   const handlePickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -50,8 +56,54 @@ export default function CreateEventScreen() {
     }
   }
 
-  const handleCreate = () => {
-    router.replace('/(tabs)/events')
+  const handleCreate = async () => {
+    if (!title.trim()) return
+    setLoading(true)
+    try {
+      let uploadedCoverUrl = null
+      if (coverPhoto && (coverPhoto.startsWith('file:') || coverPhoto.startsWith('content:'))) {
+        const uploadRes = await uploadMediaFile({
+          localUri: coverPhoto,
+          bucket: 'event-photos',
+          type: 'image',
+        })
+        if (uploadRes.url) uploadedCoverUrl = uploadRes.url
+      } else {
+        uploadedCoverUrl = coverPhoto
+      }
+
+      const eventDate = new Date()
+      eventDate.setDate(eventDate.getDate() + 3)
+
+      const { data: newEvent } = await (supabase as any)
+        .from('events')
+        .insert({
+          event_title: title.trim(),
+          description: description.trim() || `${selectedType} meetup event.`,
+          event_date: eventDate.toISOString(),
+          location_name: location.trim() || 'Local Park & Gathering Spot',
+          cover_image_url: uploadedCoverUrl || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
+          attendee_limit: parseInt(attendeeLimit, 10) || 50,
+          created_by: user?.id,
+        })
+        .select('id')
+        .single()
+
+      if (newEvent?.id && user) {
+        await (supabase as any).from('event_rsvps').insert({
+          event_id: newEvent.id,
+          user_id: user.id,
+          status: 'going',
+        })
+        router.replace(`/event/${newEvent.id}`)
+      } else {
+        router.replace('/(tabs)/discover')
+      }
+    } catch {
+      router.replace('/(tabs)/discover')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

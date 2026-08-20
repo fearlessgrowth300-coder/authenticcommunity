@@ -1,15 +1,20 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { Card } from '@/components/primitives/Card'
 import {
   ArrowLeft,
   Settings,
@@ -19,230 +24,148 @@ import {
   Users,
   Compass,
   Sparkles,
+  Bell,
 } from 'lucide-react-native'
 
 const FILTER_TABS = ['All', 'Messages', 'Connections', 'Communities', 'Events']
 
 interface NotificationItem {
   id: string
-  type: 'like' | 'event' | 'message' | 'match' | 'invite' | 'reaction' | 'post' | 'reminder'
+  type: string
   category: 'Messages' | 'Connections' | 'Communities' | 'Events'
-  avatarUrl?: string
-  iconType?: 'community' | 'event' | 'matches' | 'post' | 'invite'
+  avatarUrl?: string | null
   title: string
   body?: string
   time: string
   isToday: boolean
-  isHeart?: boolean
 }
-
-const NOTIFICATIONS: NotificationItem[] = [
-  // Today
-  {
-    id: '1',
-    type: 'like',
-    category: 'Connections',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    title: 'Sophie Martin',
-    body: 'liked your profile.',
-    time: '2m',
-    isToday: true,
-    isHeart: true,
-  },
-  {
-    id: '2',
-    type: 'event',
-    category: 'Events',
-    iconType: 'community',
-    title: 'Austin Hikers',
-    body: 'New event posted: Sunrise Hike',
-    time: '1h',
-    isToday: true,
-  },
-  {
-    id: '3',
-    type: 'message',
-    category: 'Messages',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    title: 'Maya Patel',
-    body: 'sent you a message.',
-    time: '2h',
-    isToday: true,
-  },
-  {
-    id: '4',
-    type: 'match',
-    category: 'Connections',
-    iconType: 'matches',
-    title: 'You have 3 new matches!',
-    body: 'Check them out and start a conversation.',
-    time: '3h',
-    isToday: true,
-  },
-
-  // Earlier
-  {
-    id: '5',
-    type: 'invite',
-    category: 'Communities',
-    iconType: 'invite',
-    title: 'Wellness Together',
-    body: 'Sarah invited you to join the community.',
-    time: '1d',
-    isToday: false,
-  },
-  {
-    id: '6',
-    type: 'reaction',
-    category: 'Messages',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    title: 'David Chen',
-    body: 'reacted to your message.',
-    time: '1d',
-    isToday: false,
-    isHeart: true,
-  },
-  {
-    id: '7',
-    type: 'post',
-    category: 'Communities',
-    iconType: 'post',
-    title: 'Community Update',
-    body: 'Photography Lovers has a new post.',
-    time: '2d',
-    isToday: false,
-  },
-  {
-    id: '8',
-    type: 'reminder',
-    category: 'Events',
-    iconType: 'event',
-    title: 'Event Reminder',
-    body: 'You have an upcoming event tomorrow.',
-    time: '2d',
-    isToday: false,
-  },
-]
 
 export default function NotificationsScreen() {
   const router = useRouter()
-  const [activeFilter, setActiveFilter] = useState('All')
+  const { user } = useAuth()
+  const [selectedFilter, setSelectedFilter] = useState('All')
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const filteredItems = NOTIFICATIONS.filter((item) => {
-    if (activeFilter === 'All') return true
-    return item.category === activeFilter
-  })
+  const loadNotifications = async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      const { data } = await (supabase as any)
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
 
-  const todayItems = filteredItems.filter((item) => item.isToday)
-  const earlierItems = filteredItems.filter((item) => !item.isToday)
+      if (data && data.length > 0) {
+        const today = new Date()
+        const parsed = data.map((n: any) => {
+          const createdAt = new Date(n.created_at || Date.now())
+          const isToday =
+            createdAt.getDate() === today.getDate() &&
+            createdAt.getMonth() === today.getMonth() &&
+            createdAt.getFullYear() === today.getFullYear()
 
-  const renderIconBadge = (iconType?: string) => {
-    switch (iconType) {
-      case 'community':
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: '#EEF2FF' }]}>
-            <Users color={Colors.primary} size={18} />
-          </View>
-        )
-      case 'event':
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: '#E0F2FE' }]}>
-            <Calendar color="#0284C7" size={18} />
-          </View>
-        )
-      case 'matches':
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: '#F3E8FF' }]}>
-            <Sparkles color="#9333EA" size={18} />
-          </View>
-        )
-      case 'invite':
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: '#DCFCE7' }]}>
-            <Users color="#16A34A" size={18} />
-          </View>
-        )
-      case 'post':
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: '#FEF3C7' }]}>
-            <Compass color="#D97706" size={18} />
-          </View>
-        )
-      default:
-        return (
-          <View style={[styles.iconBadge, { backgroundColor: Colors.primaryLight }]}>
-            <MessageCircle color={Colors.primary} size={18} />
-          </View>
-        )
+          let category: NotificationItem['category'] = 'Connections'
+          if (n.type?.includes('message') || n.type?.includes('chat')) category = 'Messages'
+          else if (n.type?.includes('community')) category = 'Communities'
+          else if (n.type?.includes('event')) category = 'Events'
+
+          return {
+            id: n.id,
+            type: n.type || 'notification',
+            category,
+            avatarUrl: n.metadata?.avatar_url || null,
+            title: n.title || 'Community Update',
+            body: n.body || n.content || 'You have a new update.',
+            time: isToday
+              ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : createdAt.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+            isToday,
+          }
+        })
+        setNotifications(parsed)
+      } else {
+        setNotifications([])
+      }
+    } catch {
+      setNotifications([])
+    } finally {
+      setLoading(false)
     }
   }
 
-  const renderItem = (item: NotificationItem) => (
-    <View key={item.id} style={styles.notificationRow}>
-      {item.avatarUrl ? (
-        <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-      ) : (
-        renderIconBadge(item.iconType)
-      )}
+  useEffect(() => {
+    loadNotifications()
+  }, [user])
 
-      <View style={styles.contentContainer}>
-        <AppText variant="bodySm" style={styles.titleText}>
-          <AppText variant="bodySm" weight="bold">
-            {item.title}{' '}
-          </AppText>
-          <AppText variant="bodySm" color={Colors.textSecondary}>
-            {item.body}
-          </AppText>
-        </AppText>
-      </View>
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await loadNotifications()
+    setRefreshing(false)
+  }
 
-      <View style={styles.rightContainer}>
-        <AppText variant="caption" color={Colors.textMuted}>
-          {item.time}
-        </AppText>
-        {item.isHeart && (
-          <Heart color="#EF4444" fill="#EF4444" size={12} style={styles.heartIcon} />
-        )}
-      </View>
-    </View>
-  )
+  const filteredList = notifications.filter((item) => {
+    if (selectedFilter === 'All') return true
+    return item.category === selectedFilter
+  })
+
+  const todayList = filteredList.filter((item) => item.isToday)
+  const earlierList = filteredList.filter((item) => !item.isToday)
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'Messages':
+        return <MessageCircle color={Colors.primary} size={18} />
+      case 'Communities':
+        return <Compass color="#10B981" size={18} />
+      case 'Events':
+        return <Calendar color="#F59E0B" size={18} />
+      default:
+        return <Users color="#6366F1" size={18} />
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <ArrowLeft color={Colors.text} size={22} />
         </TouchableOpacity>
-        <AppText variant="h2" weight="bold" style={styles.headerTitle}>
+        <AppText variant="h3" weight="bold">
           Notifications
         </AppText>
-        <TouchableOpacity style={styles.settingsButton}>
+        <TouchableOpacity
+          onPress={() => router.push('/profile/privacy')}
+          style={styles.headerBtn}
+        >
           <Settings color={Colors.text} size={20} />
         </TouchableOpacity>
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.filtersWrapper}>
+      <View style={styles.filterTabsWrapper}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContainer}
+          contentContainerStyle={styles.filterTabsContainer}
         >
           {FILTER_TABS.map((tab) => {
-            const isSelected = activeFilter === tab
+            const isSelected = selectedFilter === tab
             return (
               <TouchableOpacity
                 key={tab}
-                onPress={() => setActiveFilter(tab)}
+                onPress={() => setSelectedFilter(tab)}
                 style={[
-                  styles.filterPill,
-                  isSelected ? styles.filterPillActive : null,
+                  styles.filterTab,
+                  isSelected ? styles.filterTabActive : null,
                 ]}
               >
                 <AppText
-                  variant="caption"
-                  weight={isSelected ? 'bold' : 'medium'}
+                  variant="bodySm"
+                  weight={isSelected ? 'bold' : 'normal'}
                   color={isSelected ? Colors.surface : Colors.textSecondary}
                 >
                   {tab}
@@ -254,23 +177,101 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Notifications List */}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {todayItems.length > 0 && (
-          <View style={styles.section}>
-            <AppText variant="caption" weight="bold" color={Colors.textMuted} style={styles.sectionHeader}>
-              Today
-            </AppText>
-            {todayItems.map(renderItem)}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+          />
+        }
+      >
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
           </View>
-        )}
+        ) : filteredList.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Bell color={Colors.textMuted} size={40} />
+            <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+              No notifications yet
+            </AppText>
+            <AppText
+              variant="caption"
+              color={Colors.textSecondary}
+              align="center"
+              style={{ marginTop: 4 }}
+            >
+              When members match, message, or invite you to events, updates will appear here!
+            </AppText>
+          </Card>
+        ) : (
+          <>
+            {todayList.length > 0 && (
+              <View style={styles.section}>
+                <AppText variant="label" weight="bold" style={styles.sectionHeader}>
+                  Today
+                </AppText>
+                {todayList.map((item) => (
+                  <View key={item.id} style={styles.notificationItem}>
+                    {item.avatarUrl ? (
+                      <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
+                    ) : (
+                      <View style={styles.iconPlaceholder}>
+                        {getCategoryIcon(item.category)}
+                      </View>
+                    )}
+                    <View style={styles.contentCol}>
+                      <AppText variant="bodySm" weight="medium">
+                        {item.title}
+                      </AppText>
+                      {item.body ? (
+                        <AppText variant="caption" color={Colors.textSecondary}>
+                          {item.body}
+                        </AppText>
+                      ) : null}
+                    </View>
+                    <AppText variant="caption" color={Colors.textMuted}>
+                      {item.time}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+            )}
 
-        {earlierItems.length > 0 && (
-          <View style={styles.section}>
-            <AppText variant="caption" weight="bold" color={Colors.textMuted} style={styles.sectionHeader}>
-              Earlier
-            </AppText>
-            {earlierItems.map(renderItem)}
-          </View>
+            {earlierList.length > 0 && (
+              <View style={styles.section}>
+                <AppText variant="label" weight="bold" style={styles.sectionHeader}>
+                  Earlier
+                </AppText>
+                {earlierList.map((item) => (
+                  <View key={item.id} style={styles.notificationItem}>
+                    {item.avatarUrl ? (
+                      <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
+                    ) : (
+                      <View style={styles.iconPlaceholder}>
+                        {getCategoryIcon(item.category)}
+                      </View>
+                    )}
+                    <View style={styles.contentCol}>
+                      <AppText variant="bodySm" weight="medium">
+                        {item.title}
+                      </AppText>
+                      {item.body ? (
+                        <AppText variant="caption" color={Colors.textSecondary}>
+                          {item.body}
+                        </AppText>
+                      ) : null}
+                    </View>
+                    <AppText variant="caption" color={Colors.textMuted}>
+                      {item.time}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -286,90 +287,83 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     backgroundColor: Colors.surface,
   },
-  backButton: {
-    padding: 4,
+  headerBtn: {
+    padding: 6,
   },
-  headerTitle: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  settingsButton: {
-    padding: 4,
-  },
-  filtersWrapper: {
+  filterTabsWrapper: {
+    paddingVertical: Spacing.xs,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingVertical: 10,
   },
-  filtersContainer: {
-    paddingHorizontal: Spacing.lg,
+  filterTabsContainer: {
+    paddingHorizontal: Spacing.md,
     gap: 8,
   },
-  filterPill: {
-    paddingHorizontal: 16,
+  filterTab: {
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: Radii.full,
     backgroundColor: Colors.background,
+  },
+  filterTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xxl,
+  },
+  loadingContainer: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  emptyCard: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    marginTop: Spacing.md,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    marginBottom: 10,
+    color: Colors.textMuted,
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
+    marginBottom: 8,
+    gap: 12,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  filterPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  scrollContent: {
-    paddingVertical: Spacing.md,
-  },
-  section: {
-    marginBottom: Spacing.md,
-  },
-  sectionHeader: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  notificationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 12,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.border,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
-  iconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  iconPlaceholder: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  contentContainer: {
+  contentCol: {
     flex: 1,
-    marginHorizontal: 12,
-  },
-  titleText: {
-    lineHeight: 18,
-  },
-  rightContainer: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  heartIcon: {
-    marginTop: 2,
+    gap: 2,
   },
 })

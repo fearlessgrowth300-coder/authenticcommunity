@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -6,89 +6,52 @@ import {
   RefreshControl,
   TextInput,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { fetchDiscoverEvents } from '@/services/discover'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { EventCard, EventItem } from '@/components/events/EventCard'
+import { Card } from '@/components/primitives/Card'
 import {
   Search,
   SlidersHorizontal,
   Bell,
   PlusCircle,
-  MapPin,
+  Calendar,
 } from 'lucide-react-native'
 
 const TIME_FILTER_TABS = ['For You', 'Today', 'This Week', 'Nearby']
-
-const SAMPLE_EVENTS: EventItem[] = [
-  {
-    id: 'e1',
-    title: 'Morning Yoga in the Park',
-    host: 'Balance & Breathe',
-    dateMonth: 'JUN',
-    dateDay: '15',
-    dateDayOfWeek: 'SAT',
-    dateTimeFormatted: 'Sat, Jun 15 · 8:00 AM',
-    distance: '0.6 mi away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
-    attendeesCount: 12,
-  },
-  {
-    id: 'e2',
-    title: 'Local Farmers Market',
-    host: 'Greenfield Collective',
-    dateMonth: 'JUN',
-    dateDay: '15',
-    dateDayOfWeek: 'SAT',
-    dateTimeFormatted: 'Sat, Jun 15 · 10:00 AM',
-    distance: '1.2 mi away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=400&fit=crop&q=80',
-    attendeesCount: 8,
-  },
-  {
-    id: 'e3',
-    title: 'Sunset Acoustic Night',
-    host: 'Community Vibes',
-    dateMonth: 'JUN',
-    dateDay: '16',
-    dateDayOfWeek: 'SUN',
-    dateTimeFormatted: 'Sun, Jun 16 · 6:30 PM',
-    distance: '2.1 mi away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&fit=crop&q=80',
-    attendeesCount: 24,
-  },
-  {
-    id: 'e4',
-    title: 'Community Mural Project',
-    host: 'Art Together',
-    dateMonth: 'JUN',
-    dateDay: '17',
-    dateDayOfWeek: 'MON',
-    dateTimeFormatted: 'Mon, Jun 17 · 9:00 AM',
-    distance: '0.9 mi away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400&fit=crop&q=80',
-    attendeesCount: 6,
-  },
-]
 
 export default function EventsFeedScreen() {
   const router = useRouter()
   const [activeTimeTab, setActiveTimeTab] = useState('For You')
   const [searchQuery, setSearchQuery] = useState('')
   const [savedIds, setSavedIds] = useState<string[]>([])
+  const [events, setEvents] = useState<EventItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  const loadEvents = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchDiscoverEvents()
+      setEvents(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadEvents()
+  }, [])
 
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 600)
+    await loadEvents()
+    setRefreshing(false)
   }
 
   const toggleSave = (id: string) => {
@@ -97,63 +60,60 @@ export default function EventsFeedScreen() {
     )
   }
 
-  const filteredEvents = SAMPLE_EVENTS.filter((e) => {
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.host.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesSearch
+  const filteredEvents = events.filter((e) => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return e.title.toLowerCase().includes(q) || e.host.toLowerCase().includes(q)
   })
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Top Header */}
+      {/* 1. Header */}
       <View style={styles.header}>
         <AppText variant="h2" weight="bold">
           Events
         </AppText>
         <View style={styles.headerActions}>
           <TouchableOpacity
-            onPress={() => router.push('/event/create')}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Create event"
-          >
-            <PlusCircle color={Colors.primary} size={22} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
             onPress={() => router.push('/notifications')}
             style={styles.headerIconBtn}
             accessibilityLabel="Notifications"
           >
-            <Bell color={Colors.text} size={22} />
+            <Bell color={Colors.text} size={20} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/event/create')}
+            style={styles.createEventBtn}
+            accessibilityLabel="Create Event"
+          >
+            <PlusCircle color={Colors.surface} size={18} />
+            <AppText variant="bodySm" weight="bold" color={Colors.surface}>
+              Host
+            </AppText>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Search Bar */}
+      {/* 2. Search & Filter Bar */}
       <View style={styles.searchSection}>
         <View style={styles.searchBar}>
           <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search events, people, or topics"
+            placeholder="Search events, workshops, meetups..."
             placeholderTextColor={Colors.textMuted}
             style={styles.searchInput}
           />
-          <TouchableOpacity style={styles.filterBtn}>
-            <SlidersHorizontal color={Colors.textMuted} size={18} />
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Time Filter Pills */}
-      <View style={styles.timeTabsWrapper}>
+      {/* 3. Time Filter Segmented Tabs */}
+      <View style={styles.tabsWrapper}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.timeTabsContainer}
+          contentContainerStyle={styles.tabsContainer}
         >
           {TIME_FILTER_TABS.map((tab) => {
             const isSelected = activeTimeTab === tab
@@ -162,13 +122,13 @@ export default function EventsFeedScreen() {
                 key={tab}
                 onPress={() => setActiveTimeTab(tab)}
                 style={[
-                  styles.timeTabPill,
-                  isSelected ? styles.timeTabPillActive : null,
+                  styles.tabPill,
+                  isSelected ? styles.tabPillActive : null,
                 ]}
               >
                 <AppText
-                  variant="caption"
-                  weight={isSelected ? 'bold' : 'medium'}
+                  variant="bodySm"
+                  weight={isSelected ? 'bold' : 'normal'}
                   color={isSelected ? Colors.surface : Colors.textSecondary}
                 >
                   {tab}
@@ -179,23 +139,7 @@ export default function EventsFeedScreen() {
         </ScrollView>
       </View>
 
-      {/* Section Sub-Header: Upcoming Events & View Map */}
-      <View style={styles.subHeader}>
-        <AppText variant="h3" weight="bold">
-          Upcoming Events
-        </AppText>
-        <TouchableOpacity
-          style={styles.viewMapBtn}
-          onPress={() => router.push('/(tabs)/explore')}
-        >
-          <AppText variant="caption" weight="semibold" color={Colors.primary}>
-            View Map
-          </AppText>
-          <MapPin color={Colors.primary} size={14} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Events List */}
+      {/* 4. Events Feed List */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -206,26 +150,34 @@ export default function EventsFeedScreen() {
           />
         }
       >
-        {filteredEvents.map((event) => (
-          <EventCard
-            key={event.id}
-            event={{
-              ...event,
-              isSaved: savedIds.includes(event.id),
-            }}
-            onPress={() => router.push(`/event/${event.id}`)}
-            onToggleSave={() => toggleSave(event.id)}
-          />
-        ))}
-
-        {filteredEvents.length === 0 && (
-          <View style={styles.emptyState}>
-            <AppText variant="body" weight="semibold" color={Colors.textSecondary} align="center">
-              No upcoming events found
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : filteredEvents.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Calendar color={Colors.textMuted} size={40} />
+            <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+              No upcoming events
             </AppText>
-            <AppText variant="caption" color={Colors.textMuted} align="center" style={styles.emptyHint}>
-              Try searching for another topic or create an event for your community!
+            <AppText
+              variant="caption"
+              color={Colors.textSecondary}
+              align="center"
+              style={{ marginTop: 4 }}
+            >
+              Host a local community gathering or check back soon!
             </AppText>
+          </Card>
+        ) : (
+          <View style={styles.eventsList}>
+            {filteredEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onPress={() => router.push(`/event/${event.id}`)}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
@@ -242,11 +194,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   headerActions: {
     flexDirection: 'row',
@@ -254,80 +204,83 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerIconBtn: {
-    padding: 4,
+    width: 38,
+    height: 38,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createEventBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: Radii.full,
   },
   searchSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 14,
-    height: 42,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 42,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: 0,
   },
-  filterBtn: {
-    padding: 4,
+  tabsWrapper: {
+    paddingVertical: Spacing.xs,
   },
-  timeTabsWrapper: {
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingVertical: 10,
-  },
-  timeTabsContainer: {
-    paddingHorizontal: Spacing.lg,
+  tabsContainer: {
+    paddingHorizontal: Spacing.md,
     gap: 8,
   },
-  timeTabPill: {
-    paddingHorizontal: 18,
-    paddingVertical: 6,
+  tabPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: Radii.full,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  timeTabPillActive: {
+  tabPillActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  subHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xs,
-  },
-  viewMapBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xxl,
   },
-  emptyState: {
+  loadingContainer: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  emptyCard: {
     padding: Spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 40,
+    backgroundColor: Colors.surface,
+    marginTop: Spacing.md,
   },
-  emptyHint: {
-    marginTop: 8,
+  eventsList: {
+    gap: 14,
   },
 })

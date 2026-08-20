@@ -34,8 +34,13 @@ const CATEGORIES = [
   'Music',
 ]
 
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
+import { uploadMediaFile } from '@/services/mediaUpload'
+
 export default function CreateCommunityScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState(1)
   const [name, setName] = useState('')
   const [category, setCategory] = useState('Outdoors')
@@ -44,6 +49,7 @@ export default function CreateCommunityScreen() {
   const [privacy, setPrivacy] = useState<'Public' | 'Private'>('Public')
   const [showPrivacyPicker, setShowPrivacyPicker] = useState(false)
   const [photoUri, setPhotoUri] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   const handlePickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -57,11 +63,53 @@ export default function CreateCommunityScreen() {
     }
   }
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (currentStep < 5) {
       setCurrentStep((prev) => prev + 1)
-    } else {
-      router.replace('/(tabs)/explore')
+      return
+    }
+
+    setLoading(true)
+    try {
+      let uploadedPhotoUrl = null
+      if (photoUri) {
+        const uploadRes = await uploadMediaFile({
+          localUri: photoUri,
+          bucket: 'community-posts',
+          type: 'image',
+        })
+        if (uploadRes.url) uploadedPhotoUrl = uploadRes.url
+      }
+
+      const { data: newComm } = await (supabase as any)
+        .from('communities')
+        .insert({
+          community_name: name || 'New Community',
+          category,
+          location_city: location || 'Local Area',
+          is_private: privacy === 'Private',
+          profile_image_url: uploadedPhotoUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+          description: `${category} community based in ${location}.`,
+          created_by: user?.id,
+          member_count: 1,
+        })
+        .select('id')
+        .single()
+
+      if (newComm?.id && user) {
+        await supabase.from('community_members').insert({
+          community_id: newComm.id,
+          user_id: user.id,
+          role: 'owner',
+        })
+        router.replace(`/community/${newComm.id}`)
+      } else {
+        router.replace('/(tabs)/discover')
+      }
+    } catch {
+      router.replace('/(tabs)/discover')
+    } finally {
+      setLoading(false)
     }
   }
 

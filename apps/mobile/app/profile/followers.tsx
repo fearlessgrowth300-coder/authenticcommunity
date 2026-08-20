@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -7,90 +7,83 @@ import {
   TouchableOpacity,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import {
   ArrowLeft,
   Search,
-  UserCheck,
-  UserPlus,
-  MoreHorizontal,
-  X,
+  Users,
 } from 'lucide-react-native'
 
 interface FollowerItem {
   id: string
   name: string
-  avatarUrl: string
+  avatarUrl: string | null
   city: string
   isVerified: boolean
-  isFollowingBack: boolean
 }
-
-const SAMPLE_FOLLOWERS: FollowerItem[] = [
-  {
-    id: 'f1',
-    name: 'Maya Patel',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: true,
-    isFollowingBack: true,
-  },
-  {
-    id: 'f2',
-    name: 'David Chen',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: false,
-    isFollowingBack: false,
-  },
-  {
-    id: 'f3',
-    name: 'Elena Rostova',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    city: 'Round Rock, TX',
-    isVerified: true,
-    isFollowingBack: true,
-  },
-  {
-    id: 'f4',
-    name: 'Marcus Brody',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&fit=crop&q=80',
-    city: 'Austin, TX',
-    isVerified: false,
-    isFollowingBack: false,
-  },
-]
 
 export default function FollowersScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
-  const [followers, setFollowers] = useState<FollowerItem[]>(SAMPLE_FOLLOWERS)
+  const [followers, setFollowers] = useState<FollowerItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  const loadFollowers = async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      const { data: followRows } = await (supabase as any)
+        .from('user_follows')
+        .select('follower_id')
+        .eq('following_id', user.id)
+
+      if (followRows && followRows.length > 0) {
+        const followerIds = followRows.map((r: any) => r.follower_id)
+        const { data: profs } = await (supabase as any)
+          .from('profiles')
+          .select('user_id, first_name, last_name, profile_image_url, location_city, is_verified')
+          .in('user_id', followerIds)
+
+        if (profs) {
+          setFollowers(
+            profs.map((p: any) => ({
+              id: p.user_id,
+              name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Community Member',
+              avatarUrl: p.profile_image_url || null,
+              city: p.location_city || 'Local area',
+              isVerified: Boolean(p.is_verified),
+            }))
+          )
+        }
+      } else {
+        setFollowers([])
+      }
+    } catch {
+      setFollowers([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadFollowers()
+  }, [user])
 
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 500)
-  }
-
-  const toggleFollowBack = (id: string) => {
-    setFollowers((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, isFollowingBack: !item.isFollowingBack }
-          : item
-      )
-    )
-  }
-
-  const handleRemoveFollower = (id: string) => {
-    setFollowers((prev) => prev.filter((item) => item.id !== id))
+    await loadFollowers()
+    setRefreshing(false)
   }
 
   const filtered = followers.filter(
@@ -102,7 +95,6 @@ export default function FollowersScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft color={Colors.text} size={22} />
@@ -110,24 +102,22 @@ export default function FollowersScreen() {
         <AppText variant="h3" weight="bold">
           Followers ({followers.length})
         </AppText>
-        <View style={styles.placeholder} />
+        <View style={styles.headerRightPlaceholder} />
       </View>
 
-      {/* Search */}
       <View style={styles.searchSection}>
         <View style={styles.searchBar}>
           <Search color={Colors.textMuted} size={18} style={styles.searchIcon} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search followers"
+            placeholder="Search followers..."
             placeholderTextColor={Colors.textMuted}
             style={styles.searchInput}
           />
         </View>
       </View>
 
-      {/* List */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -138,60 +128,54 @@ export default function FollowersScreen() {
           />
         }
       >
-        {filtered.map((item) => (
-          <View key={item.id} style={styles.followerRow}>
-            <TouchableOpacity
-              onPress={() => router.push(`/profile/${item.id}`)}
-              style={styles.followerProfileClick}
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : filtered.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Users color={Colors.textMuted} size={40} />
+            <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+              No followers yet
+            </AppText>
+            <AppText
+              variant="caption"
+              color={Colors.textSecondary}
+              align="center"
+              style={{ marginTop: 4 }}
             >
-              <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-              <View style={styles.nameSection}>
+              When other members follow your updates, they will appear here.
+            </AppText>
+          </Card>
+        ) : (
+          filtered.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              activeOpacity={0.7}
+              onPress={() => router.push(`/profile/${item.id}`)}
+              style={styles.itemCard}
+            >
+              <Image
+                source={{
+                  uri:
+                    item.avatarUrl ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                }}
+                style={styles.avatar}
+              />
+              <View style={styles.infoCol}>
                 <View style={styles.nameRow}>
                   <AppText variant="bodySm" weight="bold">
                     {item.name}
                   </AppText>
-                  {item.isVerified && <VerifiedBadge size={14} />}
+                  {item.isVerified && <VerifiedBadge size={13} />}
                 </View>
                 <AppText variant="caption" color={Colors.textSecondary}>
                   {item.city}
                 </AppText>
               </View>
             </TouchableOpacity>
-
-            <View style={styles.actionsGroup}>
-              <TouchableOpacity
-                onPress={() => toggleFollowBack(item.id)}
-                style={[
-                  styles.followBtn,
-                  item.isFollowingBack ? styles.followingBtn : null,
-                ]}
-              >
-                <AppText
-                  variant="caption"
-                  weight="bold"
-                  color={item.isFollowingBack ? Colors.textSecondary : Colors.surface}
-                >
-                  {item.isFollowingBack ? 'Following' : 'Follow Back'}
-                </AppText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleRemoveFollower(item.id)}
-                style={styles.removeBtn}
-                accessibilityLabel="Remove follower"
-              >
-                <X color={Colors.textMuted} size={16} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-
-        {filtered.length === 0 && (
-          <View style={styles.emptyState}>
-            <AppText variant="bodySm" color={Colors.textSecondary} align="center">
-              No followers found matching "{searchQuery}"
-            </AppText>
-          </View>
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
@@ -207,8 +191,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -216,12 +200,12 @@ const styles = StyleSheet.create({
   backBtn: {
     padding: 4,
   },
-  placeholder: {
+  headerRightPlaceholder: {
     width: 30,
   },
   searchSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -230,74 +214,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 14,
+    borderRadius: Radii.md,
+    paddingHorizontal: 12,
     height: 40,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: 0,
   },
   scrollContent: {
-    paddingVertical: Spacing.xs,
+    padding: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
-  followerRow: {
-    flexDirection: 'row',
+  loadingContainer: {
+    paddingVertical: 48,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 12,
+  },
+  emptyCard: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    marginTop: Spacing.md,
   },
-  followerProfileClick: {
+  itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
+    marginBottom: 8,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.border,
-    marginRight: 12,
   },
-  nameSection: {
+  infoCol: {
     flex: 1,
+    gap: 2,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  actionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  followBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: Radii.full,
-  },
-  followingBtn: {
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  removeBtn: {
-    padding: 6,
-  },
-  emptyState: {
-    padding: Spacing.xl,
-    alignItems: 'center',
   },
 })
