@@ -33,10 +33,27 @@ import {
   CheckCheck,
 } from 'lucide-react-native'
 
+import { supabase } from '@/services/supabase'
+import { useAuth } from '@/contexts/AuthContext'
+import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+
 export default function DirectMessageChatScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const targetUserId = id || 'jane-doe'
+  const targetUserId = id || ''
+
+  const [recipient, setRecipient] = useState<{
+    name: string
+    avatar: string | null
+    isVerified: boolean
+    city: string
+  }>({
+    name: 'Community Member',
+    avatar: null,
+    isVerified: false,
+    city: 'Local',
+  })
 
   const [messages, setMessages] = useState<RealtimeMessageItem[]>([])
   const [inputText, setInputText] = useState('')
@@ -45,14 +62,34 @@ export default function DirectMessageChatScreen() {
   const scrollRef = useRef<any>(null)
 
   useEffect(() => {
-    // 1. Initial fetch from Supabase
+    if (!targetUserId) return
+
+    // 1. Fetch recipient profile
+    ;(supabase as any)
+      .from('profiles')
+      .select('first_name, last_name, profile_image_url, is_verified, location_city')
+      .eq('user_id', targetUserId)
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (data) {
+          const name = `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Community Member'
+          setRecipient({
+            name,
+            avatar: data.profile_image_url || null,
+            isVerified: Boolean(data.is_verified),
+            city: data.location_city || 'Local',
+          })
+        }
+      })
+
+    // 2. Initial fetch messages from Supabase
     loadConversationMessages(targetUserId)
       .then((data) => {
         setMessages(data)
       })
       .finally(() => setLoading(false))
 
-    // 2. Subscribe to Supabase Realtime for live updates
+    // 3. Subscribe to Supabase Realtime for live updates
     const unsubscribe = subscribeToConversationRealtime(targetUserId, (newMsg) => {
       setMessages((prev) => {
         // Prevent duplicate insertion if already added optimistically
@@ -80,7 +117,7 @@ export default function DirectMessageChatScreen() {
     const optimisticMsg: RealtimeMessageItem = {
       id: tempId,
       conversationId: targetUserId,
-      senderId: 'me',
+      senderId: user?.id || 'me',
       senderName: 'You',
       senderAvatar: null,
       text: textToSend,
@@ -99,11 +136,10 @@ export default function DirectMessageChatScreen() {
         prev.map((m) => (m.id === tempId ? realMsg : m))
       )
     } catch {
-      // Revert on error
-      setMessages((prev) => prev.filter((m) => m.id !== tempId))
-      setInputText(textToSend)
+      // Retain optimistic message or mark failed
     } finally {
       setSending(false)
+      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 100)
     }
   }
 
@@ -114,10 +150,10 @@ export default function DirectMessageChatScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top Header */}
+        {/* Top Header Bar */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft color={Colors.text} size={22} />
@@ -125,24 +161,25 @@ export default function DirectMessageChatScreen() {
 
           <TouchableOpacity
             onPress={() => router.push(`/profile/${targetUserId}`)}
-            style={styles.headerCenter}
+            style={styles.headerUser}
           >
-            <View style={styles.avatarWrap}>
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-                }}
-                style={styles.avatar}
-              />
-              <View style={styles.onlineDot} />
-            </View>
-
-            <View>
-              <AppText variant="bodySm" weight="bold">
-                Jane Doe
-              </AppText>
+            <Image
+              source={{
+                uri:
+                  recipient.avatar ||
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+              }}
+              style={styles.headerAvatar}
+            />
+            <View style={styles.headerUserInfo}>
+              <View style={styles.headerNameRow}>
+                <AppText variant="body" weight="bold" numberOfLines={1}>
+                  {recipient.name}
+                </AppText>
+                {recipient.isVerified && <VerifiedBadge size={14} />}
+              </View>
               <AppText variant="caption" color={Colors.textSecondary}>
-                Active now
+                {recipient.city}
               </AppText>
             </View>
           </TouchableOpacity>
@@ -150,18 +187,6 @@ export default function DirectMessageChatScreen() {
           <TouchableOpacity style={styles.headerRight}>
             <MoreHorizontal color={Colors.text} size={22} />
           </TouchableOpacity>
-        </View>
-
-        {/* 92% Match Floating Header Bar */}
-        <View style={styles.matchScoreBar}>
-          <View style={styles.matchBadge}>
-            <AppText variant="caption" weight="bold" color={Colors.primary}>
-              92% Match
-            </AppText>
-          </View>
-          <AppText variant="caption" color={Colors.textSecondary} style={styles.matchText}>
-            You and Jane both love Design & Technology
-          </AppText>
         </View>
 
         {/* Messages Scroll Area */}
@@ -174,7 +199,7 @@ export default function DirectMessageChatScreen() {
           <TouchableOpacity
             onPress={() =>
               handleIcebreakerPress(
-                "Hey Jane! I saw we're both into local tech communities. Are you joining any meetups this week? 🚀"
+                `Hey ${recipient.name}! Great connecting with you. What local events or projects are you excited about lately? ✨`
               )
             }
             style={styles.icebreakerCard}
@@ -182,11 +207,11 @@ export default function DirectMessageChatScreen() {
             <View style={styles.icebreakerHeader}>
               <Sparkles color={Colors.primary} size={16} />
               <AppText variant="caption" weight="bold" color={Colors.primary}>
-                AI Icebreaker Suggestion
+                AI Conversation Starter
               </AppText>
             </View>
             <AppText variant="bodySm" color={Colors.text} style={styles.icebreakerPrompt}>
-              "Hey Jane! I saw we're both into local tech communities. Are you joining any meetups this week? 🚀"
+              "Hey {recipient.name}! Great connecting with you. What local events or projects are you excited about lately? ✨"
             </AppText>
             <View style={styles.icebreakerFooter}>
               <AppText variant="caption" color={Colors.textSecondary}>
@@ -286,6 +311,9 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
+  container: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -298,6 +326,28 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     padding: 4,
+  },
+  headerUser: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  headerAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.border,
+  },
+  headerUserInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  headerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   headerCenter: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -7,9 +7,18 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import {
+  fetchDiscoverMatches,
+  fetchDiscoverCommunities,
+  fetchDiscoverEvents,
+  fetchDiscoverVideos,
+  DiscoverVideoItem,
+} from '@/services/discover'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { MatchCard, MatchProfile } from '@/components/matches/MatchCard'
@@ -17,6 +26,7 @@ import { FilterModal, FilterState } from '@/components/matches/FilterModal'
 import { SortMenuModal, SortOption } from '@/components/matches/SortMenuModal'
 import { CommunityCard, CommunityItem } from '@/components/communities/CommunityCard'
 import { EventCard, EventItem } from '@/components/events/EventCard'
+import { Card } from '@/components/primitives/Card'
 import {
   Search,
   SlidersHorizontal,
@@ -31,156 +41,21 @@ import {
 const DISCOVER_TABS = ['People', 'Communities', 'Events', 'Videos'] as const
 type DiscoverTab = (typeof DISCOVER_TABS)[number]
 
-const SAMPLE_MATCHES: MatchProfile[] = [
-  {
-    id: 'maya-patel',
-    name: 'Maya Patel',
-    age: 28,
-    isVerified: true,
-    location: 'Lagos, Nigeria',
-    distance: '1.2 mi',
-    matchScore: 94,
-    photoUrl:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
-    sharedInterests: ['Design', 'Startups', 'Photography'],
-    sharedValues: ['Kindness', 'Growth'],
-    bio: 'Product designer & creative director. Loving local art exhibitions and building collaborative tech communities.',
-  },
-  {
-    id: 'david-chen',
-    name: 'David Chen',
-    age: 30,
-    isVerified: true,
-    location: 'Lagos, Nigeria',
-    distance: '2.8 mi',
-    matchScore: 89,
-    photoUrl:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&fit=crop&q=80',
-    sharedInterests: ['Programming', 'AI', 'Hiking'],
-    sharedValues: ['Learning', 'Community'],
-    bio: 'Software architect passionate about decentralized protocols and weekend trail runs.',
-  },
-  {
-    id: 'elena-rostova',
-    name: 'Elena Rostova',
-    age: 26,
-    isVerified: true,
-    location: 'Lagos, Nigeria',
-    distance: '3.4 mi',
-    matchScore: 86,
-    photoUrl:
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&fit=crop&q=80',
-    sharedInterests: ['Yoga', 'Books', 'Wellness'],
-    sharedValues: ['Kindness', 'Health'],
-    bio: 'Yoga teacher & mental health advocate. Looking for mindful souls and weekend book club buddies.',
-  },
-]
-
-const SAMPLE_COMMUNITIES: CommunityItem[] = [
-  {
-    id: 'lagos-creators',
-    name: 'Lagos Creators & Builders',
-    distance: '1.2 km away',
-    membersCount: 420,
-    category: 'Learning',
-    description: 'A community for designers and software builders.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
-  },
-  {
-    id: 'lekki-runners',
-    name: 'Lekki Morning Runners',
-    distance: '2.4 km away',
-    membersCount: 185,
-    category: 'Outdoors',
-    description: 'Weekly morning running club in Lekki.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&fit=crop&q=80',
-  },
-  {
-    id: 'mindful-living',
-    name: 'Mindful Living Space',
-    distance: '3.1 km away',
-    membersCount: 248,
-    category: 'Wellness',
-    description: 'Mindfulness, meditation, and well-being.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400&fit=crop&q=80',
-  },
-]
-
-const SAMPLE_EVENTS: EventItem[] = [
-  {
-    id: 'e1',
-    title: 'Morning Yoga in the Park',
-    host: 'Balance & Breathe',
-    dateMonth: 'JUN',
-    dateDay: '15',
-    dateDayOfWeek: 'SAT',
-    dateTimeFormatted: 'Sat, Jun 15 · 8:00 AM',
-    distance: '0.6 km away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
-    attendeesCount: 12,
-  },
-  {
-    id: 'e2',
-    title: 'Tech Founders Coffee & Hike',
-    host: 'Lagos Tech Meetups',
-    dateMonth: 'JUN',
-    dateDay: '16',
-    dateDayOfWeek: 'SUN',
-    dateTimeFormatted: 'Sun, Jun 16 · 9:00 AM',
-    distance: '1.4 km away',
-    imageUrl:
-      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&fit=crop&q=80',
-    attendeesCount: 28,
-  },
-]
-
-const SAMPLE_VIDEOS = [
-  {
-    id: 'v1',
-    title: 'How we built a 400-member community in Lagos',
-    authorName: 'Maya Patel',
-    views: '1.8K',
-    thumbnail:
-      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
-  },
-  {
-    id: 'v2',
-    title: 'Sunrise meditation session highlights 🌿',
-    authorName: 'Elena Rostova',
-    views: '2.4K',
-    thumbnail:
-      'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
-  },
-  {
-    id: 'v3',
-    title: 'Weekend Trail Walk at Lekki Conservation',
-    authorName: 'David Chen',
-    views: '950',
-    thumbnail:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&fit=crop&q=80',
-  },
-  {
-    id: 'v4',
-    title: '5 Books that transformed our startup journey',
-    authorName: 'Marcus Brody',
-    views: '3.1K',
-    thumbnail:
-      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&fit=crop&q=80',
-  },
-]
-
 export default function DiscoverScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<DiscoverTab>('People')
   const [searchQuery, setSearchQuery] = useState('')
   const [filterModalVisible, setFilterModalVisible] = useState(false)
   const [sortModalVisible, setSortModalVisible] = useState(false)
   const [currentSort, setCurrentSort] = useState<SortOption>('best_match')
   const [refreshing, setRefreshing] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const [matches, setMatches] = useState<MatchProfile[]>([])
+  const [communities, setCommunities] = useState<CommunityItem[]>([])
+  const [events, setEvents] = useState<EventItem[]>([])
+  const [videos, setVideos] = useState<DiscoverVideoItem[]>([])
 
   const [filters, setFilters] = useState<FilterState>({
     distance: '25 mi',
@@ -191,16 +66,82 @@ export default function DiscoverScreen() {
     minMatchScore: 60,
   })
 
+  const loadDiscoverData = async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      const [matchesRes, commRes, eventsRes, videosRes] = await Promise.all([
+        fetchDiscoverMatches(user.id),
+        fetchDiscoverCommunities(),
+        fetchDiscoverEvents(),
+        fetchDiscoverVideos(),
+      ])
+      setMatches(matchesRes)
+      setCommunities(commRes)
+      setEvents(eventsRes)
+      setVideos(videosRes)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDiscoverData()
+  }, [user])
+
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 500)
+    await loadDiscoverData()
+    setRefreshing(false)
   }
 
   const handleApplyFilters = (newFilters: FilterState) => {
     setFilters(newFilters)
   }
+
+  // Filter and sort matches
+  const filteredMatches = matches
+    .filter((m) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase()
+        return (
+          m.name.toLowerCase().includes(q) ||
+          m.location.toLowerCase().includes(q) ||
+          m.sharedInterests.some((i) => i.toLowerCase().includes(q)) ||
+          m.sharedValues.some((v) => v.toLowerCase().includes(q))
+        )
+      }
+      return true
+    })
+    .filter((m) => {
+      if (filters.verifiedOnly && !m.isVerified) return false
+      if (m.matchScore < filters.minMatchScore) return false
+      return true
+    })
+
+  const filteredCommunities = communities.filter((c) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      return c.name.toLowerCase().includes(q) || c.category.toLowerCase().includes(q)
+    }
+    return true
+  })
+
+  const filteredEvents = events.filter((e) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      return e.title.toLowerCase().includes(q) || e.host.toLowerCase().includes(q)
+    }
+    return true
+  })
+
+  const filteredVideos = videos.filter((v) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      return v.title.toLowerCase().includes(q) || v.authorName.toLowerCase().includes(q)
+    }
+    return true
+  })
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -241,7 +182,7 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
-      {/* 2. Top Segmented Tabs */}
+      {/* 2. Top Segmented Discover Tabs */}
       <View style={styles.tabsWrapper}>
         <ScrollView
           horizontal
@@ -283,79 +224,138 @@ export default function DiscoverScreen() {
           />
         }
       >
-        {activeTab === 'People' && (
-          <View style={styles.peopleSection}>
-            <View style={styles.sectionHeader}>
-              <AppText variant="h3" weight="bold">
-                Best Matches Near You
-              </AppText>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                Local-first recommendation based on your values & interests
-              </AppText>
-            </View>
-
-            {SAMPLE_MATCHES.map((cand) => (
-              <MatchCard
-                key={cand.id}
-                profile={cand}
-                onPressDetails={() => router.push(`/profile/${cand.id}`)}
-                onConnect={() => router.push(`/profile/${cand.id}`)}
-              />
-            ))}
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <AppText variant="bodySm" color={Colors.textSecondary} style={{ marginTop: 12 }}>
+              Finding real matches and communities...
+            </AppText>
           </View>
-        )}
-
-        {activeTab === 'Communities' && (
-          <View style={styles.communitiesSection}>
-            {SAMPLE_COMMUNITIES.map((c) => (
-              <CommunityCard
-                key={c.id}
-                community={c}
-                onPress={() => router.push(`/community/${c.id}`)}
-              />
-            ))}
-          </View>
-        )}
-
-        {activeTab === 'Events' && (
-          <View style={styles.eventsSection}>
-            {SAMPLE_EVENTS.map((e) => (
-              <EventCard
-                key={e.id}
-                event={e}
-                onPress={() => router.push(`/event/${e.id}`)}
-              />
-            ))}
-          </View>
-        )}
-
-        {activeTab === 'Videos' && (
-          <View style={styles.videosGrid}>
-            {SAMPLE_VIDEOS.map((v) => (
-              <TouchableOpacity
-                key={v.id}
-                activeOpacity={0.88}
-                onPress={() => router.push(`/video/${v.id}`)}
-                style={styles.videoCard}
-              >
-                <Image source={{ uri: v.thumbnail }} style={styles.videoThumb} />
-                <View style={styles.videoPlayBadge}>
-                  <Play color="#FFFFFF" size={14} fill="#FFFFFF" />
-                  <AppText variant="caption" weight="bold" color="#FFFFFF">
-                    {v.views}
+        ) : (
+          <>
+            {activeTab === 'People' && (
+              <View style={styles.peopleSection}>
+                <View style={styles.sectionHeader}>
+                  <AppText variant="h3" weight="bold">
+                    Best Matches Near You
+                  </AppText>
+                  <AppText variant="caption" color={Colors.textSecondary}>
+                    Local-first recommendation based on your values & interests
                   </AppText>
                 </View>
-                <View style={styles.videoInfo}>
-                  <AppText variant="caption" weight="bold" color="#FFFFFF" numberOfLines={2}>
-                    {v.title}
-                  </AppText>
-                  <AppText variant="caption" color="rgba(255, 255, 255, 0.85)">
-                    {v.authorName}
-                  </AppText>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+
+                {filteredMatches.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Users color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No matches found
+                    </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Try adjusting your search filters or discovery radius to see more members!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredMatches.map((cand) => (
+                    <MatchCard
+                      key={cand.id}
+                      profile={cand}
+                      onPressDetails={() => router.push(`/profile/${cand.id}`)}
+                      onConnect={() => router.push(`/profile/${cand.id}`)}
+                    />
+                  ))
+                )}
+              </View>
+            )}
+
+            {activeTab === 'Communities' && (
+              <View style={styles.communitiesSection}>
+                {filteredCommunities.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Compass color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No communities yet
+                    </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Be the first to start a local community hub!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredCommunities.map((c) => (
+                    <CommunityCard
+                      key={c.id}
+                      community={c}
+                      onPress={() => router.push(`/community/${c.id}`)}
+                    />
+                  ))
+                )}
+              </View>
+            )}
+
+            {activeTab === 'Events' && (
+              <View style={styles.eventsSection}>
+                {filteredEvents.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Calendar color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No upcoming events
+                    </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Check back soon or organize a community meetup!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredEvents.map((e) => (
+                    <EventCard
+                      key={e.id}
+                      event={e}
+                      onPress={() => router.push(`/event/${e.id}`)}
+                    />
+                  ))
+                )}
+              </View>
+            )}
+
+            {activeTab === 'Videos' && (
+              <View style={styles.videosGrid}>
+                {filteredVideos.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Video color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No videos shared yet
+                    </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Post the first video story in the community!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredVideos.map((v) => (
+                    <TouchableOpacity
+                      key={v.id}
+                      activeOpacity={0.88}
+                      onPress={() => router.push(`/video/${v.id}`)}
+                      style={styles.videoCard}
+                    >
+                      <Image source={{ uri: v.thumbnail }} style={styles.videoThumb} />
+                      <View style={styles.videoPlayBadge}>
+                        <Play color="#FFFFFF" size={14} fill="#FFFFFF" />
+                        <AppText variant="caption" weight="bold" color="#FFFFFF">
+                          {v.views}
+                        </AppText>
+                      </View>
+                      <View style={styles.videoInfo}>
+                        <AppText variant="caption" weight="bold" color="#FFFFFF" numberOfLines={2}>
+                          {v.title}
+                        </AppText>
+                        <AppText variant="caption" color="rgba(255,255,255,0.85)" numberOfLines={1}>
+                          {v.authorName}
+                        </AppText>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -372,7 +372,7 @@ export default function DiscoverScreen() {
         visible={sortModalVisible}
         onClose={() => setSortModalVisible(false)}
         selectedSort={currentSort}
-        onSelectSort={setCurrentSort}
+        onSelectSort={(sort) => setCurrentSort(sort)}
       />
     </SafeAreaView>
   )
@@ -387,60 +387,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   headerIconBtn: {
-    padding: 4,
+    width: 38,
+    height: 38,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 14,
-    height: 42,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 42,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: 0,
   },
   tabsWrapper: {
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingVertical: 10,
+    paddingVertical: Spacing.xs,
   },
   tabsContainer: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.md,
     gap: 8,
   },
   tabPill: {
-    paddingHorizontal: 18,
-    paddingVertical: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: Radii.full,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -449,59 +449,71 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   scrollContent: {
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing.xxl,
   },
+  loadingContainer: {
+    paddingVertical: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCard: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    marginTop: Spacing.md,
+  },
   peopleSection: {
-    gap: Spacing.md,
+    gap: 14,
   },
   sectionHeader: {
-    marginBottom: Spacing.xs,
-    gap: 2,
+    marginBottom: 4,
   },
   communitiesSection: {
-    gap: Spacing.sm,
+    gap: 12,
   },
   eventsSection: {
-    gap: Spacing.sm,
+    gap: 12,
   },
   videosGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 12,
+    justifyContent: 'space-between',
   },
   videoCard: {
     width: '48%',
     height: 220,
-    borderRadius: Radii.md,
+    borderRadius: Radii.lg,
     overflow: 'hidden',
+    backgroundColor: '#0F172A',
     position: 'relative',
-    backgroundColor: Colors.border,
   },
   videoThumb: {
     width: '100%',
     height: '100%',
+    opacity: 0.85,
   },
   videoPlayBadge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 8,
+    left: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radii.full,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
   },
   videoInfo: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     padding: 10,
-    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
 })

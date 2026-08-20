@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -78,33 +81,101 @@ const SAMPLE_EVENT: EventItem = {
 
 export default function CommunityDetailScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [activeTab, setActiveTab] = useState<CommunityTab>('Feed')
   const [isJoined, setIsJoined] = useState(false)
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'moderator' | 'member' | 'guest'>('guest')
   const [activeChannel, setActiveChannel] = useState('general')
+  const [loading, setLoading] = useState(true)
+  const [communityData, setCommunityData] = useState<any>(null)
+
+  useEffect(() => {
+    if (!id) return
+    const loadCommunity = async () => {
+      setLoading(true)
+      try {
+        const { data: comm } = await supabase
+          .from('communities')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle()
+
+        if (comm) {
+          setCommunityData(comm)
+        }
+
+        if (user) {
+          const { data: member } = await supabase
+            .from('community_members')
+            .select('role')
+            .eq('community_id', id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          if (member) {
+            setIsJoined(true)
+            setUserRole((member as any).role || 'member')
+          } else {
+            setIsJoined(false)
+            setUserRole('guest')
+          }
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadCommunity()
+  }, [id, user])
+
+  const handleToggleJoin = async () => {
+    if (!user || !id) return
+    if (isJoined) {
+      await supabase
+        .from('community_members')
+        .delete()
+        .eq('community_id', id)
+        .eq('user_id', user.id)
+      setIsJoined(false)
+      setUserRole('guest')
+    } else {
+      await supabase
+        .from('community_members')
+        .insert({
+          community_id: id,
+          user_id: user.id,
+          role: 'member',
+        })
+      setIsJoined(true)
+      setUserRole('member')
+    }
+  }
 
   const community = {
-    name: 'Lagos Creators & Builders',
-    membersCount: 420,
-    onlineCount: 38,
+    name: communityData?.community_name || 'Community Hub',
+    membersCount: communityData?.member_count || 1,
+    onlineCount: Math.max(1, Math.round((communityData?.member_count || 1) * 0.1)),
     type: 'Hybrid (Local & Online)',
-    privacy: 'Public',
-    category: 'Design & Technology',
+    privacy: communityData?.is_private ? 'Private' : 'Public',
+    category: communityData?.category || 'General',
     coverImage:
+      communityData?.cover_image_url ||
       'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=900&fit=crop&q=80',
     avatarUrl:
+      communityData?.profile_image_url ||
       'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=200&fit=crop&q=80',
     description:
-      'A collaborative collective of software engineers, designers, startup founders, and creative technologists based in Lagos building world-class products and lifelong friendships.',
+      communityData?.description ||
+      'A welcoming local community space to connect, share experiences, and grow together.',
     rules: [
       'Be respectful, inclusive, and constructive.',
-      'No unsolicited spam or hard selling.',
-      'Help each other grow through knowledge sharing.',
+      'No spam, self-promotion, or unsolicited promotional DMs.',
+      'Celebrate diverse perspectives and foster real friendships.',
     ],
-    creatorName: 'Maya Patel',
-    createdDate: 'January 2026',
-    isAdmin: true,
   }
+
+  const isAdmin = userRole === 'owner' || userRole === 'admin' || userRole === 'moderator'
 
   return (
     <View style={styles.container}>
@@ -123,7 +194,7 @@ export default function CommunityDetailScreen() {
               <TouchableOpacity style={styles.navCircleBtn}>
                 <Share2 color="#FFFFFF" size={18} />
               </TouchableOpacity>
-              {community.isAdmin && (
+              {isAdmin && (
                 <TouchableOpacity
                   onPress={() => router.push(`/community/admin/${id}`)}
                   style={styles.navCircleBtn}
@@ -163,7 +234,7 @@ export default function CommunityDetailScreen() {
             <AppButton
               title={isJoined ? 'Joined ✓' : 'Join Community'}
               variant={isJoined ? 'secondary' : 'primary'}
-              onPress={() => setIsJoined(!isJoined)}
+              onPress={handleToggleJoin}
               style={styles.joinBtn}
             />
             <TouchableOpacity style={styles.iconBtn}>
@@ -353,7 +424,7 @@ export default function CommunityDetailScreen() {
                 Details
               </AppText>
               <AppText variant="caption" color={Colors.textSecondary}>
-                Type: {community.type} · Privacy: {community.privacy} · Created: {community.createdDate}
+                Type: {community.type} · Privacy: {community.privacy} · Category: {community.category}
               </AppText>
             </View>
           </View>

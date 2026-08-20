@@ -1,13 +1,16 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -25,30 +28,90 @@ import {
 
 export default function EventDetailScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [isRsvped, setIsRsvped] = useState(false)
   const [isLiked, setIsLiked] = useState(false)
   const [isFollowing, setIsFollowing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [eventData, setEventData] = useState<any>(null)
 
-  // Demo event data matching Morning Yoga in the Park in reference Screen 2
+  useEffect(() => {
+    if (!id) return
+    const loadEvent = async () => {
+      setLoading(true)
+      try {
+        const { data: e } = await supabase
+          .from('events')
+          .select('*, communities(community_name, profile_image_url)')
+          .eq('id', id)
+          .maybeSingle()
+
+        if (e) setEventData(e)
+
+        if (user) {
+          const { data: rsvp } = await (supabase as any)
+            .from('event_rsvps')
+            .select('id')
+            .eq('event_id', id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          setIsRsvped(Boolean(rsvp))
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadEvent()
+  }, [id, user])
+
+  const handleToggleRsvp = async () => {
+    if (!user || !id) return
+    if (isRsvped) {
+      await (supabase as any)
+        .from('event_rsvps')
+        .delete()
+        .eq('event_id', id)
+        .eq('user_id', user.id)
+      setIsRsvped(false)
+    } else {
+      await (supabase as any)
+        .from('event_rsvps')
+        .insert({
+          event_id: id,
+          user_id: user.id,
+          status: 'going',
+        })
+      setIsRsvped(true)
+    }
+  }
+
+  const d = eventData?.event_date ? new Date(eventData.event_date) : new Date()
+  const months = ['JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'JAN', 'FEB', 'MAR', 'APR', 'MAY']
+
   const event = {
-    title: 'Morning Yoga in the Park',
-    host: 'Balance & Breathe',
-    hostFollowers: '1.2K followers',
+    title: eventData?.event_title || 'Community Meetup & Gathering',
+    host: eventData?.communities?.community_name || 'Authentic Community',
+    hostFollowers: '500+ members',
     hostAvatar:
+      eventData?.communities?.profile_image_url ||
       'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=150&fit=crop&q=80',
-    dateMonth: 'JUN',
-    dateDay: '15',
+    dateMonth: months[d.getMonth()] || 'JUN',
+    dateDay: String(d.getDate() || '15'),
     dateDayOfWeek: 'SAT',
-    dateFull: 'Sat, Jun 15, 2024',
-    timeRange: '8:00 AM - 9:00 AM',
-    location: 'Riverside Park, Austin, TX',
-    distance: '0.6 mi away',
+    dateFull: d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+    timeRange: '9:00 AM - 11:00 AM',
+    location: eventData?.location_name || 'Local Community Center',
+    distance: 'In your city',
     heroImage:
+      eventData?.cover_image_url ||
       'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&fit=crop&q=80',
     description:
-      'Start your weekend with intention. All levels welcome! Bring a mat, water, and good energy. 🌿',
-    attendeesCount: 28,
+      eventData?.description ||
+      'Start your weekend with intention. All community members are welcome! Bring good energy. 🌿',
+    attendeesCount: 16,
   }
 
   return (
@@ -256,7 +319,7 @@ export default function EventDetailScreen() {
       <View style={styles.bottomBar}>
         <AppButton
           title={isRsvped ? "✓ RSVP'd · You're going!" : 'RSVP Now'}
-          onPress={() => setIsRsvped(!isRsvped)}
+          onPress={handleToggleRsvp}
           style={[styles.rsvpBtn, isRsvped ? styles.rsvpedBtn : null]}
         />
       </View>

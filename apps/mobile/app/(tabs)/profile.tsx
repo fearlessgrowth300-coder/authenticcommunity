@@ -38,22 +38,12 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userPosts, setUserPosts] = useState<MobilePostItem[]>([])
   const [stats, setStats] = useState<SocialProfileStats>({
-    followersCount: 142,
-    followingCount: 89,
-    connectionsCount: 34,
+    followersCount: 0,
+    followingCount: 0,
+    connectionsCount: 0,
   })
-  const [interests, setInterests] = useState<string[]>([
-    'Photography',
-    'Hiking',
-    'Technology',
-    'Design',
-  ])
-  const [values, setValues] = useState<string[]>([
-    'Kindness',
-    'Growth',
-    'Community',
-    'Learning',
-  ])
+  const [interests, setInterests] = useState<string[]>([])
+  const [values, setValues] = useState<string[]>([])
 
   const loadProfileData = async () => {
     if (!user) return

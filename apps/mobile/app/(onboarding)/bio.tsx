@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
+import { uploadMediaFile } from '@/services/mediaUpload'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -36,6 +37,7 @@ export default function OnboardingBioScreen() {
   const [photoUri, setPhotoUri] = useState<string>(
     profile?.profile_image_url || DEFAULT_AVATAR
   )
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null)
   const [bio, setBio] = useState(
     profile?.bio ||
       'Designer by day, coffee enthusiast always ☕. Love great conversations, local adventures, and building meaningful connections.'
@@ -52,14 +54,16 @@ export default function OnboardingBioScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.85,
+        base64: true,
       })
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setPhotoUri(result.assets[0].uri)
+        setPhotoBase64((result.assets[0] as any)?.base64 || null)
         setError(null)
       }
     } catch {
@@ -83,13 +87,28 @@ export default function OnboardingBioScreen() {
     setLoading(true)
 
     try {
+      let finalAvatarUrl = photoUri
+
+      // If user selected a new local image, upload to Supabase avatars bucket
+      if (photoUri && (photoUri.startsWith('file://') || photoUri.startsWith('content://') || photoUri.startsWith('blob:'))) {
+        const uploadRes = await uploadMediaFile({
+          bucket: 'avatars',
+          localUri: photoUri,
+          base64: photoBase64,
+          type: 'image',
+        })
+        if (!uploadRes.error && uploadRes.url) {
+          finalAvatarUrl = uploadRes.url
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert(
           {
             user_id: user.id,
             bio: bio.trim() || null,
-            profile_image_url: photoUri || null,
+            profile_image_url: finalAvatarUrl || null,
             onboarding_completed: true,
             is_active: true,
             updated_at: new Date().toISOString(),

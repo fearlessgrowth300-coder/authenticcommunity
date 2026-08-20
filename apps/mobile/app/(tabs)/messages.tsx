@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -7,22 +7,25 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import {
   Search,
-  SlidersHorizontal,
   SquarePen,
   Users,
   Compass,
   Check,
   X,
   Ban,
-  Sparkles,
+  MessageSquare,
 } from 'lucide-react-native'
 
 const MESSAGE_TABS = ['Chats', 'Requests', 'Communities'] as const
@@ -31,7 +34,7 @@ type MessageTab = (typeof MESSAGE_TABS)[number]
 interface DirectConversation {
   id: string
   name: string
-  avatarUrl: string
+  avatarUrl: string | null
   lastMessage: string
   time: string
   unreadCount?: number
@@ -39,13 +42,13 @@ interface DirectConversation {
   isVerified?: boolean
 }
 
-interface MessageRequest {
+interface MessageRequestItem {
   id: string
+  senderId: string
   name: string
-  avatarUrl: string
+  avatarUrl: string | null
   isVerified: boolean
   matchScore: number
-  sharedInterests: string[]
   previewText: string
   timeAgo: string
 }
@@ -53,110 +56,191 @@ interface MessageRequest {
 interface CommunityConversation {
   id: string
   name: string
-  iconType: 'hikers' | 'mindful' | 'general'
-  lastMessageSender: string
+  avatarUrl: string | null
   lastMessage: string
   time: string
   unreadCount?: number
 }
 
-const SAMPLE_CHATS: DirectConversation[] = [
-  {
-    id: 'jane-doe',
-    name: 'Jane Doe',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    lastMessage: "Sounds great! I'd love to check that out this weekend.",
-    time: '9:41 AM',
-    unreadCount: 2,
-    isOnline: true,
-    isVerified: true,
-  },
-  {
-    id: 'michael-chen',
-    name: 'Michael Chen',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    lastMessage: 'That makes a lot of sense. Thanks for sharing!',
-    time: 'Yesterday',
-    unreadCount: 1,
-    isOnline: true,
-    isVerified: true,
-  },
-  {
-    id: 'david-rodriguez',
-    name: 'David Rodriguez',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&fit=crop&q=80',
-    lastMessage: 'Awesome! See you at the Saturday meetup.',
-    time: 'Mon',
-    isOnline: true,
-  },
-]
-
-const SAMPLE_REQUESTS: MessageRequest[] = [
-  {
-    id: 'req-1',
-    name: 'Amara Okafor',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    isVerified: true,
-    matchScore: 92,
-    sharedInterests: ['Design', 'Community', 'Tech'],
-    previewText: 'Hey! Loved your post about building local creator spaces. Would love to connect and chat!',
-    timeAgo: '2h ago',
-  },
-  {
-    id: 'req-2',
-    name: 'Tunde Bakare',
-    avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&fit=crop&q=80',
-    isVerified: false,
-    matchScore: 84,
-    sharedInterests: ['Fitness', 'Running'],
-    previewText: 'Are you joining the Saturday 10km run at Lekki?',
-    timeAgo: '1d ago',
-  },
-]
-
-const SAMPLE_COMMUNITIES: CommunityConversation[] = [
-  {
-    id: 'lagos-creators',
-    name: 'Lagos Creators & Builders',
-    iconType: 'hikers',
-    lastMessageSender: 'Sarah',
-    lastMessage: "Don't forget our demo night this Friday! 🚀",
-    time: 'Yesterday',
-    unreadCount: 3,
-  },
-  {
-    id: 'mindful-living',
-    name: 'Mindful Living Space',
-    iconType: 'mindful',
-    lastMessageSender: 'Alex',
-    lastMessage: 'Morning meditation session link posted in #general.',
-    time: 'Mon',
-    unreadCount: 4,
-  },
-]
-
 export default function MessagesHomeScreen() {
   const router = useRouter()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<MessageTab>('Chats')
   const [searchQuery, setSearchQuery] = useState('')
-  const [requests, setRequests] = useState<MessageRequest[]>(SAMPLE_REQUESTS)
   const [refreshing, setRefreshing] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const [chats, setChats] = useState<DirectConversation[]>([])
+  const [requests, setRequests] = useState<MessageRequestItem[]>([])
+  const [communities, setCommunities] = useState<CommunityConversation[]>([])
+
+  const loadMessagesData = async () => {
+    if (!user) return
+    setLoading(true)
+
+    try {
+      // 1. Fetch direct messages where current user is sender or recipient
+      const { data: messagesData } = await (supabase as any)
+        .from('messages')
+        .select('id, sender_id, recipient_id, content, created_at, is_read')
+        .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+        .order('created_at', { ascending: false })
+
+      // 2. Fetch connections
+      const { data: connsData } = await supabase
+        .from('connections')
+        .select('user_id_1, user_id_2')
+        .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`)
+
+      const connectedUserIds = new Set<string>()
+      ;(connsData || []).forEach((c: any) => {
+        connectedUserIds.add(c.user_id_1 === user.id ? c.user_id_2 : c.user_id_1)
+      })
+
+      // Group messages by counterpart
+      const conversationMap = new Map<string, { lastMsg: any; unread: number }>()
+      ;(messagesData || []).forEach((m: any) => {
+        const otherId = m.sender_id === user.id ? m.recipient_id : m.sender_id
+        if (!conversationMap.has(otherId)) {
+          conversationMap.set(otherId, {
+            lastMsg: m,
+            unread: m.recipient_id === user.id && !m.is_read ? 1 : 0,
+          })
+        } else if (m.recipient_id === user.id && !m.is_read) {
+          conversationMap.get(otherId)!.unread += 1
+        }
+      })
+
+      const allCounterpartIds = Array.from(
+        new Set([...Array.from(conversationMap.keys()), ...Array.from(connectedUserIds)])
+      )
+
+      if (allCounterpartIds.length > 0) {
+        const { data: profilesData } = await (supabase as any)
+          .from('profiles')
+          .select('user_id, first_name, last_name, profile_image_url, is_verified, location_city')
+          .in('user_id', allCounterpartIds)
+
+        const profileMap = new Map<string, any>()
+        ;(profilesData || []).forEach((p: any) => profileMap.set(p.user_id, p))
+
+        const activeChats: DirectConversation[] = []
+        const pendingReqs: MessageRequestItem[] = []
+
+        allCounterpartIds.forEach((cId) => {
+          const prof = profileMap.get(cId)
+          const info = conversationMap.get(cId)
+          const name = prof ? `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Community Member' : 'Member'
+          const isConnected = connectedUserIds.has(cId)
+
+          // If incoming message from non-connection who sent the first message -> treat as request
+          if (!isConnected && info && info.lastMsg.sender_id === cId) {
+            pendingReqs.push({
+              id: info.lastMsg.id,
+              senderId: cId,
+              name,
+              avatarUrl: prof?.profile_image_url || null,
+              isVerified: Boolean(prof?.is_verified),
+              matchScore: 88,
+              previewText: info.lastMsg.content || 'Sent you a connection message.',
+              timeAgo: 'Recently',
+            })
+          } else {
+            activeChats.push({
+              id: cId,
+              name,
+              avatarUrl: prof?.profile_image_url || null,
+              lastMessage: info?.lastMsg ? info.lastMsg.content : 'Connected with you',
+              time: info?.lastMsg ? 'Recently' : '',
+              unreadCount: info?.unread || 0,
+              isOnline: true,
+              isVerified: Boolean(prof?.is_verified),
+            })
+          }
+        })
+
+        setChats(activeChats)
+        setRequests(pendingReqs)
+      } else {
+        setChats([])
+        setRequests([])
+      }
+
+      // 3. Fetch joined communities
+      const { data: commMembers } = await supabase
+        .from('community_members')
+        .select('community_id, communities(id, community_name, profile_image_url)')
+        .eq('user_id', user.id)
+
+      if (commMembers && commMembers.length > 0) {
+        setCommunities(
+          commMembers.map((cm: any) => ({
+            id: cm.communities?.id || cm.community_id,
+            name: cm.communities?.community_name || 'Community Channel',
+            avatarUrl: cm.communities?.profile_image_url || null,
+            lastMessage: 'Active discussion in channel',
+            time: 'Today',
+          }))
+        )
+      } else {
+        setCommunities([])
+      }
+    } catch {
+      // Graceful fallback
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadMessagesData()
+  }, [user])
 
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 500)
+    await loadMessagesData()
+    setRefreshing(false)
   }
 
-  const handleAcceptRequest = (req: MessageRequest) => {
-    setRequests((prev) => prev.filter((r) => r.id !== req.id))
-    router.push('/chat/jane-doe')
+  const handleAcceptRequest = async (req: MessageRequestItem) => {
+    if (!user) return
+    try {
+      await supabase.from('connections').insert({
+        user_id_1: user.id,
+        user_id_2: req.senderId,
+      })
+      setRequests((prev) => prev.filter((r) => r.id !== req.id))
+      router.push(`/chat/${req.senderId}`)
+    } catch {
+      router.push(`/chat/${req.senderId}`)
+    }
   }
 
   const handleDeclineRequest = (id: string) => {
     setRequests((prev) => prev.filter((r) => r.id !== id))
   }
+
+  const handleBlockRequest = async (senderId: string) => {
+    if (!user) return
+    try {
+      await supabase.from('blocked_users').insert({
+        blocker_id: user.id,
+        blocked_id: senderId,
+      })
+      setRequests((prev) => prev.filter((r) => r.senderId !== senderId))
+    } catch {
+      setRequests((prev) => prev.filter((r) => r.senderId !== senderId))
+    }
+  }
+
+  const filteredChats = chats.filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const filteredCommunities = communities.filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -167,9 +251,9 @@ export default function MessagesHomeScreen() {
         </AppText>
 
         <TouchableOpacity
-          onPress={() => router.push('/chat/jane-doe')}
+          onPress={() => router.push('/discover')}
           style={styles.composeBtn}
-          accessibilityLabel="Compose new message"
+          accessibilityLabel="Find people to chat"
         >
           <SquarePen color={Colors.primary} size={22} />
         </TouchableOpacity>
@@ -221,14 +305,14 @@ export default function MessagesHomeScreen() {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search conversations"
+            placeholder="Search conversations & messages..."
             placeholderTextColor={Colors.textMuted}
             style={styles.searchInput}
           />
         </View>
       </View>
 
-      {/* 4. Tab Streams */}
+      {/* 4. Tab Content Views */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -239,180 +323,209 @@ export default function MessagesHomeScreen() {
           />
         }
       >
-        {activeTab === 'Chats' && (
-          /* Direct Chats Stream */
-          SAMPLE_CHATS.map((convo) => (
-            <TouchableOpacity
-              key={convo.id}
-              style={styles.convoRow}
-              onPress={() => router.push(`/chat/${convo.id}`)}
-            >
-              <View style={styles.avatarWrap}>
-                <Image source={{ uri: convo.avatarUrl }} style={styles.avatar} />
-                {convo.isOnline && <View style={styles.onlineDot} />}
-              </View>
-
-              <View style={styles.convoContent}>
-                <View style={styles.convoTopRow}>
-                  <View style={styles.nameRow}>
-                    <AppText variant="bodySm" weight="bold">
-                      {convo.name}
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : (
+          <>
+            {/* Direct Chats Tab */}
+            {activeTab === 'Chats' && (
+              <View style={styles.chatList}>
+                {filteredChats.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <MessageSquare color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No conversations yet
                     </AppText>
-                    {convo.isVerified && <VerifiedBadge size={13} />}
-                  </View>
-                  <AppText variant="caption" color={Colors.textMuted}>
-                    {convo.time}
-                  </AppText>
-                </View>
-
-                <View style={styles.convoBottomRow}>
-                  <AppText
-                    variant="caption"
-                    color={convo.unreadCount ? Colors.text : Colors.textSecondary}
-                    numberOfLines={1}
-                    style={styles.messageSnippet}
-                  >
-                    {convo.lastMessage}
-                  </AppText>
-                  {convo.unreadCount ? (
-                    <View style={styles.unreadBadge}>
-                      <AppText variant="caption" weight="bold" color="#FFFFFF" style={styles.unreadBadgeText}>
-                        {convo.unreadCount}
-                      </AppText>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-
-        {activeTab === 'Requests' && (
-          /* Message Requests Stream (Section 36) */
-          <View style={styles.requestsContainer}>
-            <View style={styles.requestsNotice}>
-              <Sparkles color={Colors.primary} size={16} />
-              <AppText variant="caption" color={Colors.textSecondary} style={styles.noticeText}>
-                Accepting a message request allows the sender to message you and call directly.
-              </AppText>
-            </View>
-
-            {requests.map((req) => (
-              <View key={req.id} style={styles.requestCard}>
-                <View style={styles.requestHeader}>
-                  <Image source={{ uri: req.avatarUrl }} style={styles.reqAvatar} />
-                  <View style={styles.reqInfo}>
-                    <View style={styles.nameRow}>
-                      <AppText variant="bodySm" weight="bold">
-                        {req.name}
-                      </AppText>
-                      {req.isVerified && <VerifiedBadge size={14} />}
-                      <View style={styles.fitBadge}>
-                        <AppText variant="caption" weight="bold" color={Colors.primary} style={styles.fitText}>
-                          {req.matchScore}% Fit
-                        </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Start connecting with members on Discover to chat!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredChats.map((chat) => (
+                    <TouchableOpacity
+                      key={chat.id}
+                      activeOpacity={0.7}
+                      onPress={() => router.push(`/chat/${chat.id}`)}
+                      style={styles.chatItem}
+                    >
+                      <View style={styles.avatarWrapper}>
+                        <Image
+                          source={{
+                            uri:
+                              chat.avatarUrl ||
+                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                          }}
+                          style={styles.avatar}
+                        />
+                        {chat.isOnline && <View style={styles.onlineIndicator} />}
                       </View>
-                    </View>
-                    <AppText variant="caption" color={Colors.textMuted}>
-                      {req.sharedInterests.join(' · ')} · {req.timeAgo}
-                    </AppText>
-                  </View>
-                </View>
 
-                {/* Message preview bubble */}
-                <View style={styles.reqBubble}>
-                  <AppText variant="bodySm" color={Colors.text} style={styles.reqBubbleText}>
-                    "{req.previewText}"
-                  </AppText>
-                </View>
+                      <View style={styles.chatContent}>
+                        <View style={styles.chatHeaderRow}>
+                          <View style={styles.nameBadgeRow}>
+                            <AppText variant="body" weight="bold" numberOfLines={1}>
+                              {chat.name}
+                            </AppText>
+                            {chat.isVerified && <VerifiedBadge size={14} />}
+                          </View>
+                          <AppText variant="caption" color={Colors.textSecondary}>
+                            {chat.time}
+                          </AppText>
+                        </View>
 
-                {/* Action Buttons */}
-                <View style={styles.reqActions}>
-                  <TouchableOpacity
-                    onPress={() => handleAcceptRequest(req)}
-                    style={styles.acceptBtn}
-                  >
-                    <Check color="#FFFFFF" size={16} strokeWidth={2.5} />
-                    <AppText variant="caption" weight="bold" color="#FFFFFF">
-                      Accept
-                    </AppText>
-                  </TouchableOpacity>
+                        <View style={styles.chatBottomRow}>
+                          <AppText
+                            variant="bodySm"
+                            color={chat.unreadCount ? Colors.text : Colors.textSecondary}
+                            weight={chat.unreadCount ? 'bold' : 'normal'}
+                            numberOfLines={1}
+                            style={styles.lastMessageText}
+                          >
+                            {chat.lastMessage}
+                          </AppText>
 
-                  <TouchableOpacity
-                    onPress={() => handleDeclineRequest(req.id)}
-                    style={styles.declineBtn}
-                  >
-                    <X color={Colors.textSecondary} size={16} />
-                    <AppText variant="caption" weight="semibold" color={Colors.textSecondary}>
-                      Decline
-                    </AppText>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => handleDeclineRequest(req.id)}
-                    style={styles.blockBtn}
-                  >
-                    <Ban color={Colors.coral} size={15} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-
-            {requests.length === 0 && (
-              <View style={styles.emptyState}>
-                <AppText variant="bodySm" color={Colors.textSecondary} align="center">
-                  No pending message requests.
-                </AppText>
+                          {chat.unreadCount ? (
+                            <View style={styles.unreadBadge}>
+                              <AppText variant="caption" weight="bold" color="#FFFFFF" style={styles.unreadText}>
+                                {chat.unreadCount}
+                              </AppText>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
             )}
-          </View>
-        )}
 
-        {activeTab === 'Communities' && (
-          /* Communities Chat Stream */
-          SAMPLE_COMMUNITIES.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={styles.convoRow}
-              onPress={() => router.push(`/community-chat/${c.id}`)}
-            >
-              <View style={[styles.avatarWrap, styles.communityBadge]}>
-                <Compass color="#16A34A" size={22} />
-              </View>
-
-              <View style={styles.convoContent}>
-                <View style={styles.convoTopRow}>
-                  <AppText variant="bodySm" weight="bold">
-                    {c.name}
-                  </AppText>
-                  <AppText variant="caption" color={Colors.textMuted}>
-                    {c.time}
-                  </AppText>
-                </View>
-
-                <View style={styles.convoBottomRow}>
-                  <AppText
-                    variant="caption"
-                    color={c.unreadCount ? Colors.text : Colors.textSecondary}
-                    numberOfLines={1}
-                    style={styles.messageSnippet}
-                  >
-                    <AppText variant="caption" weight="semibold">
-                      {c.lastMessageSender}:{' '}
+            {/* Requests Tab */}
+            {activeTab === 'Requests' && (
+              <View style={styles.requestsList}>
+                {requests.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Users color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No pending requests
                     </AppText>
-                    {c.lastMessage}
-                  </AppText>
-                  {c.unreadCount ? (
-                    <View style={styles.unreadBadge}>
-                      <AppText variant="caption" weight="bold" color="#FFFFFF" style={styles.unreadBadgeText}>
-                        {c.unreadCount}
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Incoming message requests from new connections will appear here.
+                    </AppText>
+                  </Card>
+                ) : (
+                  requests.map((req) => (
+                    <Card key={req.id} style={styles.requestCard}>
+                      <View style={styles.requestHeader}>
+                        <Image
+                          source={{
+                            uri:
+                              req.avatarUrl ||
+                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                          }}
+                          style={styles.requestAvatar}
+                        />
+                        <View style={styles.requestInfo}>
+                          <View style={styles.nameBadgeRow}>
+                            <AppText variant="body" weight="bold">
+                              {req.name}
+                            </AppText>
+                            {req.isVerified && <VerifiedBadge size={14} />}
+                          </View>
+                          <AppText variant="caption" color={Colors.primary} weight="bold">
+                            {req.matchScore}% Match
+                          </AppText>
+                        </View>
+                      </View>
+
+                      <AppText variant="bodySm" color={Colors.text} style={styles.requestPreview}>
+                        "{req.previewText}"
                       </AppText>
-                    </View>
-                  ) : null}
-                </View>
+
+                      <View style={styles.requestActionsRow}>
+                        <TouchableOpacity
+                          onPress={() => handleAcceptRequest(req)}
+                          style={[styles.reqBtn, styles.acceptBtn]}
+                        >
+                          <Check color="#FFFFFF" size={16} />
+                          <AppText variant="bodySm" weight="bold" color="#FFFFFF">
+                            Accept & Chat
+                          </AppText>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => handleDeclineRequest(req.id)}
+                          style={[styles.reqBtn, styles.declineBtn]}
+                        >
+                          <X color={Colors.text} size={16} />
+                          <AppText variant="bodySm" weight="medium" color={Colors.text}>
+                            Decline
+                          </AppText>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => handleBlockRequest(req.senderId)}
+                          style={styles.blockIconBtn}
+                          accessibilityLabel="Block user"
+                        >
+                          <Ban color={Colors.textMuted} size={18} />
+                        </TouchableOpacity>
+                      </View>
+                    </Card>
+                  ))
+                )}
               </View>
-            </TouchableOpacity>
-          ))
+            )}
+
+            {/* Communities Tab */}
+            {activeTab === 'Communities' && (
+              <View style={styles.communitiesList}>
+                {filteredCommunities.length === 0 ? (
+                  <Card style={styles.emptyCard}>
+                    <Compass color={Colors.textMuted} size={40} />
+                    <AppText variant="body" weight="bold" style={{ marginTop: 12 }}>
+                      No community chats
+                    </AppText>
+                    <AppText variant="caption" color={Colors.textSecondary} align="center" style={{ marginTop: 4 }}>
+                      Join communities on Discover to participate in group channels!
+                    </AppText>
+                  </Card>
+                ) : (
+                  filteredCommunities.map((comm) => (
+                    <TouchableOpacity
+                      key={comm.id}
+                      activeOpacity={0.7}
+                      onPress={() => router.push(`/community/${comm.id}`)}
+                      style={styles.chatItem}
+                    >
+                      <Image
+                        source={{
+                          uri:
+                            comm.avatarUrl ||
+                            'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+                        }}
+                        style={styles.avatar}
+                      />
+                      <View style={styles.chatContent}>
+                        <View style={styles.chatHeaderRow}>
+                          <AppText variant="body" weight="bold" numberOfLines={1}>
+                            {comm.name}
+                          </AppText>
+                          <AppText variant="caption" color={Colors.textSecondary}>
+                            {comm.time}
+                          </AppText>
+                        </View>
+                        <AppText variant="bodySm" color={Colors.textSecondary} numberOfLines={1}>
+                          {comm.lastMessage}
+                        </AppText>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -428,36 +541,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   composeBtn: {
-    padding: 6,
-    borderRadius: Radii.md,
-    backgroundColor: Colors.primaryLight,
+    width: 40,
+    height: 40,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabsWrapper: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
+    backgroundColor: '#E2E8F0',
+    borderRadius: Radii.md,
     padding: 3,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   tabBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radii.full,
+    borderRadius: Radii.sm,
   },
   tabBtnActive: {
     backgroundColor: Colors.primary,
@@ -468,210 +581,180 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabBadge: {
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    paddingHorizontal: 5,
+    backgroundColor: Colors.coral,
+    borderRadius: Radii.full,
+    paddingHorizontal: 6,
     paddingVertical: 1,
   },
   tabBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
   },
   searchSection: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 14,
-    height: 40,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 42,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: 0,
   },
   scrollContent: {
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xxl,
   },
-  convoRow: {
-    flexDirection: 'row',
+  loadingContainer: {
+    paddingVertical: 48,
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 14,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
-  avatarWrap: {
-    position: 'relative',
-    marginRight: 12,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.border,
-  },
-  communityBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#DCFCE7',
+  emptyCard: {
+    padding: Spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    marginTop: Spacing.md,
   },
-  onlineDot: {
+  chatList: {
+    gap: 8,
+  },
+  chatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 12,
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E2E8F0',
+  },
+  onlineIndicator: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#22C55E',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#16A34A',
     borderWidth: 2,
     borderColor: Colors.surface,
   },
-  convoContent: {
+  chatContent: {
     flex: 1,
     gap: 4,
   },
-  convoTopRow: {
+  chatHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  nameRow: {
+  nameBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    flex: 1,
   },
-  convoBottomRow: {
+  chatBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  messageSnippet: {
+  lastMessageText: {
     flex: 1,
     marginRight: 8,
   },
   unreadBadge: {
     backgroundColor: Colors.primary,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
+    borderRadius: Radii.full,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  unreadBadgeText: {
-    fontSize: 10,
+  unreadText: {
+    fontSize: 11,
   },
-  requestsContainer: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  requestsNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#EEF2FF',
-    padding: 10,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  noticeText: {
-    flex: 1,
-    lineHeight: 16,
+  requestsList: {
+    gap: 12,
   },
   requestCard: {
+    padding: 14,
     backgroundColor: Colors.surface,
-    borderRadius: Radii.md,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
   },
   requestHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 10,
   },
-  reqAvatar: {
+  requestAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.border,
   },
-  reqInfo: {
+  requestInfo: {
     flex: 1,
+    gap: 2,
   },
-  fitBadge: {
-    backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: Radii.full,
-    marginLeft: 4,
-  },
-  fitText: {
-    fontSize: 9,
-  },
-  reqBubble: {
-    backgroundColor: Colors.background,
-    padding: 10,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  reqBubbleText: {
-    lineHeight: 19,
+  requestPreview: {
+    lineHeight: 20,
+    marginBottom: 12,
     fontStyle: 'italic',
   },
-  reqActions: {
+  requestActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  acceptBtn: {
-    flex: 1,
+  reqBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    backgroundColor: Colors.primary,
+    gap: 6,
     paddingVertical: 8,
-    borderRadius: Radii.full,
+    borderRadius: Radii.md,
+  },
+  acceptBtn: {
+    flex: 2,
+    backgroundColor: Colors.primary,
   },
   declineBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
     backgroundColor: Colors.background,
-    paddingVertical: 8,
-    borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  blockBtn: {
-    padding: 8,
-    borderRadius: Radii.full,
-    backgroundColor: '#FEF2F2',
-  },
-  emptyState: {
-    padding: Spacing.xl,
+  blockIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  communitiesList: {
+    gap: 8,
   },
 })
