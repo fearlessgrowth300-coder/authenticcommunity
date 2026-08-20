@@ -6,27 +6,25 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
-import { AppButton } from '@/components/primitives/AppButton'
+import { createStory } from '@/services/stories'
+import { uploadMediaFile } from '@/services/mediaUpload'
 import {
   X,
   Camera,
   Flame,
-  Send,
 } from 'lucide-react-native'
-
-const { width, height } = Dimensions.get('window')
 
 export default function CreateStoryScreen() {
   const router = useRouter()
-  const [photoUri, setPhotoUri] = useState<string | null>(
-    'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=900&fit=crop&q=80'
-  )
+  const [photoUri, setPhotoUri] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
   const [uploading, setUploading] = useState(false)
 
@@ -42,12 +40,40 @@ export default function CreateStoryScreen() {
     }
   }
 
-  const handleShareStory = () => {
+  const handleShareStory = async () => {
+    if (!photoUri || uploading) return
     setUploading(true)
-    setTimeout(() => {
-      setUploading(false)
+
+    try {
+      const uploadRes = await uploadMediaFile({
+        bucket: 'stories',
+        localUri: photoUri,
+        type: 'image',
+      })
+
+      if (uploadRes.error) {
+        Alert.alert('Upload Error', uploadRes.error.message)
+        setUploading(false)
+        return
+      }
+
+      const createRes = await createStory({
+        mediaUrl: uploadRes.url,
+        caption: caption.trim() || undefined,
+      })
+
+      if (createRes.error) {
+        Alert.alert('Story Error', createRes.error.message)
+        setUploading(false)
+        return
+      }
+
       router.replace('/(tabs)')
-    }, 600)
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to share story.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -68,30 +94,47 @@ export default function CreateStoryScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Center Text Overlay */}
+        {/* Center Prompt or Caption Overlay */}
         <View style={styles.textOverlayContainer}>
-          <TextInput
-            value={caption}
-            onChangeText={setCaption}
-            placeholder="Tap to add a caption..."
-            placeholderTextColor="rgba(255, 255, 255, 0.7)"
-            multiline
-            style={styles.captionInput}
-          />
+          {!photoUri ? (
+            <TouchableOpacity onPress={handlePickPhoto} style={styles.pickPromptBox}>
+              <Camera color="#FFFFFF" size={40} />
+              <AppText variant="body" weight="bold" color="#FFFFFF">
+                Select Photo from Gallery
+              </AppText>
+            </TouchableOpacity>
+          ) : (
+            <TextInput
+              value={caption}
+              onChangeText={setCaption}
+              placeholder="Tap to add a caption..."
+              placeholderTextColor="rgba(255, 255, 255, 0.7)"
+              multiline
+              style={styles.captionInput}
+            />
+          )}
         </View>
 
         {/* Bottom Actions */}
         <View style={styles.bottomBar}>
-          <TouchableOpacity
-            onPress={handleShareStory}
-            disabled={uploading}
-            style={styles.shareStoryBtn}
-          >
-            <Flame color="#FFFFFF" size={20} />
-            <AppText variant="bodySm" weight="bold" color="#FFFFFF">
-              {uploading ? 'Sharing...' : 'Your Story'}
-            </AppText>
-          </TouchableOpacity>
+          {photoUri && (
+            <TouchableOpacity
+              onPress={handleShareStory}
+              disabled={uploading}
+              style={styles.shareStoryBtn}
+            >
+              {uploading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Flame color="#FFFFFF" size={20} />
+                  <AppText variant="bodySm" weight="bold" color="#FFFFFF">
+                    Your Story
+                  </AppText>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     </View>
@@ -104,9 +147,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   backgroundImage: {
-    width,
-    height,
-    position: 'absolute',
+    ...StyleSheet.absoluteFillObject,
   },
   safeArea: {
     flex: 1,
@@ -131,12 +172,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     alignItems: 'center',
   },
+  pickPromptBox: {
+    alignItems: 'center',
+    gap: 12,
+    padding: Spacing.xl,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: Radii.lg,
+  },
   captionInput: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: Radii.md,

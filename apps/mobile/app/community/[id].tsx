@@ -14,8 +14,9 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
-import { PostCard, PostItem } from '@/components/feed/PostCard'
+import { PostCard } from '@/components/feed/PostCard'
 import { EventCard, EventItem } from '@/components/events/EventCard'
+import { MobilePostItem } from '@/services/feed'
 import {
   ArrowLeft,
   Share2,
@@ -43,7 +44,7 @@ const COMMUNITY_CHANNELS = [
   'off-topic',
 ]
 
-const SAMPLE_POST: PostItem = {
+const SAMPLE_POST: MobilePostItem = {
   id: 'cp-1',
   authorId: 'maya-patel',
   authorName: 'Maya Patel (Admin)',

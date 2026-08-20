@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -16,8 +18,9 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '@/contexts/AuthContext'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
-import { AppButton } from '@/components/primitives/AppButton'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+import { createNewPost } from '@/services/feed'
+import { uploadMediaFile } from '@/services/mediaUpload'
 import {
   X,
   Globe,
@@ -50,28 +53,66 @@ export default function CreatePostScreen() {
   const [mediaType, setMediaType] = useState<'photo' | 'video'>('photo')
   const [selectedAudience, setSelectedAudience] = useState(AUDIENCES[0])
   const [audienceModalVisible, setAudienceModalVisible] = useState(false)
-  const [locationTag, setLocationTag] = useState<string | null>('Lagos, Nigeria')
+  const [locationTag, setLocationTag] = useState<string | null>(
+    profile?.location_city ? `${profile.location_city}, ${profile.location_country || ''}` : 'Local'
+  )
   const [posting, setPosting] = useState(false)
 
-  const handlePickMedia = async (type: 'photo' | 'video') => {
+  const handlePickMedia = async (mediaTypeToPick: 'photo' | 'video') => {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: type === 'photo' ? ['images'] : ['videos'],
+      mediaTypes: mediaTypeToPick === 'photo' ? ['images'] : ['videos'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.85,
     })
     if (!res.canceled && res.assets[0]) {
       setMediaUri(res.assets[0].uri)
-      setMediaType(type)
+      setMediaType(mediaTypeToPick)
     }
   }
 
   const handlePost = async () => {
     if (!text.trim() && !mediaUri) return
     setPosting(true)
-    setTimeout(() => {
-      setPosting(false)
+
+    try {
+      let uploadedUrl: string | undefined = undefined
+
+      // Upload media to storage bucket if attached
+      if (mediaUri) {
+        const uploadRes = await uploadMediaFile({
+          bucket: 'post_media',
+          localUri: mediaUri,
+          type: mediaType === 'video' ? 'video' : 'image',
+        })
+        if (uploadRes.error) {
+          Alert.alert('Upload Error', uploadRes.error.message)
+          setPosting(false)
+          return
+        }
+        uploadedUrl = uploadRes.url
+      }
+
+      const result = await createNewPost({
+        content: text.trim(),
+        audience: selectedAudience.id as any,
+        locationLabel: locationTag || undefined,
+        mediaUrl: uploadedUrl,
+        mediaType: mediaType === 'video' ? 'video' : 'image',
+        interestTags: (profile as any)?.interests?.slice(0, 3) || ['Community'],
+      })
+
+      if (result.error) {
+        Alert.alert('Post Failed', result.error.message)
+        setPosting(false)
+        return
+      }
+
       router.replace('/(tabs)')
-    }, 600)
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to publish post.')
+    } finally {
+      setPosting(false)
+    }
   }
 
   const canPost = text.trim().length > 0 || mediaUri !== null
@@ -99,13 +140,17 @@ export default function CreatePostScreen() {
             disabled={!canPost || posting}
             style={[styles.postBtn, canPost ? styles.postBtnActive : styles.postBtnDisabled]}
           >
-            <AppText
-              variant="bodySm"
-              weight="bold"
-              color={canPost ? '#FFFFFF' : Colors.textMuted}
-            >
-              {posting ? 'Posting...' : 'Post'}
-            </AppText>
+            {posting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <AppText
+                variant="bodySm"
+                weight="bold"
+                color={canPost ? '#FFFFFF' : Colors.textMuted}
+              >
+                Post
+              </AppText>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -289,6 +334,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: Radii.full,
+    minWidth: 64,
+    alignItems: 'center',
   },
   postBtnActive: {
     backgroundColor: Colors.primary,

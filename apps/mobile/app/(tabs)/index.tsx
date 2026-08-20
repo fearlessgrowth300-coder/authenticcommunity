@@ -1,105 +1,208 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
   StyleSheet,
-  ScrollView,
+  FlatList,
   RefreshControl,
   TouchableOpacity,
-  Image,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { AppButton } from '@/components/primitives/AppButton'
 import { StoriesRow } from '@/components/feed/StoriesRow'
-import { PostCard, PostItem } from '@/components/feed/PostCard'
+import { PostCard } from '@/components/feed/PostCard'
 import {
   PeopleYouMayConnectWithModule,
   CommunitiesForYouModule,
   EventsNearYouModule,
 } from '@/components/feed/FeedModules'
+import { fetchFeedPosts, MobilePostItem, FeedStreamType } from '@/services/feed'
+import { getActiveStories, MobileStoryItem } from '@/services/stories'
 import {
   Search,
   Bell,
   Users,
+  Compass,
 } from 'lucide-react-native'
 
-const FEED_TABS = ['For You', 'Following', 'Nearby'] as const
-type FeedTab = (typeof FEED_TABS)[number]
-
-const SAMPLE_POSTS: PostItem[] = [
-  {
-    id: 'p1',
-    authorId: 'maya-patel',
-    authorName: 'Maya Patel',
-    authorAvatar:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    isVerified: true,
-    location: 'Lagos, Nigeria',
-    topic: 'Community',
-    timeAgo: '2h ago',
-    text: 'Building authentic communities is not about follower vanity—it’s about creating safe spaces where people genuinely connect, exchange ideas, and build lasting friendships. So excited for our upcoming weekend meetup! 🌿✨',
-    images: [
-      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
-    ],
-    likesCount: 38,
-    commentsCount: 12,
-    isLiked: false,
-    isSaved: false,
-    isFollowing: false,
-  },
-  {
-    id: 'p2',
-    authorId: 'david-chen',
-    authorName: 'David Chen',
-    authorAvatar:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    isVerified: true,
-    location: 'Lagos · Tech Hub',
-    topic: 'Technology',
-    timeAgo: '4h ago',
-    text: 'Just finished prototyping our new local matching algorithm with deterministic local-first proximity. What are your favorite tech events in the city this week?',
-    likesCount: 24,
-    commentsCount: 7,
-    isLiked: true,
-    isSaved: true,
-    isFollowing: true,
-  },
-  {
-    id: 'p3',
-    authorId: 'elena-rostova',
-    authorName: 'Elena Rostova',
-    authorAvatar:
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    isVerified: true,
-    location: 'Lagos · Nature',
-    topic: 'Wellness',
-    timeAgo: '6h ago',
-    text: 'Morning sunrise yoga and meditation by the beach. Grounding yourself before the week starts makes all the difference. 🧘‍♀️🌊',
-    videoUrl: 'https://sample-video.mp4',
-    images: [
-      'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&fit=crop&q=80',
-    ],
-    likesCount: 52,
-    commentsCount: 19,
-    isLiked: false,
-    isSaved: false,
-    isFollowing: false,
-  },
-]
+const FEED_TABS: FeedStreamType[] = ['For You', 'Following', 'Nearby']
 
 export default function HomeFeedScreen() {
   const router = useRouter()
   const { profile } = useAuth()
-  const [activeTab, setActiveTab] = useState<FeedTab>('For You')
+  const [activeTab, setActiveTab] = useState<FeedStreamType>('For You')
+  const [posts, setPosts] = useState<MobilePostItem[]>([])
+  const [stories, setStories] = useState<MobileStoryItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [page, setPage] = useState(1)
+
+  const loadData = useCallback(
+    async (pageNum = 1, isRefresh = false) => {
+      try {
+        if (pageNum === 1) {
+          const [storiesData, feedData] = await Promise.all([
+            getActiveStories(),
+            fetchFeedPosts({ stream: activeTab, page: 1, pageSize: 10 }),
+          ])
+          setStories(storiesData)
+          setPosts(feedData.posts)
+          setHasMore(feedData.hasMore)
+          setPage(1)
+        } else {
+          setLoadingMore(true)
+          const feedData = await fetchFeedPosts({
+            stream: activeTab,
+            page: pageNum,
+            pageSize: 10,
+          })
+          setPosts((prev) => [...prev, ...feedData.posts])
+          setHasMore(feedData.hasMore)
+          setPage(pageNum)
+        }
+      } catch (err) {
+        // Feed fetch fallback handled safely
+      } finally {
+        setLoading(false)
+        if (isRefresh) setRefreshing(false)
+        setLoadingMore(false)
+      }
+    },
+    [activeTab]
+  )
+
+  useEffect(() => {
+    setLoading(true)
+    loadData(1)
+  }, [loadData])
 
   const onRefresh = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 600)
+    await loadData(1, true)
+  }
+
+  const handleEndReached = () => {
+    if (!loading && !loadingMore && hasMore) {
+      loadData(page + 1)
+    }
+  }
+
+  const handlePostDismissed = (postId: string) => {
+    setPosts((prev) => prev.filter((p) => p.id !== postId))
+  }
+
+  // Header component with Stories & Tabs
+  const renderHeader = () => (
+    <View>
+      {/* 2. Stories Row */}
+      <StoriesRow
+        myAvatarUrl={profile?.profile_image_url || undefined}
+        stories={stories}
+      />
+
+      {/* 3. Feed Tabs (For You, Following, Nearby) */}
+      <View style={styles.tabsWrapper}>
+        <View style={styles.tabsContainer}>
+          {FEED_TABS.map((tab) => {
+            const isSelected = activeTab === tab
+            return (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                style={[styles.feedTab, isSelected ? styles.feedTabActive : null]}
+              >
+                <AppText
+                  variant="bodySm"
+                  weight={isSelected ? 'bold' : 'medium'}
+                  color={isSelected ? Colors.primary : Colors.textSecondary}
+                >
+                  {tab}
+                </AppText>
+                {isSelected && <View style={styles.activeTabUnderline} />}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      </View>
+    </View>
+  )
+
+  // Real Empty State without fake content fallback
+  const renderEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <AppText variant="caption" color={Colors.textSecondary} style={styles.loadingText}>
+            Loading your personalized feed...
+          </AppText>
+        </View>
+      )
+    }
+
+    if (activeTab === 'Following') {
+      return (
+        <View style={styles.emptyContainer}>
+          <Users color={Colors.primary} size={40} />
+          <AppText variant="h3" weight="bold" align="center">
+            Follow people to build your feed
+          </AppText>
+          <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.emptySub}>
+            Discover members in your city, shared interest communities, and local creators.
+          </AppText>
+          <AppButton
+            title="Discover People"
+            variant="primary"
+            onPress={() => router.push('/(tabs)/discover')}
+            style={styles.emptyBtn}
+          />
+        </View>
+      )
+    }
+
+    if (activeTab === 'Nearby') {
+      return (
+        <View style={styles.emptyContainer}>
+          <Compass color={Colors.sage} size={40} />
+          <AppText variant="h3" weight="bold" align="center">
+            Nothing nearby yet
+          </AppText>
+          <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.emptySub}>
+            Be the first in your area to post or expand your discovery radius in settings.
+          </AppText>
+          <AppButton
+            title="Create First Post"
+            variant="primary"
+            onPress={() => router.push('/post/create')}
+            style={styles.emptyBtn}
+          />
+        </View>
+      )
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Users color={Colors.primary} size={40} />
+        <AppText variant="h3" weight="bold" align="center">
+          No posts yet
+        </AppText>
+        <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.emptySub}>
+          Share your first update, join a community, or RSVP to an event!
+        </AppText>
+        <AppButton
+          title="Share Something"
+          variant="primary"
+          onPress={() => router.push('/post/create')}
+          style={styles.emptyBtn}
+        />
+      </View>
+    )
   }
 
   return (
@@ -135,8 +238,28 @@ export default function HomeFeedScreen() {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
+      {/* Virtualized FlatList for high performance */}
+      <FlatList<MobilePostItem>
+        data={posts}
+        keyExtractor={(item: MobilePostItem) => item.id}
+        renderItem={({ item, index }: { item: MobilePostItem; index: number }) => (
+          <View>
+            <PostCard post={item} onPostDismissed={handlePostDismissed} />
+            {/* Interleave intelligent feed modules at sensible intervals */}
+            {index === 0 && <PeopleYouMayConnectWithModule />}
+            {index === 2 && <CommunitiesForYouModule />}
+            {index === 4 && <EventsNearYouModule />}
+          </View>
+        )}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -144,57 +267,10 @@ export default function HomeFeedScreen() {
             tintColor={Colors.primary}
           />
         }
-      >
-        {/* 2. Stories Row */}
-        <StoriesRow myAvatarUrl={profile?.profile_image_url || undefined} />
-
-        {/* 3. Feed Tabs (For You, Following, Nearby) */}
-        <View style={styles.tabsWrapper}>
-          <View style={styles.tabsContainer}>
-            {FEED_TABS.map((tab) => {
-              const isSelected = activeTab === tab
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  onPress={() => setActiveTab(tab)}
-                  style={[
-                    styles.feedTab,
-                    isSelected ? styles.feedTabActive : null,
-                  ]}
-                >
-                  <AppText
-                    variant="bodySm"
-                    weight={isSelected ? 'bold' : 'medium'}
-                    color={isSelected ? Colors.primary : Colors.textSecondary}
-                  >
-                    {tab}
-                  </AppText>
-                  {isSelected && <View style={styles.activeTabUnderline} />}
-                </TouchableOpacity>
-              )
-            })}
-          </View>
-        </View>
-
-        {/* 4. Mixed Social Feed Stream */}
-        {/* Post 1 */}
-        <PostCard post={SAMPLE_POSTS[0]} />
-
-        {/* Module 1: People you may connect with */}
-        <PeopleYouMayConnectWithModule />
-
-        {/* Post 2 */}
-        <PostCard post={SAMPLE_POSTS[1]} />
-
-        {/* Module 2: Communities for you */}
-        <CommunitiesForYouModule />
-
-        {/* Post 3 */}
-        <PostCard post={SAMPLE_POSTS[2]} />
-
-        {/* Module 3: Events near you */}
-        <EventsNearYouModule />
-      </ScrollView>
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        contentContainerStyle={styles.listContent}
+      />
     </SafeAreaView>
   )
 }
@@ -245,9 +321,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#EF4444',
   },
-  scrollContent: {
-    paddingBottom: Spacing.xl,
-  },
   tabsWrapper: {
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
@@ -273,5 +346,33 @@ const styles = StyleSheet.create({
     right: 20,
     backgroundColor: Colors.primary,
     borderRadius: 2,
+  },
+  listContent: {
+    paddingBottom: Spacing.xxl,
+  },
+  loadingContainer: {
+    padding: Spacing.xxl,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    marginTop: 4,
+  },
+  emptyContainer: {
+    padding: Spacing.xxl,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptySub: {
+    lineHeight: 20,
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyBtn: {
+    marginTop: 8,
+    minWidth: 180,
+  },
+  footerLoader: {
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
   },
 })

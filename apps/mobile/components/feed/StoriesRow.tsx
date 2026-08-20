@@ -9,56 +9,15 @@ import {
 import { useRouter } from 'expo-router'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { MobileStoryItem } from '@/services/stories'
 import { Plus } from 'lucide-react-native'
-
-export interface StoryUser {
-  id: string
-  name: string
-  avatarUrl: string
-  hasUnseen: boolean
-  isCommunity?: boolean
-}
-
-const SAMPLE_STORIES: StoryUser[] = [
-  {
-    id: 's1',
-    name: 'Sarah',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-    hasUnseen: true,
-  },
-  {
-    id: 's2',
-    name: 'David',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    hasUnseen: false,
-  },
-  {
-    id: 's3',
-    name: 'Lagos Creators',
-    avatarUrl: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=150&fit=crop&q=80',
-    hasUnseen: true,
-    isCommunity: true,
-  },
-  {
-    id: 's4',
-    name: 'AI Builders',
-    avatarUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&fit=crop&q=80',
-    hasUnseen: true,
-    isCommunity: true,
-  },
-  {
-    id: 's5',
-    name: 'Elena',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    hasUnseen: false,
-  },
-]
 
 interface StoriesRowProps {
   myAvatarUrl?: string
+  stories: MobileStoryItem[]
 }
 
-export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl }) => {
+export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl, stories }) => {
   const router = useRouter()
 
   return (
@@ -68,7 +27,7 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl }) => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
       >
-        {/* Your Story item */}
+        {/* Your Story button */}
         <TouchableOpacity
           onPress={() => router.push('/story/create')}
           style={styles.storyItem}
@@ -92,8 +51,8 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl }) => {
           </AppText>
         </TouchableOpacity>
 
-        {/* Stories from others */}
-        {SAMPLE_STORIES.map((story) => (
+        {/* Real stories from Supabase */}
+        {stories.map((story) => (
           <TouchableOpacity
             key={story.id}
             onPress={() => router.push(`/story/${story.id}`)}
@@ -106,7 +65,14 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl }) => {
                 story.hasUnseen ? styles.unseenRing : styles.seenRing,
               ]}
             >
-              <Image source={{ uri: story.avatarUrl }} style={styles.avatar} />
+              <Image
+                source={{
+                  uri:
+                    story.userAvatar ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                }}
+                style={styles.avatar}
+              />
             </View>
             <AppText
               variant="caption"
@@ -114,7 +80,7 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl }) => {
               numberOfLines={1}
               style={styles.nameText}
             >
-              {story.name}
+              {story.userName}
             </AppText>
           </TouchableOpacity>
         ))}

@@ -131,14 +131,33 @@ declare module 'react-native' {
   export const Image: React.FC<ImageProps>
 
   export interface ScrollViewProps extends ViewProps {
+    ref?: any
     contentContainerStyle?: any
     keyboardShouldPersistTaps?: 'always' | 'never' | 'handled'
     refreshControl?: React.ReactElement
     horizontal?: boolean
     showsHorizontalScrollIndicator?: boolean
     showsVerticalScrollIndicator?: boolean
+    onContentSizeChange?: (w?: number, h?: number) => void
   }
-  export const ScrollView: React.FC<ScrollViewProps>
+  export const ScrollView: React.ForwardRefExoticComponent<ScrollViewProps & React.RefAttributes<any>>
+
+  export interface FlatListProps<T = any> extends ViewProps {
+    data: readonly T[] | null | undefined
+    keyExtractor: (item: T, index: number) => string
+    renderItem: (info: { item: T; index: number }) => React.ReactElement | null
+    ListHeaderComponent?: React.ComponentType<any> | React.ReactElement | null | (() => React.ReactElement | null)
+    ListEmptyComponent?: React.ComponentType<any> | React.ReactElement | null | (() => React.ReactElement | null)
+    ListFooterComponent?: React.ComponentType<any> | React.ReactElement | null | (() => React.ReactElement | null)
+    refreshControl?: React.ReactElement
+    onEndReached?: (() => void) | null
+    onEndReachedThreshold?: number | null
+    contentContainerStyle?: any
+    horizontal?: boolean
+    showsHorizontalScrollIndicator?: boolean
+    showsVerticalScrollIndicator?: boolean
+  }
+  export const FlatList: <T = any>(props: FlatListProps<T>) => React.ReactElement
 
   export interface RefreshControlProps {
     refreshing: boolean

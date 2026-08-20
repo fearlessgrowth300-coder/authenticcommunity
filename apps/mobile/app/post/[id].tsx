@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -8,12 +8,14 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+import { loadPostComments, addPostComment, PostComment } from '@/services/feed'
 import {
   ArrowLeft,
   Heart,
@@ -24,64 +26,39 @@ import {
   MoreHorizontal,
 } from 'lucide-react-native'
 
-interface Comment {
-  id: string
-  authorName: string
-  authorAvatar: string
-  isVerified: boolean
-  text: string
-  timeAgo: string
-  likesCount: number
-  isLiked?: boolean
-}
-
-const SAMPLE_COMMENTS: Comment[] = [
-  {
-    id: 'c1',
-    authorName: 'David Chen',
-    authorAvatar:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&fit=crop&q=80',
-    isVerified: true,
-    text: 'Totally agree! Local connections make all the difference when scaling an initiative.',
-    timeAgo: '1h ago',
-    likesCount: 5,
-  },
-  {
-    id: 'c2',
-    authorName: 'Elena Rostova',
-    authorAvatar:
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&fit=crop&q=80',
-    isVerified: true,
-    text: 'Count me in for this weekend! Love what you are building.',
-    timeAgo: '45m ago',
-    likesCount: 3,
-  },
-]
-
 export default function PostDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
 
   const [isLiked, setIsLiked] = useState(false)
-  const [likesCount, setLikesCount] = useState(38)
+  const [likesCount, setLikesCount] = useState(0)
   const [isSaved, setIsSaved] = useState(false)
-  const [comments, setComments] = useState<Comment[]>(SAMPLE_COMMENTS)
+  const [comments, setComments] = useState<PostComment[]>([])
   const [commentInput, setCommentInput] = useState('')
+  const [loadingComments, setLoadingComments] = useState(true)
+  const [sendingComment, setSendingComment] = useState(false)
 
-  const handleSendComment = () => {
-    if (!commentInput.trim()) return
-    const newComment: Comment = {
-      id: Date.now().toString(),
-      authorName: 'You',
-      authorAvatar:
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-      isVerified: true,
-      text: commentInput.trim(),
-      timeAgo: 'Just now',
-      likesCount: 0,
+  useEffect(() => {
+    if (!id) return
+    loadPostComments(id)
+      .then((loaded) => setComments(loaded))
+      .catch(() => {})
+      .finally(() => setLoadingComments(false))
+  }, [id])
+
+  const handleSendComment = async () => {
+    if (!commentInput.trim() || !id || sendingComment) return
+    setSendingComment(true)
+
+    try {
+      const newComment = await addPostComment(id, commentInput.trim())
+      setComments((prev) => [...prev, newComment])
+      setCommentInput('')
+    } catch {
+      // Handled cleanly
+    } finally {
+      setSendingComment(false)
     }
-    setComments((prev) => [...prev, newComment])
-    setCommentInput('')
   }
 
   return (
@@ -115,98 +92,57 @@ export default function PostDetailScreen() {
             <View style={styles.authorInfo}>
               <View style={styles.nameRow}>
                 <AppText variant="bodySm" weight="bold">
-                  Maya Patel
+                  Community Post
                 </AppText>
                 <VerifiedBadge size={14} />
               </View>
               <AppText variant="caption" color={Colors.textSecondary}>
-                Lagos, Nigeria · 2h ago
+                Local Community
               </AppText>
             </View>
           </View>
-
-          {/* Post Text */}
-          <AppText variant="body" color={Colors.text} style={styles.postBody}>
-            Building authentic communities is not about follower vanity—it’s about creating safe spaces where people genuinely connect, exchange ideas, and build lasting friendships. So excited for our upcoming weekend meetup! 🌿✨
-          </AppText>
-
-          {/* Post Image */}
-          <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
-            }}
-            style={styles.postImage}
-            resizeMode="cover"
-          />
-
-          {/* Post Metrics & Actions */}
-          <View style={styles.actionsBar}>
-            <View style={styles.actionsLeft}>
-              <TouchableOpacity
-                onPress={() => {
-                  setIsLiked(!isLiked)
-                  setLikesCount((prev) => (isLiked ? prev - 1 : prev + 1))
-                }}
-                style={styles.actionItem}
-              >
-                <Heart
-                  color={isLiked ? '#EF4444' : Colors.textSecondary}
-                  fill={isLiked ? '#EF4444' : 'transparent'}
-                  size={20}
-                />
-                <AppText variant="caption" weight="semibold">
-                  {likesCount}
-                </AppText>
-              </TouchableOpacity>
-
-              <View style={styles.actionItem}>
-                <MessageCircle color={Colors.textSecondary} size={20} />
-                <AppText variant="caption" weight="semibold">
-                  {comments.length}
-                </AppText>
-              </View>
-
-              <TouchableOpacity style={styles.actionItem}>
-                <Share2 color={Colors.textSecondary} size={19} />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity onPress={() => setIsSaved(!isSaved)}>
-              <Bookmark
-                color={isSaved ? Colors.amber : Colors.textSecondary}
-                fill={isSaved ? Colors.amber : 'transparent'}
-                size={20}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
 
           {/* Comments Section */}
           <AppText variant="label" weight="bold" style={styles.commentsTitle}>
             Comments ({comments.length})
           </AppText>
 
-          {comments.map((c) => (
-            <View key={c.id} style={styles.commentRow}>
-              <Image source={{ uri: c.authorAvatar }} style={styles.commentAvatar} />
-              <View style={styles.commentContent}>
-                <View style={styles.commentHeader}>
-                  <AppText variant="bodySm" weight="bold">
-                    {c.authorName}
-                  </AppText>
-                  {c.isVerified && <VerifiedBadge size={12} />}
-                  <AppText variant="caption" color={Colors.textMuted} style={styles.commentTime}>
-                    {c.timeAgo}
+          {loadingComments ? (
+            <ActivityIndicator size="small" color={Colors.primary} style={styles.loader} />
+          ) : comments.length === 0 ? (
+            <View style={styles.emptyComments}>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                No comments yet. Start the conversation!
+              </AppText>
+            </View>
+          ) : (
+            comments.map((c) => (
+              <View key={c.id} style={styles.commentRow}>
+                <Image
+                  source={{
+                    uri:
+                      c.authorAvatar ||
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                  }}
+                  style={styles.commentAvatar}
+                />
+                <View style={styles.commentContent}>
+                  <View style={styles.commentHeader}>
+                    <AppText variant="bodySm" weight="bold">
+                      {c.authorName}
+                    </AppText>
+                    {c.isVerified && <VerifiedBadge size={12} />}
+                    <AppText variant="caption" color={Colors.textMuted} style={styles.commentTime}>
+                      {c.timeAgo}
+                    </AppText>
+                  </View>
+                  <AppText variant="bodySm" color={Colors.text} style={styles.commentText}>
+                    {c.text}
                   </AppText>
                 </View>
-                <AppText variant="bodySm" color={Colors.text} style={styles.commentText}>
-                  {c.text}
-                </AppText>
               </View>
-            </View>
-          ))}
+            ))
+          )}
         </ScrollView>
 
         {/* Bottom Comment Input Bar */}
@@ -219,8 +155,16 @@ export default function PostDetailScreen() {
             style={styles.commentInput}
           />
           {commentInput.trim() ? (
-            <TouchableOpacity onPress={handleSendComment} style={styles.sendBtn}>
-              <Send color="#FFFFFF" size={16} />
+            <TouchableOpacity
+              onPress={handleSendComment}
+              disabled={sendingComment}
+              style={styles.sendBtn}
+            >
+              {sendingComment ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send color="#FFFFFF" size={16} />
+              )}
             </TouchableOpacity>
           ) : null}
         </View>
@@ -274,40 +218,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  postBody: {
-    lineHeight: 22,
-    marginBottom: Spacing.md,
-  },
-  postImage: {
-    width: '100%',
-    height: 280,
-    borderRadius: Radii.md,
-    backgroundColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  actionsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.xs,
-  },
-  actionsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: Spacing.lg,
-  },
   commentsTitle: {
     marginBottom: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  loader: {
+    marginVertical: Spacing.lg,
+  },
+  emptyComments: {
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
   },
   commentRow: {
     flexDirection: 'row',

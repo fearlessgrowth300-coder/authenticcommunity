@@ -11,6 +11,8 @@ import { AppText } from '@/components/primitives/AppText'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import { PostMenuModal } from '@/components/feed/PostMenuModal'
 import { WhyAmISeeingThisModal } from '@/components/feed/WhyAmISeeingThisModal'
+import { togglePostLike, togglePostSave, MobilePostItem, dismissPost } from '@/services/feed'
+import { followUser } from '@/services/socialGraph'
 import {
   Heart,
   MessageCircle,
@@ -18,65 +20,67 @@ import {
   Bookmark,
   MoreHorizontal,
   Play,
-  MapPin,
-  UserPlus,
 } from 'lucide-react-native'
 
-export interface PostItem {
-  id: string
-  authorId: string
-  authorName: string
-  authorAvatar: string
-  isVerified: boolean
-  location?: string
-  topic?: string
-  timeAgo: string
-  text?: string
-  images?: string[]
-  videoUrl?: string
-  likesCount: number
-  commentsCount: number
-  isLiked?: boolean
-  isSaved?: boolean
-  isFollowing?: boolean
-  isConnection?: boolean
-}
-
 interface PostCardProps {
-  post: PostItem
-  onLikeToggle?: (postId: string) => void
-  onSaveToggle?: (postId: string) => void
-  onFollowToggle?: (authorId: string) => void
+  post: MobilePostItem
+  onPostDismissed?: (postId: string) => void
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
   post,
-  onLikeToggle,
-  onSaveToggle,
-  onFollowToggle,
+  onPostDismissed,
 }) => {
   const router = useRouter()
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
-  const [likesCount, setLikesCount] = useState(post.likesCount)
+  const [likesCount, setLikesCount] = useState(post.likesCount || 0)
   const [isSaved, setIsSaved] = useState(post.isSaved || false)
   const [isFollowing, setIsFollowing] = useState(post.isFollowing || false)
   const [menuVisible, setMenuVisible] = useState(false)
   const [whyVisible, setWhyVisible] = useState(false)
 
-  const handleLike = () => {
-    setIsLiked(!isLiked)
-    setLikesCount((prev) => (isLiked ? prev - 1 : prev + 1))
-    onLikeToggle?.(post.id)
+  const handleLike = async () => {
+    const prevLiked = isLiked
+    const prevCount = likesCount
+
+    // Optimistic UI update
+    setIsLiked(!prevLiked)
+    setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1)
+
+    try {
+      await togglePostLike(post.id, prevLiked)
+    } catch {
+      // Rollback on failure
+      setIsLiked(prevLiked)
+      setLikesCount(prevCount)
+    }
   }
 
-  const handleSave = () => {
-    setIsSaved(!isSaved)
-    onSaveToggle?.(post.id)
+  const handleSave = async () => {
+    const prevSaved = isSaved
+    setIsSaved(!prevSaved)
+
+    try {
+      await togglePostSave(post.id, prevSaved)
+    } catch {
+      setIsSaved(prevSaved)
+    }
   }
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing)
-    onFollowToggle?.(post.authorId)
+  const handleFollow = async () => {
+    setIsFollowing(true)
+    try {
+      await followUser(post.authorId)
+    } catch {
+      setIsFollowing(false)
+    }
+  }
+
+  const handleMenuAction = async (action: string) => {
+    if (action === 'hide' || action === 'not_interested') {
+      await dismissPost(post.id, action as any)
+      onPostDismissed?.(post.id)
+    }
   }
 
   return (
@@ -87,7 +91,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           onPress={() => router.push(`/profile/${post.authorId}`)}
           style={styles.authorSection}
         >
-          <Image source={{ uri: post.authorAvatar }} style={styles.avatar} />
+          <Image
+            source={{
+              uri:
+                post.authorAvatar ||
+                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+            }}
+            style={styles.avatar}
+          />
           <View style={styles.authorInfo}>
             <View style={styles.nameRow}>
               <AppText variant="bodySm" weight="bold">
@@ -248,6 +259,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onWhySeeing={() => setWhyVisible(true)}
+        onAction={handleMenuAction}
         authorName={post.authorName}
       />
 
@@ -255,8 +267,8 @@ export const PostCard: React.FC<PostCardProps> = ({
       <WhyAmISeeingThisModal
         visible={whyVisible}
         onClose={() => setWhyVisible(false)}
-        topic={post.topic || 'Community Growth'}
-        location={post.location || 'Your area'}
+        topic={post.topic || 'Community'}
+        location={post.location || 'Local area'}
       />
     </View>
   )
