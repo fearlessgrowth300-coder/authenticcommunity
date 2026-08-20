@@ -12,6 +12,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.expo/
+apps/mobile/.expo/
 
 # Environment variables & credentials
 .env
