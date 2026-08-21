@@ -16,6 +16,7 @@ import { AppButton } from '@/components/primitives/AppButton'
 import { AppInput } from '@/components/primitives/AppInput'
 import { Card } from '@/components/primitives/Card'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native'
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons'
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -138,26 +139,7 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social Buttons */}
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => setError('Social login will be available soon.')}
-            >
-              <AppText variant="body" style={styles.socialIcon}>G</AppText>
-              <AppText variant="bodySm" weight="medium">
-                Continue with Google
-              </AppText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => setError('Social login will be available soon.')}
-            >
-              <AppText variant="body" style={styles.socialIcon}>🐙</AppText>
-              <AppText variant="bodySm" weight="medium">
-                Continue with GitHub
-              </AppText>
-            </TouchableOpacity>
+            <SocialAuthButtons onError={setError} />
           </Card>
 
           {/* Footer Navigation */}
@@ -232,21 +214,6 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: Spacing.sm,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radii.md,
-    paddingVertical: 12,
-    marginBottom: 10,
-  },
-  socialIcon: {
-    fontWeight: 'bold',
   },
   footer: {
     flexDirection: 'row',

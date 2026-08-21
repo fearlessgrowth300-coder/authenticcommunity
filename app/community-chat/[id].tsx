@@ -402,7 +402,7 @@ export default function CommunityChatScreen() {
           <View style={styles.channelSheet}>
             <AppText variant="h3" weight="bold">Channels</AppText>
             {channels.length ? channels.map((item) => (
-              <TouchableOpacity key={item.id} onPress={() => { setChannelModalVisible(false); router.replace({ pathname: `/community-chat/${id}`, params: { channel: item.name } }) }} style={styles.channelRow}>
+              <TouchableOpacity key={item.id} onPress={() => { setChannelModalVisible(false); router.replace({ pathname: `/community-chat/${id}` as any, params: { channel: item.name } }) }} style={styles.channelRow}>
                 <Hash color={item.name === channel ? Colors.primary : Colors.textMuted} size={18} />
                 <View style={{ flex: 1 }}><AppText variant="bodySm" weight={item.name === channel ? 'bold' : 'normal'}>{item.name}</AppText>{item.description ? <AppText variant="caption" color={Colors.textSecondary}>{item.description}</AppText> : null}</View>
               </TouchableOpacity>
