@@ -72,16 +72,27 @@ export default function CreateEventScreen() {
         uploadedCoverUrl = coverPhoto
       }
 
-      const eventDate = new Date()
-      eventDate.setDate(eventDate.getDate() + 3)
+      let finalEventDate: Date
+      if (date.trim()) {
+        const combined = time.trim() ? `${date.trim()} ${time.trim()}` : date.trim()
+        const parsed = new Date(combined)
+        finalEventDate = isNaN(parsed.getTime()) ? new Date(Date.now() + 86400000) : parsed
+      } else {
+        finalEventDate = new Date(Date.now() + 86400000)
+      }
 
       const { data: newEvent } = await (supabase as any)
         .from('events')
         .insert({
           event_title: title.trim(),
+          title: title.trim(),
           description: description.trim() || `${selectedType} meetup event.`,
-          event_date: eventDate.toISOString(),
+          event_date: finalEventDate.toISOString(),
+          start_time: finalEventDate.toISOString(),
           location_name: location.trim() || 'Local Park & Gathering Spot',
+          location_city: location.trim() || 'Local Area',
+          event_type: selectedType,
+          category: selectedType,
           cover_image_url: uploadedCoverUrl || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
           attendee_limit: parseInt(attendeeLimit, 10) || 50,
           created_by: user?.id,
@@ -90,17 +101,24 @@ export default function CreateEventScreen() {
         .single()
 
       if (newEvent?.id && user) {
-        await (supabase as any).from('event_rsvps').insert({
-          event_id: newEvent.id,
-          user_id: user.id,
-          status: 'going',
-        })
+        await Promise.all([
+          (supabase as any).from('event_attendees').upsert({
+            event_id: newEvent.id,
+            user_id: user.id,
+            status: 'going',
+          }),
+          (supabase as any).from('event_rsvps').upsert({
+            event_id: newEvent.id,
+            user_id: user.id,
+            status: 'going',
+          }),
+        ])
         router.replace(`/event/${newEvent.id}`)
       } else {
-        router.replace('/(tabs)/discover')
+        router.replace('/(tabs)/events')
       }
     } catch {
-      router.replace('/(tabs)/discover')
+      router.replace('/(tabs)/events')
     } finally {
       setLoading(false)
     }

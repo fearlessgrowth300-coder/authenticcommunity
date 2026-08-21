@@ -4,6 +4,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -30,58 +31,102 @@ export default function SettingsHomeScreen() {
   const { signOut } = useAuth()
 
   const handleSignOut = async () => {
-    await signOut()
-    router.replace('/(auth)/login')
+    Alert.alert('Log Out', 'Are you sure you want to sign out of Authentic Community?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut()
+          router.replace('/(auth)/login')
+        },
+      },
+    ])
   }
 
-  const settingsSections = [
+  const handleOpenHelp = () => {
+    Alert.alert(
+      'Help & Support',
+      'For assistance, feedback, or to report safety concerns, email our community team at support@authenticcommunity.fun.',
+      [{ text: 'OK' }]
+    )
+  }
+
+  const handleOpenAbout = () => {
+    Alert.alert(
+      'Authentic Community',
+      'Version 1.0.0\n\nA mobile-first platform dedicated to real human connection, local hubs, and verified trust.',
+      [{ text: 'Close' }]
+    )
+  }
+
+  const handleOpenAppearance = () => {
+    Alert.alert(
+      'Appearance',
+      'Authentic Community matches your device system theme (Light / Dark mode).',
+      [{ text: 'OK' }]
+    )
+  }
+
+  const settingsSections: {
+    id: string
+    title: string
+    icon: React.ReactNode
+    onPress: () => void
+  }[] = [
     {
       id: 'account',
       title: 'Account',
       icon: <UserRound color={Colors.primary} size={20} />,
-      route: '/settings/account',
+      onPress: () => router.push('/settings/account'),
     },
     {
       id: 'privacy',
       title: 'Privacy & Safety',
       icon: <Shield color={Colors.sage} size={20} />,
-      route: '/settings/privacy',
+      onPress: () => router.push('/settings/privacy'),
     },
     {
       id: 'content_discovery',
       title: 'Content & Discovery',
       icon: <SlidersHorizontal color={Colors.amber} size={20} />,
-      route: '/settings/content-discovery',
+      onPress: () => router.push('/settings/content-discovery'),
     },
     {
       id: 'notifications',
       title: 'Notifications',
       icon: <Bell color={Colors.coral} size={20} />,
-      route: '/settings/notifications',
+      onPress: () => router.push('/settings/notifications'),
+    },
+    {
+      id: 'subscription',
+      title: 'Supporter & Tier Status',
+      icon: <Crown color={Colors.amber} size={20} />,
+      onPress: () => router.push('/settings/subscription'),
     },
     {
       id: 'verification',
       title: 'Identity Verification',
       icon: <BadgeCheck color={Colors.primary} size={20} />,
-      route: '/verification',
+      onPress: () => router.push('/verification'),
     },
     {
       id: 'appearance',
       title: 'Appearance',
       icon: <Palette color={Colors.textSecondary} size={20} />,
-      route: '/settings/appearance',
+      onPress: handleOpenAppearance,
     },
     {
       id: 'support',
       title: 'Support & Help Center',
       icon: <CircleHelp color={Colors.textSecondary} size={20} />,
-      route: '/settings/support',
+      onPress: handleOpenHelp,
     },
     {
       id: 'about',
       title: 'About Authentic',
       icon: <Info color={Colors.textSecondary} size={20} />,
-      route: '/settings/about',
+      onPress: handleOpenAbout,
     },
   ]
 
@@ -98,12 +143,12 @@ export default function SettingsHomeScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.menuContainer}>
           {settingsSections.map((item) => (
             <TouchableOpacity
               key={item.id}
-              onPress={() => router.push(item.route as any)}
+              onPress={item.onPress}
               style={styles.menuRow}
             >
               <View style={styles.menuLeft}>
@@ -117,21 +162,13 @@ export default function SettingsHomeScreen() {
           ))}
         </View>
 
-        {/* Log Out Action */}
-        <TouchableOpacity onPress={handleSignOut} style={styles.logoutRow}>
-          <View style={styles.menuLeft}>
-            <View style={[styles.iconCircle, styles.logoutCircle]}>
-              <LogOut color="#DC2626" size={18} />
-            </View>
-            <AppText variant="bodySm" weight="bold" color="#DC2626">
-              Log Out
-            </AppText>
-          </View>
+        {/* Log Out Button */}
+        <TouchableOpacity onPress={handleSignOut} style={styles.signOutRow}>
+          <LogOut color="#DC2626" size={20} />
+          <AppText variant="bodySm" weight="bold" color="#DC2626">
+            Log Out
+          </AppText>
         </TouchableOpacity>
-
-        <AppText variant="caption" color={Colors.textMuted} align="center" style={styles.versionText}>
-          Authentic Community Connection v2.0.0 (Build 2026)
-        </AppText>
       </ScrollView>
     </SafeAreaView>
   )
@@ -146,25 +183,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   backBtn: {
-    padding: 4,
+    padding: 6,
   },
   placeholder: {
-    width: 30,
+    width: 32,
   },
   scrollContent: {
-    padding: Spacing.lg,
-    gap: Spacing.lg,
+    padding: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
   menuContainer: {
     backgroundColor: Colors.surface,
-    borderRadius: Radii.md,
+    borderRadius: Radii.xl,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
@@ -173,8 +210,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
     paddingVertical: 14,
+    paddingHorizontal: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -184,25 +221,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutRow: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-  },
-  logoutCircle: {
+  signOutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: '#FEF2F2',
-  },
-  versionText: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.xl,
+    paddingVertical: 14,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
 })

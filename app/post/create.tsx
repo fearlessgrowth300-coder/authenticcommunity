@@ -100,18 +100,14 @@ export default function CreatePostScreen() {
         content: text.trim(),
         audience: selectedAudience.id as any,
         locationLabel: locationTag || undefined,
-        mediaUrl: uploadedUrl,
-        mediaType: mediaType === 'video' ? 'video' : 'image',
+        mediaUrls: uploadedUrl ? [uploadedUrl] : [],
+        contentType: mediaType === 'video' ? 'video' : 'image',
         interestTags: (profile as any)?.interests?.slice(0, 3) || ['Community'],
       })
 
-      if (result.error) {
-        Alert.alert('Post Failed', result.error.message)
-        setPosting(false)
-        return
+      if (result?.id) {
+        router.replace('/(tabs)')
       }
-
-      router.replace('/(tabs)')
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to publish post.')
     } finally {

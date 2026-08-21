@@ -5,8 +5,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  TextInput,
   ActivityIndicator,
+  Alert,
+  Share,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -17,22 +18,19 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
-import { PostCard } from '@/components/feed/PostCard'
-import { EventCard, EventItem } from '@/components/events/EventCard'
-import { MobilePostItem } from '@/services/feed'
 import {
   ArrowLeft,
   Share2,
-  MoreHorizontal,
   Users,
   ShieldCheck,
   Calendar,
   MessageSquare,
-  Lock,
   Globe,
   Settings,
   Plus,
   Hash,
+  ChevronRight,
+  Shield,
 } from 'lucide-react-native'
 
 const COMMUNITY_TABS = ['Feed', 'Chat', 'Events', 'Members', 'About'] as const
@@ -47,574 +45,572 @@ const COMMUNITY_CHANNELS = [
   'off-topic',
 ]
 
-const SAMPLE_POST: MobilePostItem = {
-  id: 'cp-1',
-  authorId: 'maya-patel',
-  authorName: 'Maya Patel (Admin)',
-  authorAvatar:
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-  isVerified: true,
-  location: 'Lagos Creators Hub',
-  topic: 'Announcement',
-  timeAgo: '1h ago',
-  text: '📌 Welcome all new members to Lagos Creators & Builders! Check out the #introductions channel to say hello and share what you are working on!',
-  likesCount: 42,
-  commentsCount: 15,
-  isLiked: true,
-  isSaved: true,
-  isFollowing: true,
-}
-
-const SAMPLE_EVENT: EventItem = {
-  id: 'e2',
-  title: 'Tech Founders Coffee & Hike',
-  host: 'Lagos Creators & Builders',
-  dateMonth: 'JUN',
-  dateDay: '16',
-  dateDayOfWeek: 'SUN',
-  dateTimeFormatted: 'Sun, Jun 16 · 9:00 AM',
-  distance: '1.4 km away',
-  imageUrl:
-    'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&fit=crop&q=80',
-  attendeesCount: 28,
-}
-
 export default function CommunityDetailScreen() {
   const router = useRouter()
   const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
+
   const [activeTab, setActiveTab] = useState<CommunityTab>('Feed')
   const [isJoined, setIsJoined] = useState(false)
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'moderator' | 'member' | 'guest'>('guest')
-  const [activeChannel, setActiveChannel] = useState('general')
   const [loading, setLoading] = useState(true)
   const [communityData, setCommunityData] = useState<any>(null)
+  const [feedPosts, setFeedPosts] = useState<any[]>([])
+  const [communityEvents, setCommunityEvents] = useState<any[]>([])
+  const [membersList, setMembersList] = useState<any[]>([])
+  const [memberCount, setMemberCount] = useState(1)
+
+  const loadCommunity = async () => {
+    if (!id) return
+    setLoading(true)
+    try {
+      const [commRes, memRes, postsRes, eventsRes, allMemsRes] = await Promise.all([
+        supabase.from('communities').select('*').eq('id', id).maybeSingle(),
+        user
+          ? (supabase as any).from('community_members').select('role').eq('community_id', id).eq('user_id', user.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        (supabase as any)
+          .from('posts')
+          .select('*, profiles(first_name, last_name, profile_image_url, is_verified, location_city)')
+          .or(`community_id.eq.${id},audience.eq.community`)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        (supabase as any)
+          .from('events')
+          .select('*, communities(community_name, photo_url)')
+          .or(`community_id.eq.${id}`)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        (supabase as any)
+          .from('community_members')
+          .select('role, user_id, profiles(user_id, first_name, last_name, profile_image_url, is_verified, location_city)')
+          .eq('community_id', id)
+          .limit(20),
+      ])
+
+      if (commRes.data) {
+        setCommunityData(commRes.data)
+        setMemberCount(commRes.data.member_count || 1)
+      }
+
+      if (memRes.data) {
+        setIsJoined(true)
+        setUserRole(memRes.data.role || 'member')
+      } else {
+        setIsJoined(false)
+        setUserRole('guest')
+      }
+
+      if (postsRes.data) setFeedPosts(postsRes.data)
+      if (eventsRes.data) setCommunityEvents(eventsRes.data)
+      if (allMemsRes.data) {
+        setMembersList(
+          allMemsRes.data.map((m: any) => ({
+            role: m.role,
+            userId: m.user_id,
+            profile: m.profiles,
+          }))
+        )
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    if (!id) return
-    const loadCommunity = async () => {
-      setLoading(true)
-      try {
-        const { data: comm } = await supabase
-          .from('communities')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle()
-
-        if (comm) {
-          setCommunityData(comm)
-        }
-
-        if (user) {
-          const { data: member } = await supabase
-            .from('community_members')
-            .select('role')
-            .eq('community_id', id)
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-          if (member) {
-            setIsJoined(true)
-            setUserRole((member as any).role || 'member')
-          } else {
-            setIsJoined(false)
-            setUserRole('guest')
-          }
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
     loadCommunity()
   }, [id, user])
 
   const handleToggleJoin = async () => {
-    if (!user || !id) return
+    if (!user) {
+      Alert.alert('Sign In', 'Please sign in to join communities.')
+      return
+    }
+    if (!id) return
+
     if (isJoined) {
-      await supabase
-        .from('community_members')
-        .delete()
-        .eq('community_id', id)
-        .eq('user_id', user.id)
       setIsJoined(false)
       setUserRole('guest')
+      setMemberCount((prev) => Math.max(1, prev - 1))
+      await (supabase as any).from('community_members').delete().eq('community_id', id).eq('user_id', user.id)
     } else {
-      await supabase
-        .from('community_members')
-        .insert({
-          community_id: id,
-          user_id: user.id,
-          role: 'member',
-        })
       setIsJoined(true)
       setUserRole('member')
+      setMemberCount((prev) => prev + 1)
+      await (supabase as any).from('community_members').upsert({
+        community_id: id,
+        user_id: user.id,
+        role: 'member',
+      })
     }
   }
 
-  const community = {
-    name: communityData?.community_name || 'Community Hub',
-    membersCount: communityData?.member_count || 1,
-    onlineCount: Math.max(1, Math.round((communityData?.member_count || 1) * 0.1)),
-    type: 'Hybrid (Local & Online)',
-    privacy: communityData?.is_private ? 'Private' : 'Public',
-    category: communityData?.category || 'General',
-    coverImage:
-      communityData?.cover_image_url ||
-      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=900&fit=crop&q=80',
-    avatarUrl:
-      communityData?.profile_image_url ||
-      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=200&fit=crop&q=80',
-    description:
-      communityData?.description ||
-      'A welcoming local community space to connect, share experiences, and grow together.',
-    rules: [
-      'Be respectful, inclusive, and constructive.',
-      'No spam, self-promotion, or unsolicited promotional DMs.',
-      'Celebrate diverse perspectives and foster real friendships.',
-    ],
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Join ${communityData?.community_name || 'this hub'} on Authentic Community!`,
+        url: `https://authenticcommunity.fun/community/${id}`,
+      })
+    } catch {
+      // Ignore
+    }
   }
 
-  const isAdmin = userRole === 'owner' || userRole === 'admin' || userRole === 'moderator'
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <AppText variant="caption" color={Colors.textSecondary} style={{ marginTop: 12 }}>
+            Loading community hub...
+          </AppText>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  const name = communityData?.community_name || 'Community Hub'
+  const category = communityData?.category || 'General'
+  const location = communityData?.location_city || 'Local Area'
+  const photo = communityData?.photo_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
+  const description = communityData?.description || 'A welcoming space for creators, builders, and community members.'
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Cover Image & Header */}
-        <View style={styles.heroContainer}>
-          <Image source={{ uri: community.coverImage }} style={styles.coverImage} />
-          <View style={styles.heroOverlay} />
+    <SafeAreaView style={styles.safeArea}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <ArrowLeft color={Colors.text} size={22} />
+        </TouchableOpacity>
+        <AppText variant="bodySm" weight="bold" numberOfLines={1} style={{ flex: 1, textAlign: 'center', marginHorizontal: 8 }}>
+          {name}
+        </AppText>
+        <TouchableOpacity onPress={handleShare} style={styles.headerBtn}>
+          <Share2 color={Colors.text} size={20} />
+        </TouchableOpacity>
+      </View>
 
-          <SafeAreaView style={styles.heroNav}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.navCircleBtn}>
-              <ArrowLeft color="#FFFFFF" size={20} />
-            </TouchableOpacity>
-
-            <View style={styles.heroRightActions}>
-              <TouchableOpacity style={styles.navCircleBtn}>
-                <Share2 color="#FFFFFF" size={18} />
-              </TouchableOpacity>
-              {isAdmin && (
-                <TouchableOpacity
-                  onPress={() => router.push(`/community/admin/${id}`)}
-                  style={styles.navCircleBtn}
-                  accessibilityLabel="Community Admin"
-                >
-                  <Settings color="#FFFFFF" size={18} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </SafeAreaView>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Cover Photo */}
+        <View style={styles.coverPhotoContainer}>
+          <Image source={{ uri: photo }} style={styles.coverPhoto} />
         </View>
 
-        {/* Community Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.avatarRow}>
-            <Image source={{ uri: community.avatarUrl }} style={styles.communityAvatar} />
-            <View style={styles.trustBadgeWrap}>
-              <ShieldCheck color={Colors.primary} size={16} />
+        {/* Title, Badge & Meta */}
+        <View style={styles.mainInfo}>
+          <View style={styles.titleRow}>
+            <AppText variant="h2" weight="bold" style={{ flex: 1 }}>
+              {name}
+            </AppText>
+            {(userRole === 'owner' || userRole === 'admin') && (
+              <TouchableOpacity
+                onPress={() => router.push(`/community/admin/${id}`)}
+                style={styles.adminBadgeBtn}
+              >
+                <Settings color={Colors.primary} size={16} />
+                <AppText variant="caption" weight="bold" color={Colors.primary}>
+                  Admin
+                </AppText>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.metaRow}>
+            <View style={styles.metaPill}>
+              <Globe color={Colors.textSecondary} size={14} />
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Public · {location}
+              </AppText>
+            </View>
+            <View style={styles.metaPill}>
+              <Users color={Colors.primary} size={14} />
               <AppText variant="caption" weight="bold" color={Colors.primary}>
-                Trusted Space
+                {memberCount} members
               </AppText>
             </View>
           </View>
 
-          <AppText variant="h1" weight="bold">
-            {community.name}
-          </AppText>
-
-          <View style={styles.metaRow}>
-            <AppText variant="caption" color={Colors.textSecondary}>
-              {community.membersCount} members · {community.onlineCount} online · {community.type}
-            </AppText>
-          </View>
-
-          {/* Action Buttons: Join, Invite, Share */}
-          <View style={styles.actionRow}>
+          {/* Join / Leave CTA */}
+          <View style={styles.ctaRow}>
             <AppButton
-              title={isJoined ? 'Joined ✓' : 'Join Community'}
-              variant={isJoined ? 'secondary' : 'primary'}
+              title={isJoined ? '✓ Joined' : 'Join Community'}
+              variant={isJoined ? 'outline' : 'primary'}
               onPress={handleToggleJoin}
-              style={styles.joinBtn}
+              style={{ flex: 1 }}
             />
-            <TouchableOpacity style={styles.iconBtn}>
-              <Share2 color={Colors.text} size={18} />
+            <TouchableOpacity
+              onPress={() => router.push(`/community-chat/${id}`)}
+              style={styles.chatIconBtn}
+            >
+              <MessageSquare color={Colors.primary} size={22} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* 5 Sub-Tabs (Feed, Chat, Events, Members, About) */}
-        <View style={styles.tabsWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabsContainer}
-          >
-            {COMMUNITY_TABS.map((tab) => {
-              const isSelected = activeTab === tab
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  onPress={() => setActiveTab(tab)}
-                  style={[
-                    styles.tabItem,
-                    isSelected ? styles.tabItemActive : null,
-                  ]}
-                >
-                  <AppText
-                    variant="bodySm"
-                    weight={isSelected ? 'bold' : 'medium'}
-                    color={isSelected ? Colors.primary : Colors.textSecondary}
-                  >
-                    {tab}
-                  </AppText>
-                  {isSelected && <View style={styles.activeTabUnderline} />}
-                </TouchableOpacity>
-              )
-            })}
+        {/* Channels Row */}
+        <View style={styles.channelsSection}>
+          <AppText variant="caption" weight="bold" color={Colors.textSecondary} style={{ marginBottom: 8, paddingHorizontal: Spacing.md }}>
+            CHANNELS
+          </AppText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.channelsScroll}>
+            {COMMUNITY_CHANNELS.map((ch) => (
+              <TouchableOpacity
+                key={ch}
+                onPress={() => router.push(`/community-chat/${id}?channel=${ch}`)}
+                style={styles.channelChip}
+              >
+                <Hash color={Colors.primary} size={14} />
+                <AppText variant="caption" weight="medium" color={Colors.text}>
+                  {ch}
+                </AppText>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
 
-        {/* Tab Views */}
-        {activeTab === 'Feed' && (
-          <View style={styles.tabContent}>
-            {/* Compose Box */}
+        {/* Tab Navigation */}
+        <View style={styles.tabsNavRow}>
+          {COMMUNITY_TABS.map((tab) => (
             <TouchableOpacity
-              onPress={() => router.push('/post/create')}
-              style={styles.composeBox}
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[styles.tabNavItem, activeTab === tab && styles.activeTabNavItem]}
             >
-              <Image source={{ uri: community.avatarUrl }} style={styles.composeAvatar} />
-              <AppText variant="bodySm" color={Colors.textMuted}>
-                Share with the community...
+              <AppText
+                variant="caption"
+                weight={activeTab === tab ? 'bold' : 'medium'}
+                color={activeTab === tab ? Colors.primary : Colors.textSecondary}
+              >
+                {tab}
               </AppText>
             </TouchableOpacity>
+          ))}
+        </View>
 
-            <PostCard post={SAMPLE_POST} />
+        {/* Tab Viewport */}
+        {activeTab === 'Feed' && (
+          <View style={styles.tabContent}>
+            {feedPosts.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <AppText variant="bodySm" color={Colors.textSecondary}>
+                  No community posts yet. Start the conversation!
+                </AppText>
+                <AppButton
+                  title="Create Post"
+                  variant="outline"
+                  leftIcon={<Plus color={Colors.primary} size={16} />}
+                  onPress={() => router.push('/post/create')}
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            ) : (
+              feedPosts.map((post) => (
+                <Card key={post.id} style={styles.postCard}>
+                  <View style={styles.postAuthorRow}>
+                    <Image
+                      source={{
+                        uri: post.profiles?.profile_image_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&fit=crop&q=80',
+                      }}
+                      style={styles.postAvatar}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <AppText variant="bodySm" weight="bold">
+                          {post.profiles?.first_name} {post.profiles?.last_name}
+                        </AppText>
+                        {post.profiles?.is_verified && <VerifiedBadge size={12} />}
+                      </View>
+                      <AppText variant="caption" color={Colors.textMuted}>
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </AppText>
+                    </View>
+                  </View>
+                  <AppText variant="bodySm" style={{ marginTop: 8 }}>
+                    {post.content}
+                  </AppText>
+                </Card>
+              ))
+            )}
           </View>
         )}
 
         {activeTab === 'Chat' && (
           <View style={styles.tabContent}>
-            {/* Channels Bar */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.channelsBar}
-            >
-              {COMMUNITY_CHANNELS.map((ch) => (
-                <TouchableOpacity
-                  key={ch}
-                  onPress={() => setActiveChannel(ch)}
-                  style={[
-                    styles.channelChip,
-                    activeChannel === ch ? styles.channelChipActive : null,
-                  ]}
-                >
-                  <Hash color={activeChannel === ch ? '#FFFFFF' : Colors.textSecondary} size={14} />
-                  <AppText
-                    variant="caption"
-                    weight={activeChannel === ch ? 'bold' : 'normal'}
-                    color={activeChannel === ch ? '#FFFFFF' : Colors.text}
-                  >
-                    {ch}
-                  </AppText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Card style={styles.chatShortcutCard}>
-              <View style={styles.chatShortcutInfo}>
-                <AppText variant="bodySm" weight="bold">
-                  #{activeChannel} Channel
-                </AppText>
-                <AppText variant="caption" color={Colors.textSecondary}>
-                  Tap below to open full real-time group chat
-                </AppText>
-              </View>
+            <View style={styles.emptyCard}>
+              <MessageSquare color={Colors.primary} size={32} />
+              <AppText variant="bodySm" weight="bold" style={{ marginTop: 8 }}>
+                Live Group Discussions
+              </AppText>
+              <AppText variant="caption" color={Colors.textSecondary} style={{ textAlign: 'center', marginTop: 4 }}>
+                Join members in real-time channel chats and updates.
+              </AppText>
               <AppButton
-                title="Open Chat"
-                size="sm"
+                title="Open Community Chat"
+                variant="primary"
                 onPress={() => router.push(`/community-chat/${id}`)}
+                style={{ marginTop: 12 }}
               />
-            </Card>
+            </View>
           </View>
         )}
 
         {activeTab === 'Events' && (
           <View style={styles.tabContent}>
-            <View style={styles.eventsHeader}>
-              <AppText variant="bodySm" weight="bold">
-                Upcoming Community Events
-              </AppText>
-              <TouchableOpacity onPress={() => router.push('/event/create')}>
-                <AppText variant="caption" weight="bold" color={Colors.primary}>
-                  + Host Event
+            {communityEvents.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Calendar color={Colors.textMuted} size={32} />
+                <AppText variant="bodySm" color={Colors.textSecondary} style={{ marginTop: 8 }}>
+                  No upcoming community events scheduled.
                 </AppText>
-              </TouchableOpacity>
-            </View>
-            <EventCard event={SAMPLE_EVENT} onPress={() => router.push('/event/e2')} />
+                <AppButton
+                  title="Host an Event"
+                  variant="outline"
+                  onPress={() => router.push('/event/create')}
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            ) : (
+              communityEvents.map((ev) => (
+                <TouchableOpacity
+                  key={ev.id}
+                  onPress={() => router.push(`/event/${ev.id}`)}
+                  style={styles.eventItemRow}
+                >
+                  <Calendar color={Colors.primary} size={20} />
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="bodySm" weight="bold">{ev.title || ev.event_title}</AppText>
+                    <AppText variant="caption" color={Colors.textMuted}>{ev.location_city || 'Local'}</AppText>
+                  </View>
+                  <ChevronRight color={Colors.textMuted} size={18} />
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         )}
 
         {activeTab === 'Members' && (
           <View style={styles.tabContent}>
-            <Card style={styles.memberCard}>
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
-                }}
-                style={styles.memberAvatar}
-              />
-              <View style={styles.memberInfo}>
-                <View style={styles.memberNameRow}>
-                  <AppText variant="bodySm" weight="bold">
-                    Maya Patel
-                  </AppText>
-                  <View style={styles.adminRoleBadge}>
-                    <AppText variant="caption" weight="bold" color={Colors.primary} style={styles.adminRoleText}>
-                      Admin
+            {membersList.map((m, idx) => {
+              const p = m.profile
+              const mName = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Member' : 'Member'
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => p?.user_id && router.push(`/profile/${p.user_id}`)}
+                  style={styles.memberRow}
+                >
+                  <Image
+                    source={{
+                      uri: p?.profile_image_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&fit=crop&q=80',
+                    }}
+                    style={styles.memberAvatar}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <AppText variant="bodySm" weight="bold">{mName}</AppText>
+                      {p?.is_verified && <VerifiedBadge size={12} />}
+                    </View>
+                    <AppText variant="caption" color={Colors.textMuted}>
+                      {p?.location_city || 'Local'} · {m.role}
                     </AppText>
                   </View>
-                </View>
-                <AppText variant="caption" color={Colors.textSecondary}>
-                  Product Designer · Lagos
-                </AppText>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/profile/maya-patel')}
-                style={styles.viewMemberBtn}
-              >
-                <AppText variant="caption" weight="bold" color={Colors.primary}>
-                  View
-                </AppText>
-              </TouchableOpacity>
-            </Card>
+                  <ChevronRight color={Colors.textMuted} size={18} />
+                </TouchableOpacity>
+              )
+            })}
           </View>
         )}
 
         {activeTab === 'About' && (
-          <View style={styles.aboutContainer}>
-            <View style={styles.aboutSection}>
-              <AppText variant="label" weight="bold">
-                About Community
+          <View style={styles.tabContent}>
+            <Card style={styles.aboutCard}>
+              <AppText variant="bodySm" weight="bold" style={{ marginBottom: 6 }}>
+                About this Hub
               </AppText>
-              <AppText variant="bodySm" color={Colors.text} style={styles.aboutText}>
-                {community.description}
+              <AppText variant="body" color={Colors.textSecondary} style={{ lineHeight: 22 }}>
+                {description}
               </AppText>
-            </View>
 
-            <View style={styles.aboutSection}>
-              <AppText variant="label" weight="bold">
-                Community Rules
+              <AppText variant="bodySm" weight="bold" style={{ marginTop: 16, marginBottom: 6 }}>
+                Category & Focus
               </AppText>
-              {community.rules.map((rule, idx) => (
-                <View key={idx} style={styles.ruleRow}>
-                  <AppText variant="caption" weight="bold" color={Colors.primary}>
-                    {idx + 1}.
-                  </AppText>
-                  <AppText variant="bodySm" color={Colors.textSecondary} style={styles.ruleText}>
-                    {rule}
-                  </AppText>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.aboutSection}>
-              <AppText variant="label" weight="bold">
-                Details
+              <AppText variant="caption" color={Colors.primary} weight="bold">
+                {category}
               </AppText>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                Type: {community.type} · Privacy: {community.privacy} · Category: {community.category}
-              </AppText>
-            </View>
+            </Card>
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  loadingCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  headerBtn: {
+    padding: 6,
   },
   scrollContent: {
     paddingBottom: Spacing.xxl,
   },
-  heroContainer: {
+  coverPhotoContainer: {
     width: '100%',
-    height: 220,
-    position: 'relative',
+    height: 180,
     backgroundColor: Colors.border,
   },
-  coverImage: {
+  coverPhoto: {
     width: '100%',
     height: '100%',
   },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-  },
-  heroNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xs,
-  },
-  heroRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  navCircleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoCard: {
+  mainInfo: {
+    padding: Spacing.md,
     backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 8,
   },
-  avatarRow: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: -38,
-    marginBottom: 4,
+    gap: 8,
   },
-  communityAvatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 3,
-    borderColor: Colors.surface,
-    backgroundColor: Colors.border,
-  },
-  trustBadgeWrap: {
+  adminBadgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: Radii.full,
   },
   metaRow: {
-    marginBottom: 4,
-  },
-  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 4,
+    marginVertical: 10,
   },
-  joinBtn: {
-    flex: 1,
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  chatIconBtn: {
+    width: 48,
+    height: 48,
     borderRadius: Radii.md,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabsWrapper: {
+  channelsSection: {
+    paddingVertical: Spacing.md,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  tabsContainer: {
-    paddingHorizontal: Spacing.lg,
-    gap: 16,
-  },
-  tabItem: {
-    paddingVertical: 12,
-    position: 'relative',
-  },
-  tabItemActive: {},
-  activeTabUnderline: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2.5,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
-  tabContent: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  composeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.surface,
-    padding: 12,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  composeAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.border,
-  },
-  channelsBar: {
+  channelsScroll: {
+    paddingHorizontal: Spacing.md,
     gap: 8,
-    marginBottom: Spacing.sm,
   },
   channelChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  channelChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  tabsNavRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  chatShortcutCard: {
+  tabNavItem: {
+    paddingVertical: 12,
+    marginRight: 18,
+  },
+  activeTabNavItem: {
+    borderBottomWidth: 2,
+    borderBottomColor: Colors.primary,
+  },
+  tabContent: {
     padding: Spacing.md,
+    gap: 10,
+  },
+  emptyCard: {
+    backgroundColor: Colors.surface,
+    padding: Spacing.xl,
+    borderRadius: Radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  postCard: {
+    padding: Spacing.md,
+  },
+  postAuthorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
+  },
+  postAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.border,
+  },
+  eventItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  chatShortcutInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  eventsHeader: {
+  memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  memberCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
     gap: 12,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   memberAvatar: {
     width: 40,
@@ -622,52 +618,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.border,
   },
-  memberInfo: {
-    flex: 1,
-  },
-  memberNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  adminRoleBadge: {
-    backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: Radii.full,
-  },
-  adminRoleText: {
-    fontSize: 9,
-  },
-  viewMemberBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  aboutContainer: {
-    padding: Spacing.lg,
-    gap: Spacing.lg,
-  },
-  aboutSection: {
-    backgroundColor: Colors.surface,
+  aboutCard: {
     padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 6,
-  },
-  aboutText: {
-    lineHeight: 20,
-  },
-  ruleRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginVertical: 2,
-  },
-  ruleText: {
-    flex: 1,
-    lineHeight: 18,
   },
 })

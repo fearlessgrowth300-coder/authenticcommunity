@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
+  Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -25,11 +27,11 @@ import {
   MoreHorizontal,
   Plus,
   Smile,
-  Mic,
   Send,
-  Sparkles,
-  ChevronRight,
-  Heart,
+  User,
+  VolumeX,
+  Ban,
+  Flag,
   CheckCheck,
 } from 'lucide-react-native'
 
@@ -59,10 +61,12 @@ export default function DirectMessageChatScreen() {
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [menuVisible, setMenuVisible] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
   const scrollRef = useRef<any>(null)
 
   useEffect(() => {
-    if (!targetUserId) return
+    if (!targetUserId || !user) return
 
     // 1. Fetch recipient profile
     ;(supabase as any)
@@ -82,69 +86,142 @@ export default function DirectMessageChatScreen() {
         }
       })
 
-    // 2. Initial fetch messages from Supabase
+    // 2. Fetch conversation settings (mute state)
+    ;(supabase as any)
+      .from('conversation_settings')
+      .select('is_muted')
+      .eq('user_id', user.id)
+      .eq('other_user_id', targetUserId)
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (data) setIsMuted(Boolean(data.is_muted))
+      })
+
+    // 3. Initial fetch messages from Supabase
     loadConversationMessages(targetUserId)
       .then((data) => {
         setMessages(data)
       })
       .finally(() => setLoading(false))
 
-    // 3. Subscribe to Supabase Realtime for live updates
+    // 4. Subscribe to Supabase Realtime for live updates
     const unsubscribe = subscribeToConversationRealtime(targetUserId, (newMsg) => {
       setMessages((prev) => {
-        // Prevent duplicate insertion if already added optimistically
         if (prev.some((m) => m.id === newMsg.id)) {
           return prev
         }
         return [...prev, newMsg]
       })
-      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 100)
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true })
+      }, 100)
     })
 
     return () => {
       unsubscribe()
     }
-  }, [targetUserId])
+  }, [targetUserId, user])
 
-  const handleSend = async () => {
-    if (!inputText.trim() || sending) return
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !user || !targetUserId || sending) return
     const textToSend = inputText.trim()
     setInputText('')
     setSending(true)
 
-    // Optimistic local item
-    const tempId = `temp-${Date.now()}`
-    const optimisticMsg: RealtimeMessageItem = {
-      id: tempId,
-      conversationId: targetUserId,
-      senderId: user?.id || 'me',
-      senderName: 'You',
-      senderAvatar: null,
-      text: textToSend,
-      createdAt: new Date().toISOString(),
-      timeAgo: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isMe: true,
-      isRead: false,
-    }
-    setMessages((prev) => [...prev, optimisticMsg])
-    setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 50)
-
     try {
-      const realMsg = await sendDirectMessage(targetUserId, textToSend)
-      // Replace optimistic message with real message from server
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? realMsg : m))
-      )
-    } catch {
-      // Retain optimistic message or mark failed
+      const newMsg = await sendDirectMessage(targetUserId, textToSend)
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev
+        return [...prev, newMsg]
+      })
+
+      // Also ensure message_requests entry exists if first message
+      await (supabase as any).from('message_requests').upsert({
+        sender_id: user.id,
+        recipient_id: targetUserId,
+        initial_message: textToSend,
+        status: 'pending',
+      }, { onConflict: 'sender_id,recipient_id' })
+
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true })
+      }, 100)
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not send message.')
     } finally {
       setSending(false)
-      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 100)
     }
   }
 
-  const handleIcebreakerPress = (prompt: string) => {
-    setInputText(prompt)
+  const handleToggleMute = async () => {
+    if (!user) return
+    const newMuted = !isMuted
+    setIsMuted(newMuted)
+    setMenuVisible(false)
+    try {
+      await (supabase as any).from('conversation_settings').upsert({
+        user_id: user.id,
+        other_user_id: targetUserId,
+        is_muted: newMuted,
+      }, { onConflict: 'user_id,other_user_id' })
+      Alert.alert(newMuted ? 'Muted' : 'Unmuted', `Conversation notifications ${newMuted ? 'muted' : 'unmuted'}.`)
+    } catch {
+      // Graceful
+    }
+  }
+
+  const handleBlockUser = async () => {
+    if (!user) return
+    setMenuVisible(false)
+    Alert.alert('Block User', `Are you sure you want to block ${recipient.name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Block',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await (supabase as any).from('blocked_users').insert({
+              blocker_id: user.id,
+              blocked_id: targetUserId,
+            })
+            Alert.alert('Blocked', `${recipient.name} has been blocked.`)
+            router.back()
+          } catch {
+            Alert.alert('Error', 'Could not block user.')
+          }
+        },
+      },
+    ])
+  }
+
+  const handleReportUser = async () => {
+    if (!user) return
+    setMenuVisible(false)
+    Alert.alert('Report Member', 'Please select a reason for reporting:', [
+      {
+        text: 'Harassment / Spam',
+        onPress: async () => {
+          await (supabase as any).from('content_reports').insert({
+            reporter_id: user.id,
+            reported_user_id: targetUserId,
+            reason: 'harassment_spam',
+          })
+          Alert.alert('Thank You', 'Our moderation team will review this report within 24 hours.')
+        },
+      },
+      {
+        text: 'Impersonation / Fake Profile',
+        onPress: async () => {
+          await (supabase as any).from('content_reports').insert({
+            reporter_id: user.id,
+            reported_user_id: targetUserId,
+            reason: 'fake_profile',
+          })
+          Alert.alert('Thank You', 'Our moderation team will review this report within 24 hours.')
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ])
   }
 
   return (
@@ -153,7 +230,7 @@ export default function DirectMessageChatScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top Header Bar */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft color={Colors.text} size={22} />
@@ -161,19 +238,19 @@ export default function DirectMessageChatScreen() {
 
           <TouchableOpacity
             onPress={() => router.push(`/profile/${targetUserId}`)}
-            style={styles.headerUser}
+            style={styles.profileHeaderTouch}
           >
             <Image
               source={{
                 uri:
                   recipient.avatar ||
-                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&fit=crop&q=80',
               }}
               style={styles.headerAvatar}
             />
-            <View style={styles.headerUserInfo}>
-              <View style={styles.headerNameRow}>
-                <AppText variant="body" weight="bold" numberOfLines={1}>
+            <View>
+              <View style={styles.nameRow}>
+                <AppText variant="bodySm" weight="bold">
                   {recipient.name}
                 </AppText>
                 {recipient.isVerified && <VerifiedBadge size={14} />}
@@ -184,50 +261,35 @@ export default function DirectMessageChatScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.headerRight}>
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.headerBtn}>
             <MoreHorizontal color={Colors.text} size={22} />
           </TouchableOpacity>
         </View>
 
-        {/* Messages Scroll Area */}
+        {/* Messages List */}
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd?.({ animated: false })}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+          showsVerticalScrollIndicator={false}
         >
-          {/* AI Icebreaker Card */}
-          <TouchableOpacity
-            onPress={() =>
-              handleIcebreakerPress(
-                `Hey ${recipient.name}! Great connecting with you. What local events or projects are you excited about lately? ✨`
-              )
-            }
-            style={styles.icebreakerCard}
-          >
-            <View style={styles.icebreakerHeader}>
-              <Sparkles color={Colors.primary} size={16} />
-              <AppText variant="caption" weight="bold" color={Colors.primary}>
-                AI Conversation Starter
-              </AppText>
-            </View>
-            <AppText variant="bodySm" color={Colors.text} style={styles.icebreakerPrompt}>
-              "Hey {recipient.name}! Great connecting with you. What local events or projects are you excited about lately? ✨"
-            </AppText>
-            <View style={styles.icebreakerFooter}>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                Tap to use this icebreaker
-              </AppText>
-              <ChevronRight color={Colors.textSecondary} size={14} />
-            </View>
-          </TouchableOpacity>
-
-          {/* Messages list */}
           {loading ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={styles.loader} />
+            <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 24 }} />
           ) : messages.length === 0 ? (
-            <View style={styles.emptyMessages}>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                No messages yet. Send a greeting to start chatting!
+            <View style={styles.emptyStateContainer}>
+              <Image
+                source={{
+                  uri:
+                    recipient.avatar ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&fit=crop&q=80',
+                }}
+                style={styles.bigAvatar}
+              />
+              <AppText variant="bodySm" weight="bold" style={{ marginTop: 12 }}>
+                {recipient.name}
+              </AppText>
+              <AppText variant="caption" color={Colors.textSecondary} style={{ textAlign: 'center', marginTop: 4 }}>
+                This is the beginning of your conversation with {recipient.name}. Reach out with an introduction!
               </AppText>
             </View>
           ) : (
@@ -235,34 +297,31 @@ export default function DirectMessageChatScreen() {
               <View
                 key={msg.id}
                 style={[
-                  styles.messageBubbleWrapper,
-                  msg.isMe ? styles.myBubbleWrapper : styles.otherBubbleWrapper,
+                  styles.messageBubbleRow,
+                  msg.isMe ? styles.myMessageRow : styles.otherMessageRow,
                 ]}
               >
                 <View
                   style={[
-                    styles.messageBubble,
+                    styles.bubble,
                     msg.isMe ? styles.myBubble : styles.otherBubble,
                   ]}
                 >
                   <AppText
                     variant="bodySm"
                     color={msg.isMe ? '#FFFFFF' : Colors.text}
-                    style={styles.messageText}
                   >
                     {msg.text}
                   </AppText>
-                  <View style={styles.timeRow}>
+                  <View style={styles.bubbleFooter}>
                     <AppText
                       variant="caption"
-                      color={msg.isMe ? 'rgba(255,255,255,0.75)' : Colors.textMuted}
+                      color={msg.isMe ? 'rgba(255,255,255,0.7)' : Colors.textMuted}
                       style={styles.timeText}
                     >
-                      {msg.timeAgo}
+                      {msg.timeAgo || 'Just now'}
                     </AppText>
-                    {msg.isMe && (
-                      <CheckCheck color="rgba(255,255,255,0.85)" size={13} style={styles.checkIcon} />
-                    )}
+                    {msg.isMe && <CheckCheck color="#FFFFFF" size={12} />}
                   </View>
                 </View>
               </View>
@@ -270,7 +329,7 @@ export default function DirectMessageChatScreen() {
           )}
         </ScrollView>
 
-        {/* Bottom Input Composer */}
+        {/* Input Bar */}
         <View style={styles.inputContainer}>
           <TouchableOpacity style={styles.plusBtn}>
             <Plus color={Colors.textSecondary} size={20} />
@@ -289,15 +348,44 @@ export default function DirectMessageChatScreen() {
           </TouchableOpacity>
 
           {inputText.trim() ? (
-            <TouchableOpacity onPress={handleSend} style={styles.sendBtn}>
+            <TouchableOpacity onPress={handleSendMessage} style={styles.sendBtn} disabled={sending}>
               <Send color="#FFFFFF" size={16} />
             </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.iconBtn}>
-              <Mic color={Colors.textSecondary} size={20} />
-            </TouchableOpacity>
-          )}
+          ) : null}
         </View>
+
+        {/* Context Menu Modal */}
+        <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+            <View style={styles.menuCard}>
+              <TouchableOpacity
+                onPress={() => {
+                  setMenuVisible(false)
+                  router.push(`/profile/${targetUserId}`)
+                }}
+                style={styles.menuItem}
+              >
+                <User color={Colors.text} size={18} />
+                <AppText variant="bodySm">View Full Profile</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleToggleMute} style={styles.menuItem}>
+                <VolumeX color={isMuted ? Colors.primary : Colors.text} size={18} />
+                <AppText variant="bodySm">{isMuted ? 'Unmute Notifications' : 'Mute Notifications'}</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleBlockUser} style={styles.menuItem}>
+                <Ban color="#DC2626" size={18} />
+                <AppText variant="bodySm" color="#DC2626">Block User</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleReportUser} style={styles.menuItem}>
+                <Flag color={Colors.coral} size={18} />
+                <AppText variant="bodySm" color={Colors.coral}>Report Account</AppText>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -308,9 +396,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  keyboardView: {
-    flex: 1,
-  },
   container: {
     flex: 1,
   },
@@ -318,16 +403,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   backBtn: {
-    padding: 4,
+    padding: 6,
   },
-  headerUser: {
+  profileHeaderTouch: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -340,144 +425,71 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     backgroundColor: Colors.border,
   },
-  headerUserInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  headerNameRow: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  avatarWrap: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.border,
-  },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    backgroundColor: '#22C55E',
-    borderWidth: 1.5,
-    borderColor: Colors.surface,
-  },
-  headerRight: {
-    padding: 4,
-  },
-  matchScoreBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#C7D2FE',
-  },
-  matchBadge: {
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Radii.full,
-  },
-  matchText: {
-    fontSize: 11,
+  headerBtn: {
+    padding: 6,
   },
   scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
-  icebreakerCard: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: Radii.md,
     padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginBottom: Spacing.md,
-    gap: 6,
+    paddingBottom: Spacing.lg,
   },
-  icebreakerHeader: {
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: Spacing.xl,
+  },
+  bigAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.border,
+  },
+  messageBubbleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    marginBottom: 10,
   },
-  icebreakerPrompt: {
-    lineHeight: 20,
-    fontStyle: 'italic',
+  myMessageRow: {
+    justifyContent: 'flex-end',
   },
-  icebreakerFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
+  otherMessageRow: {
+    justifyContent: 'flex-start',
   },
-  loader: {
-    marginVertical: Spacing.xl,
-  },
-  emptyMessages: {
-    paddingVertical: Spacing.xxl,
-    alignItems: 'center',
-  },
-  messageBubbleWrapper: {
-    marginVertical: 4,
-    width: '100%',
-  },
-  myBubbleWrapper: {
-    alignItems: 'flex-end',
-  },
-  otherBubbleWrapper: {
-    alignItems: 'flex-start',
-  },
-  messageBubble: {
-    maxWidth: '78%',
+  bubble: {
+    maxWidth: '80%',
     paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 16,
+    paddingVertical: 10,
+    borderRadius: Radii.lg,
   },
   myBubble: {
     backgroundColor: Colors.primary,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 2,
   },
   otherBubble: {
     backgroundColor: Colors.surface,
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: 2,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  messageText: {
-    lineHeight: 20,
-  },
-  timeRow: {
+  bubbleFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 3,
-    marginTop: 3,
+    gap: 4,
+    marginTop: 4,
   },
   timeText: {
     fontSize: 10,
   },
-  checkIcon: {
-    marginLeft: 2,
-  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
@@ -488,14 +500,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: Colors.background,
-    borderRadius: Radii.full,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
     fontSize: 14,
     color: Colors.text,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.background,
+    borderRadius: Radii.full,
   },
   iconBtn: {
     padding: 6,
@@ -507,5 +517,30 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 16,
+  },
+  menuCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    padding: Spacing.sm,
+    width: 220,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
 })

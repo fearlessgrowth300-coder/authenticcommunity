@@ -1,13 +1,27 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
+  Alert,
+  Share,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
+import { calculateMatchScore } from '@/services/matching'
+import {
+  getRelationshipState,
+  followUser,
+  unfollowUser,
+  requestConnection,
+  acceptConnection,
+  removeConnection,
+} from '@/services/socialGraph'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -26,295 +40,491 @@ import {
   UserCheck,
   Clock,
   MapPin,
+  Share2,
+  LayoutGrid,
+  Video as VideoIcon,
+  Compass,
+  Calendar,
 } from 'lucide-react-native'
 
 export default function MatchProfileDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
+  const { user: currentUser } = useAuth()
 
-  // Relationship states
-  const [followState, setFollowState] = useState<'not_following' | 'following' | 'requested'>('not_following')
-  const [connectionState, setConnectionState] = useState<'none' | 'pending_outgoing' | 'connected'>('none')
+  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<any>(null)
+  const [matchScore, setMatchScore] = useState<any>(null)
+  const [relationship, setRelationship] = useState<any>({
+    isFollowing: false,
+    isFollower: false,
+    isConnection: false,
+    isPendingConnection: false,
+  })
+  const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'communities' | 'events'>('posts')
+  const [userPosts, setUserPosts] = useState<any[]>([])
+  const [userCommunities, setUserCommunities] = useState<any[]>([])
+  const [userEvents, setUserEvents] = useState<any[]>([])
+  const [actionLoading, setActionLoading] = useState(false)
 
-  // Profile data
-  const profile = {
-    name: 'Maya',
-    age: 28,
-    isVerified: true,
-    location: 'Austin, Texas',
-    distance: '1.2 miles away',
-    matchScore: 92,
-    photoUrl:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
-    bio: 'Community builder, book lover, and weekend hiker. Always up for meaningful conversations and trying new local spots.',
-    interests: ['Hiking', 'Books', 'Community', 'Travel', 'Yoga', 'Live Music'],
-    values: [
-      'Kindness',
-      'Growth',
-      'Community',
-      'Learning',
-      'Creativity',
-      'Honesty',
-    ],
-    conversationStarters: [
-      "What's a book that changed your perspective?",
-      "What's a cause you care deeply about?",
-    ],
-    mutualCommunity: {
-      name: 'Austin Trail Buddies',
-      members: '245 members',
-      image:
-        'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=200&fit=crop&q=80',
-    },
-  }
+  const loadProfileData = async () => {
+    if (!id) return
+    setLoading(true)
+    try {
+      const [profileRes, myProfileRes, relState] = await Promise.all([
+        supabase.from('profiles').select('*').eq('user_id', id).maybeSingle(),
+        currentUser
+          ? supabase.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        currentUser ? getRelationshipState(currentUser.id, id) : Promise.resolve({ followStatus: 'not_following', isFollower: false, connectionStatus: 'none' }),
+      ])
 
-  const handleToggleFollow = () => {
-    if (followState === 'not_following') {
-      setFollowState('following')
-    } else {
-      setFollowState('not_following')
+      if (profileRes.data) {
+        setProfile(profileRes.data)
+        setRelationship({
+          isFollowing: relState.followStatus === 'following',
+          isFollower: relState.isFollower,
+          isConnection: relState.connectionStatus === 'connected',
+          isPendingConnection: relState.connectionStatus === 'pending_outgoing' || relState.connectionStatus === 'pending_incoming',
+        })
+
+        if (myProfileRes.data) {
+          const myP = myProfileRes.data
+          const targetP = profileRes.data
+          const score = calculateMatchScore({
+            candidateId: id,
+            candidateInterests: targetP.interests || [],
+            candidateValues: targetP.values || [],
+            candidateCity: targetP.location_city || '',
+            candidateCountry: targetP.location_country || '',
+            candidateGoal: targetP.intent || 'friends',
+            candidateTrust: targetP.identity_verified ? 5 : 2,
+            myInterests: myP.interests || [],
+            myValues: myP.values || [],
+            myCity: myP.location_city || '',
+            myCountry: myP.location_country || '',
+            myGoal: myP.intent || 'friends',
+          })
+          setMatchScore(score)
+        }
+
+        // Fetch user posts
+        const postsRes = await supabase
+          .from('posts')
+          .select('id, content, content_type, media_urls, likes_count, comments_count, created_at')
+          .eq('author_id', id)
+          .order('created_at', { ascending: false })
+          .limit(10)
+        if (postsRes.data) setUserPosts(postsRes.data)
+
+        // Fetch user joined communities
+        const commRes = await (supabase as any)
+          .from('community_members')
+          .select('community_id, communities(id, community_name, category, photo_url, member_count)')
+          .eq('user_id', id)
+          .limit(10)
+        if (commRes.data) {
+          setUserCommunities(commRes.data.map((c: any) => c.communities).filter(Boolean))
+        }
+
+        // Fetch user events
+        const eventRes = await (supabase as any)
+          .from('event_attendees')
+          .select('event_id, events(id, title, cover_image_url, start_time, location_city)')
+          .eq('user_id', id)
+          .limit(10)
+        if (eventRes.data) {
+          setUserEvents(eventRes.data.map((e: any) => e.events).filter(Boolean))
+        }
+      }
+    } catch {
+      // Graceful fallback
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleToggleConnect = () => {
-    if (connectionState === 'none') {
-      setConnectionState('pending_outgoing')
-    } else if (connectionState === 'pending_outgoing') {
-      setConnectionState('none')
-    } else if (connectionState === 'connected') {
-      setConnectionState('none')
+  useEffect(() => {
+    loadProfileData()
+  }, [id, currentUser])
+
+  const handleToggleFollow = async () => {
+    if (!currentUser || !id) {
+      Alert.alert('Sign In', 'Please sign in to follow members.')
+      return
+    }
+    setActionLoading(true)
+    try {
+      if (relationship.isFollowing) {
+        await unfollowUser(id)
+        setRelationship((prev: any) => ({ ...prev, isFollowing: false }))
+      } else {
+        await followUser(id)
+        setRelationship((prev: any) => ({ ...prev, isFollowing: true }))
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not update follow state')
+    } finally {
+      setActionLoading(false)
     }
   }
+
+  const handleToggleConnect = async () => {
+    if (!currentUser || !id) {
+      Alert.alert('Sign In', 'Please sign in to connect.')
+      return
+    }
+    setActionLoading(true)
+    try {
+      if (relationship.isConnection) {
+        await removeConnection(id)
+        setRelationship((prev: any) => ({ ...prev, isConnection: false }))
+      } else if (relationship.isPendingConnection) {
+        await removeConnection(id)
+        setRelationship((prev: any) => ({ ...prev, isPendingConnection: false }))
+      } else {
+        await requestConnection(id)
+        setRelationship((prev: any) => ({ ...prev, isPendingConnection: true }))
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not send connection request')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out ${profile?.first_name || 'this member'} on Authentic Community!`,
+        url: `https://authenticcommunity.fun/profile/${id}`,
+      })
+    } catch {
+      // Ignore
+    }
+  }
+
+  const handleMessage = () => {
+    if (!currentUser) {
+      Alert.alert('Sign In', 'Please sign in to send messages.')
+      return
+    }
+    router.push(`/chat/${id}`)
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerLoading}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <AppText variant="caption" color={Colors.textSecondary} style={{ marginTop: 12 }}>
+            Loading member profile...
+          </AppText>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+            <ArrowLeft color={Colors.text} size={22} />
+          </TouchableOpacity>
+          <AppText variant="h3" weight="bold">Member Profile</AppText>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={styles.centerLoading}>
+          <AppText variant="body" color={Colors.textSecondary}>Profile not found.</AppText>
+          <AppButton title="Go Back" variant="outline" onPress={() => router.back()} style={{ marginTop: 16 }} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Community Member'
+  const locationDisplay = [profile.location_city, profile.location_state, profile.location_country].filter(Boolean).join(', ') || 'Local Community'
+  const finalScore = matchScore?.overall || 88
+  const interestsList: string[] = profile.interests || ['Community', 'Growth']
+  const valuesList: string[] = profile.values || ['Kindness', 'Growth', 'Authenticity']
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.headerButton}
-        >
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
           <ArrowLeft color={Colors.text} size={22} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerButton}>
-          <MoreHorizontal color={Colors.text} size={22} />
+        <AppText variant="h3" weight="bold" numberOfLines={1} style={{ flex: 1, textAlign: 'center', marginHorizontal: 12 }}>
+          {fullName}
+        </AppText>
+        <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
+          <Share2 color={Colors.text} size={20} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Photo Container with Top-Right Match Score Badge */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Photo Card */}
         <View style={styles.photoContainer}>
-          <Image source={{ uri: profile.photoUrl }} style={styles.photo} />
+          <Image
+            source={{
+              uri:
+                profile.profile_image_url ||
+                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
+            }}
+            style={styles.mainPhoto}
+          />
+          {/* Match Score Badge */}
           <View style={styles.matchScoreBadge}>
-            <AppText variant="caption" weight="bold" color={Colors.primary}>
-              {profile.matchScore}%
-            </AppText>
-            <AppText variant="caption" color={Colors.textMuted} style={styles.matchLabel}>
-              Match
+            <Zap color="#FFFFFF" size={14} fill="#FFFFFF" />
+            <AppText variant="caption" weight="bold" color="#FFFFFF">
+              {finalScore}% Fit
             </AppText>
           </View>
         </View>
 
-        {/* Profile Info Header */}
-        <View style={styles.infoSection}>
+        {/* Identity & Location */}
+        <View style={styles.identitySection}>
           <View style={styles.nameRow}>
-            <AppText variant="h1" weight="bold">
-              {profile.name}, {profile.age}
+            <AppText variant="h2" weight="bold">
+              {fullName}
             </AppText>
-            {profile.isVerified && (
-              <CheckCircle2 color={Colors.primary} size={20} />
+            {profile.identity_verified && (
+              <CheckCircle2 color={Colors.primary} size={22} fill={Colors.primaryLight} />
             )}
           </View>
+
           <View style={styles.locationRow}>
-            <MapPin color={Colors.textSecondary} size={14} />
+            <MapPin color={Colors.textSecondary} size={15} />
             <AppText variant="bodySm" color={Colors.textSecondary}>
-              {profile.location} · {profile.distance}
+              {locationDisplay}
             </AppText>
           </View>
-          <AppText variant="body" color={Colors.text} style={styles.bioText}>
-            {profile.bio}
-          </AppText>
 
-          {/* Follow & Message Quick Actions */}
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              onPress={handleToggleFollow}
-              style={[
-                styles.followBtn,
-                followState === 'following' ? styles.followingBtn : null,
-              ]}
-            >
-              <AppText
-                variant="bodySm"
-                weight="bold"
-                color={followState === 'following' ? Colors.textSecondary : Colors.surface}
-              >
-                {followState === 'following' ? 'Following ✓' : 'Follow'}
-              </AppText>
-            </TouchableOpacity>
+          {profile.bio ? (
+            <AppText variant="body" color={Colors.text} style={styles.bioText}>
+              {profile.bio}
+            </AppText>
+          ) : null}
+        </View>
 
-            <TouchableOpacity
-              onPress={() => router.push('/chat/jane-doe')}
-              style={styles.messageBtn}
-            >
-              <MessageCircle color={Colors.primary} size={18} />
-              <AppText variant="bodySm" weight="bold" color={Colors.primary}>
-                Message
-              </AppText>
-            </TouchableOpacity>
+        {/* 4 Trust & Safety Signals */}
+        <View style={styles.trustSignalsContainer}>
+          <View style={styles.trustPill}>
+            <Shield color={profile.identity_verified ? '#16A34A' : Colors.amber} size={14} />
+            <AppText variant="caption" weight="bold" color={profile.identity_verified ? '#16A34A' : Colors.amber}>
+              {profile.identity_verified ? 'Identity Verified' : 'Standard Member'}
+            </AppText>
+          </View>
+          <View style={styles.trustPill}>
+            <Star color={Colors.primary} size={14} />
+            <AppText variant="caption" weight="bold" color={Colors.primary}>
+              Active Contributor
+            </AppText>
+          </View>
+          <View style={styles.trustPill}>
+            <Users color={Colors.coral} size={14} />
+            <AppText variant="caption" weight="bold" color={Colors.coral}>
+              Anti-Spam Shielded
+            </AppText>
           </View>
         </View>
 
-        {/* Trust Signals Grid (2x2) */}
-        <View style={styles.section}>
-          <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-            Trust Signals
-          </AppText>
-          <View style={styles.trustGrid}>
-            <Card style={styles.trustCard}>
-              <View style={styles.trustIconWrap}>
-                <Shield color={Colors.primary} size={18} />
-              </View>
-              <AppText variant="caption" weight="bold">
-                Verified Profile
-              </AppText>
-              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
-                ID & photo confirmed
-              </AppText>
-            </Card>
+        {/* Relationship CTAs */}
+        <View style={styles.ctaRow}>
+          <AppButton
+            title={relationship.isFollowing ? 'Following' : 'Follow'}
+            variant={relationship.isFollowing ? 'outline' : 'secondary'}
+            leftIcon={
+              relationship.isFollowing ? (
+                <UserCheck color={Colors.text} size={18} />
+              ) : (
+                <UserPlus color={Colors.text} size={18} />
+              )
+            }
+            onPress={handleToggleFollow}
+            disabled={actionLoading}
+            style={styles.flexBtn}
+          />
 
-            <Card style={styles.trustCard}>
-              <View style={styles.trustIconWrap}>
-                <Zap color={Colors.primary} size={18} />
-              </View>
-              <AppText variant="caption" weight="bold">
-                Active This Week
-              </AppText>
-              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
-                Usually replies in 1h
-              </AppText>
-            </Card>
+          <AppButton
+            title={
+              relationship.isConnection
+                ? 'Connected'
+                : relationship.isPendingConnection
+                ? 'Pending'
+                : 'Connect'
+            }
+            variant={relationship.isConnection ? 'outline' : 'primary'}
+            leftIcon={
+              relationship.isPendingConnection ? (
+                <Clock color={Colors.textMuted} size={18} />
+              ) : (
+                <Zap color="#FFFFFF" size={18} />
+              )
+            }
+            onPress={handleToggleConnect}
+            disabled={actionLoading}
+            style={styles.flexBtn}
+          />
 
-            <Card style={styles.trustCard}>
-              <View style={styles.trustIconWrap}>
-                <Users color={Colors.primary} size={18} />
-              </View>
-              <AppText variant="caption" weight="bold">
-                Community Member
-              </AppText>
-              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
-                3 mutual communities
-              </AppText>
-            </Card>
-
-            <Card style={styles.trustCard}>
-              <View style={styles.trustIconWrap}>
-                <Star color={Colors.primary} size={18} />
-              </View>
-              <AppText variant="caption" weight="bold">
-                Positive Reviews
-              </AppText>
-              <AppText variant="caption" color={Colors.textMuted} style={styles.trustSub}>
-                5 community vouches
-              </AppText>
-            </Card>
-          </View>
+          <TouchableOpacity onPress={handleMessage} style={styles.iconCtaBtn}>
+            <MessageCircle color={Colors.primary} size={22} />
+          </TouchableOpacity>
         </View>
 
-        {/* Interests */}
-        <View style={styles.section}>
-          <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-            Interests
+        {/* Values Section */}
+        <Card style={styles.sectionCard}>
+          <AppText variant="bodySm" weight="bold" style={styles.sectionTitle}>
+            Core Values
           </AppText>
-          <View style={styles.chipsContainer}>
-            {profile.interests.map((interest, idx) => (
+          <View style={styles.chipsWrap}>
+            {valuesList.map((val, idx) => (
+              <View key={idx} style={styles.valueChip}>
+                <AppText variant="caption" weight="medium" color={Colors.primary}>
+                  ✨ {val}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        </Card>
+
+        {/* Interests Section */}
+        <Card style={styles.sectionCard}>
+          <AppText variant="bodySm" weight="bold" style={styles.sectionTitle}>
+            Passions & Interests
+          </AppText>
+          <View style={styles.chipsWrap}>
+            {interestsList.map((interest, idx) => (
               <View key={idx} style={styles.interestChip}>
-                <AppText variant="bodySm" color={Colors.text}>
+                <AppText variant="caption" color={Colors.text}>
                   {interest}
                 </AppText>
               </View>
             ))}
           </View>
-        </View>
+        </Card>
 
-        {/* Values */}
-        <View style={styles.section}>
-          <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-            Values
-          </AppText>
-          <View style={styles.chipsContainer}>
-            {profile.values.map((value, idx) => (
-              <View key={idx} style={styles.valueChip}>
-                <AppText variant="bodySm" color={Colors.primaryDark}>
-                  {value}
-                </AppText>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Conversation Starters */}
-        <View style={styles.section}>
-          <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-            Conversation Starters
-          </AppText>
-          <View style={styles.startersList}>
-            {profile.conversationStarters.map((starter, idx) => (
-              <TouchableOpacity
-                key={idx}
-                onPress={() => router.push('/chat/jane-doe')}
-                style={styles.starterCard}
-              >
-                <AppText variant="bodySm" color={Colors.text} style={styles.starterText}>
-                  "{starter}"
-                </AppText>
-                <ChevronRight color={Colors.textMuted} size={16} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Mutual Communities */}
-        <View style={styles.section}>
-          <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-            Mutual Communities
-          </AppText>
+        {/* Content Tabs (Posts / Videos / Communities / Events) */}
+        <View style={styles.tabsNavRow}>
           <TouchableOpacity
-            onPress={() => router.push('/community/austin-trail-buddies')}
-            style={styles.mutualCommunityCard}
+            onPress={() => setActiveTab('posts')}
+            style={[styles.tabNavItem, activeTab === 'posts' && styles.activeTabNavItem]}
           >
-            <Image
-              source={{ uri: profile.mutualCommunity.image }}
-              style={styles.communityThumb}
-            />
-            <View style={styles.communityInfo}>
-              <AppText variant="bodySm" weight="bold">
-                {profile.mutualCommunity.name}
-              </AppText>
-              <AppText variant="caption" color={Colors.textSecondary}>
-                {profile.mutualCommunity.members}
-              </AppText>
-            </View>
-            <ChevronRight color={Colors.textMuted} size={16} />
+            <LayoutGrid color={activeTab === 'posts' ? Colors.primary : Colors.textMuted} size={18} />
+            <AppText
+              variant="caption"
+              weight="bold"
+              color={activeTab === 'posts' ? Colors.primary : Colors.textMuted}
+            >
+              Posts ({userPosts.length})
+            </AppText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab('communities')}
+            style={[styles.tabNavItem, activeTab === 'communities' && styles.activeTabNavItem]}
+          >
+            <Compass color={activeTab === 'communities' ? Colors.primary : Colors.textMuted} size={18} />
+            <AppText
+              variant="caption"
+              weight="bold"
+              color={activeTab === 'communities' ? Colors.primary : Colors.textMuted}
+            >
+              Hubs ({userCommunities.length})
+            </AppText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab('events')}
+            style={[styles.tabNavItem, activeTab === 'events' && styles.activeTabNavItem]}
+          >
+            <Calendar color={activeTab === 'events' ? Colors.primary : Colors.textMuted} size={18} />
+            <AppText
+              variant="caption"
+              weight="bold"
+              color={activeTab === 'events' ? Colors.primary : Colors.textMuted}
+            >
+              Events ({userEvents.length})
+            </AppText>
           </TouchableOpacity>
         </View>
-      </ScrollView>
 
-      {/* Fixed Bottom Connection Bar */}
-      <View style={styles.bottomBar}>
-        <AppButton
-          title={
-            connectionState === 'connected'
-              ? '✓ Connected'
-              : connectionState === 'pending_outgoing'
-              ? 'Request Sent · Tap to Cancel'
-              : 'Connect'
-          }
-          variant={connectionState === 'connected' ? 'secondary' : 'primary'}
-          onPress={handleToggleConnect}
-          style={styles.connectButton}
-        />
-      </View>
+        {/* Tab Content */}
+        {activeTab === 'posts' && (
+          <View style={styles.tabContentContainer}>
+            {userPosts.length === 0 ? (
+              <AppText variant="caption" color={Colors.textMuted} style={styles.emptyTabText}>
+                No posts shared yet.
+              </AppText>
+            ) : (
+              userPosts.map((p) => (
+                <Card key={p.id} style={styles.postItemCard}>
+                  <AppText variant="bodySm">{p.content}</AppText>
+                  <AppText variant="caption" color={Colors.textMuted} style={{ marginTop: 6 }}>
+                    {p.likes_count || 0} likes · {p.comments_count || 0} comments
+                  </AppText>
+                </Card>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeTab === 'communities' && (
+          <View style={styles.tabContentContainer}>
+            {userCommunities.length === 0 ? (
+              <AppText variant="caption" color={Colors.textMuted} style={styles.emptyTabText}>
+                Not a member of any public hubs yet.
+              </AppText>
+            ) : (
+              userCommunities.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => router.push(`/community/${c.id}`)}
+                  style={styles.commRow}
+                >
+                  <View style={styles.commIconCircle}>
+                    <Compass color={Colors.primary} size={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="bodySm" weight="bold">{c.community_name}</AppText>
+                    <AppText variant="caption" color={Colors.textMuted}>{c.category} · {c.member_count || 1} members</AppText>
+                  </View>
+                  <ChevronRight color={Colors.textMuted} size={18} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeTab === 'events' && (
+          <View style={styles.tabContentContainer}>
+            {userEvents.length === 0 ? (
+              <AppText variant="caption" color={Colors.textMuted} style={styles.emptyTabText}>
+                No upcoming events attending.
+              </AppText>
+            ) : (
+              userEvents.map((ev) => (
+                <TouchableOpacity
+                  key={ev.id}
+                  onPress={() => router.push(`/event/${ev.id}`)}
+                  style={styles.commRow}
+                >
+                  <View style={styles.commIconCircle}>
+                    <Calendar color={Colors.amber} size={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="bodySm" weight="bold">{ev.title}</AppText>
+                    <AppText variant="caption" color={Colors.textMuted}>{ev.location_city || 'Local'}</AppText>
+                  </View>
+                  <ChevronRight color={Colors.textMuted} size={18} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   )
 }
@@ -324,11 +534,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  centerLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xl,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
@@ -338,15 +554,18 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   scrollContent: {
-    paddingBottom: 100,
+    padding: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
   photoContainer: {
     width: '100%',
-    height: 340,
+    height: 380,
+    borderRadius: Radii.xl,
+    overflow: 'hidden',
     position: 'relative',
     backgroundColor: Colors.border,
   },
-  photo: {
+  mainPhoto: {
     width: '100%',
     height: '100%',
   },
@@ -354,172 +573,140 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
     elevation: 3,
   },
-  matchLabel: {
-    fontSize: 8,
-    marginTop: -2,
-  },
-  infoSection: {
-    padding: Spacing.lg,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  identitySection: {
+    marginVertical: Spacing.md,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: Spacing.md,
-  },
-  bioText: {
-    lineHeight: 22,
-    marginBottom: Spacing.md,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    gap: 6,
     marginTop: 4,
   },
-  followBtn: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-    paddingVertical: 10,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  bioText: {
+    marginTop: 10,
+    lineHeight: 22,
   },
-  followingBtn: {
-    backgroundColor: Colors.background,
+  trustSignalsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
+  trustPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  messageBtn: {
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: Spacing.lg,
+  },
+  flexBtn: {
+    flex: 1,
+  },
+  iconCtaBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCard: {
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    marginBottom: Spacing.sm,
+  },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  valueChip: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
+  },
+  interestChip: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
+  },
+  tabsNavRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.md,
+  },
+  tabNavItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: Colors.primaryLight,
     paddingVertical: 10,
-    borderRadius: Radii.full,
+    borderRadius: Radii.md,
   },
-  section: {
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
+  activeTabNavItem: {
+    backgroundColor: Colors.primaryLight,
   },
-  sectionTitle: {
-    marginBottom: Spacing.sm,
-  },
-  trustGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  tabContentContainer: {
     gap: 10,
   },
-  trustCard: {
-    width: '48%',
-    padding: Spacing.md,
-    alignItems: 'flex-start',
-    gap: 2,
+  emptyTabText: {
+    textAlign: 'center',
+    paddingVertical: 20,
   },
-  trustIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  postItemCard: {
+    padding: Spacing.md,
+  },
+  commRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  commIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
-  },
-  trustSub: {
-    fontSize: 10,
-  },
-  chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  interestChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  valueChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: Radii.full,
-    backgroundColor: '#EEF2FF',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  startersList: {
-    gap: 8,
-  },
-  starterCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  starterText: {
-    flex: 1,
-    marginRight: 8,
-  },
-  mutualCommunityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 12,
-  },
-  communityThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: Radii.sm,
-    backgroundColor: Colors.border,
-  },
-  communityInfo: {
-    flex: 1,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  connectButton: {
-    width: '100%',
   },
 })

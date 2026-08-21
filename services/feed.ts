@@ -49,34 +49,33 @@ export async function recordFeedInteraction(params: {
     | 'profile_open'
     | 'follow'
     | 'connect'
-    | 'not_interested'
-    | 'see_more'
-    | 'see_fewer'
-    | 'mute'
-    | 'hidden'
-    | 'reported'
+    | 'rsvp'
   postId?: string
-  storyId?: string
-  metadata?: Record<string, any>
+  targetUserId?: string
+  communityId?: string
+  eventId?: string
+  dwellTimeMs?: number
 }) {
-  try {
-    const { data: auth } = await supabase.auth.getUser()
-    if (!auth.user) return
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return
 
+  try {
     await (supabase as any).from('feed_interactions').insert({
       user_id: auth.user.id,
-      post_id: params.postId || null,
-      story_id: params.storyId || null,
       interaction_type: params.interactionType,
-      metadata: params.metadata || {},
+      post_id: params.postId || null,
+      target_user_id: params.targetUserId || null,
+      community_id: params.communityId || null,
+      event_id: params.eventId || null,
+      dwell_time_ms: params.dwellTimeMs || null,
     })
   } catch {
-    // Telemetry errors should never block UI
+    // Telemetry errors fail silently without interrupting UI
   }
 }
 
 /**
- * Fetch real posts from Supabase for the active feed stream.
+ * Fetch real posts for Mobile Home feed with interest and value affinity scoring
  */
 export async function fetchFeedPosts(params: {
   stream: FeedStreamType
@@ -96,7 +95,7 @@ export async function fetchFeedPosts(params: {
     const [pRes, fRes, bRes, dRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('location_city, location_state, location_country')
+        .select('location_city, location_state, location_country, interests, values')
         .eq('user_id', currentUserId)
         .maybeSingle(),
       supabase.from('user_follows').select('following_id').eq('follower_id', currentUserId),
@@ -155,7 +154,7 @@ export async function fetchFeedPosts(params: {
     authorIds.length > 0
       ? (supabase as any)
           .from('profiles')
-          .select('id, user_id, first_name, last_name, profile_image_url, location_city, location_country, is_verified, is_active, account_status')
+          .select('id, user_id, first_name, last_name, profile_image_url, location_city, location_country, interests, values, is_verified, is_active, account_status')
           .in('user_id', authorIds)
       : Promise.resolve({ data: [] }),
     currentUserId
@@ -196,6 +195,8 @@ export async function fetchFeedPosts(params: {
   })
 
   const posts: MobilePostItem[] = []
+  const myInterests: string[] = myProfile?.interests || []
+  const myValues: string[] = myProfile?.values || []
 
   for (const post of filteredPosts) {
     const isMe = Boolean(currentUserId && post.user_id === currentUserId)
@@ -218,8 +219,26 @@ export async function fetchFeedPosts(params: {
     const postCity = post.location_label || author.location_city || 'Local'
     const isSameCity = Boolean(myProfile?.location_city && myProfile.location_city.toLowerCase() === postCity.toLowerCase())
 
-    // Score for geographic ordering
-    const score = (isMe ? 100 : 0) + (isSameCity ? 50 : 0) + (isFollowing ? 30 : 0)
+    // Calculate Interest & Value Affinity
+    const postTags: string[] = post.interest_tags || []
+    const authorInterests: string[] = author.interests || []
+    const sharedInterestsCount = myInterests.filter(i => 
+      postTags.map(t => t.toLowerCase()).includes(i.toLowerCase()) || 
+      authorInterests.map(ai => ai.toLowerCase()).includes(i.toLowerCase())
+    ).length
+
+    const authorValues: string[] = author.values || []
+    const sharedValuesCount = myValues.filter(v =>
+      authorValues.map(av => av.toLowerCase()).includes(v.toLowerCase())
+    ).length
+
+    // Multidimensional score for For You stream
+    const score =
+      (isMe ? 100 : 0) +
+      (isSameCity ? 40 : 0) +
+      (isFollowing ? 25 : 0) +
+      (sharedInterestsCount * 15) +
+      (sharedValuesCount * 10)
 
     // Filter Nearby stream strictly by local proximity (or author's own posts)
     if (stream === 'Nearby' && !isSameCity && !isMe) {
@@ -247,7 +266,7 @@ export async function fetchFeedPosts(params: {
     })
   }
 
-  // Sort For You / Nearby by score
+  // Sort For You / Nearby by calculated score
   if (stream === 'For You' || stream === 'Nearby') {
     posts.sort((a, b) => (b.score || 0) - (a.score || 0))
   }
@@ -260,141 +279,134 @@ export async function fetchFeedPosts(params: {
 }
 
 /**
- * Create a new post in Supabase with post_media
+ * Create a new post with text and media
  */
 export async function createNewPost(params: {
   content: string
-  audience: 'public' | 'followers' | 'connections' | 'community' | 'only_me'
-  locationLabel?: string
-  mediaUrl?: string
-  mediaType?: 'image' | 'video'
+  mediaUrls?: string[]
+  contentType?: 'text' | 'image' | 'video'
+  audience?: 'public' | 'followers' | 'connections' | 'community' | 'only_me'
+  communityId?: string
   interestTags?: string[]
-}): Promise<{ id: string; error: Error | null }> {
-  try {
-    const { data: auth } = await supabase.auth.getUser()
-    if (!auth.user) throw new Error('You must be signed in to create a post.')
+  locationLabel?: string
+}): Promise<{ id: string }> {
+  const {
+    content,
+    mediaUrls = [],
+    contentType = 'text',
+    audience = 'public',
+    communityId,
+    interestTags = [],
+    locationLabel,
+  } = params
 
-    const { data: postData, error: postError } = await (supabase as any)
-      .from('posts')
-      .insert({
-        user_id: auth.user.id,
-        content: params.content.trim(),
-        visibility: params.audience,
-        location_label: params.locationLabel || null,
-        interest_tags: params.interestTags || [],
-        content_type: params.mediaType || 'text',
-        status: 'active',
-      })
-      .select('id')
-      .single()
-
-    if (postError) throw postError
-
-    if (params.mediaUrl && postData?.id) {
-      const { error: mediaError } = await (supabase as any)
-        .from('post_media')
-        .insert({
-          post_id: postData.id,
-          media_url: params.mediaUrl,
-          media_type: params.mediaType || 'image',
-          sort_order: 0,
-        })
-      if (mediaError) throw mediaError
-    }
-
-    return { id: postData.id, error: null }
-  } catch (err: any) {
-    return { id: '', error: err instanceof Error ? err : new Error(err?.message || 'Failed to create post.') }
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) {
+    throw new Error('User must be authenticated to create a post.')
   }
+
+  const { data: post, error } = await (supabase as any)
+    .from('posts')
+    .insert({
+      user_id: auth.user.id,
+      content,
+      content_type: contentType,
+      visibility: audience,
+      community_id: communityId || null,
+      interest_tags: interestTags,
+      location_label: locationLabel || null,
+      status: 'active',
+    })
+    .select('id')
+    .single()
+
+  if (error) throw error
+
+  if (mediaUrls.length > 0 && post?.id) {
+    const mediaPayload = mediaUrls.map((url, index) => ({
+      post_id: post.id,
+      media_url: url,
+      media_type: contentType === 'video' ? 'video' : 'image',
+      sort_order: index,
+    }))
+    await (supabase as any).from('post_media').insert(mediaPayload)
+  }
+
+  return { id: post.id }
 }
 
 /**
- * Toggle post like in post_likes table
+ * Toggle post like
  */
 export async function togglePostLike(postId: string, isCurrentlyLiked: boolean): Promise<boolean> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('Sign in to like posts.')
 
   if (isCurrentlyLiked) {
-    const { error } = await (supabase as any)
+    await (supabase as any)
       .from('post_likes')
       .delete()
       .eq('post_id', postId)
       .eq('user_id', auth.user.id)
-    if (error) throw error
     return false
   } else {
-    const { error } = await (supabase as any)
+    await (supabase as any)
       .from('post_likes')
-      .insert({ post_id: postId, user_id: auth.user.id })
-    if (error) throw error
+      .upsert({ post_id: postId, user_id: auth.user.id })
     recordFeedInteraction({ interactionType: 'like', postId })
     return true
   }
 }
 
 /**
- * Toggle post save in post_saves table
+ * Toggle post save
  */
 export async function togglePostSave(postId: string, isCurrentlySaved: boolean): Promise<boolean> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('Sign in to save posts.')
 
   if (isCurrentlySaved) {
-    const { error } = await (supabase as any)
-      .from('post_saves')
-      .delete()
-      .eq('post_id', postId)
-      .eq('user_id', auth.user.id)
-    if (error) throw error
+    await Promise.all([
+      (supabase as any).from('post_saves').delete().eq('post_id', postId).eq('user_id', auth.user.id),
+      (supabase as any).from('saved_posts').delete().eq('post_id', postId).eq('user_id', auth.user.id),
+    ])
     return false
   } else {
-    const { error } = await (supabase as any)
-      .from('post_saves')
-      .insert({ post_id: postId, user_id: auth.user.id })
-    if (error) throw error
+    await Promise.all([
+      (supabase as any).from('post_saves').upsert({ post_id: postId, user_id: auth.user.id }),
+      (supabase as any).from('saved_posts').upsert({ post_id: postId, user_id: auth.user.id }),
+    ])
     recordFeedInteraction({ interactionType: 'save', postId })
     return true
   }
 }
 
 /**
- * Load comments for a post from post_comments table
+ * Load comments for a post
  */
 export async function loadPostComments(postId: string): Promise<PostComment[]> {
   const { data, error } = await (supabase as any)
     .from('post_comments')
-    .select('id, post_id, user_id, content, created_at')
+    .select('id, post_id, user_id, content, created_at, profiles(first_name, last_name, profile_image_url, is_verified)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
 
-  if (error) throw error
-  if (!data || data.length === 0) return []
+  if (error) return []
 
-  const userIds = Array.from(new Set(data.map((c: any) => c.user_id))) as string[]
-  const { data: profiles } = await (supabase as any)
-    .from('profiles')
-    .select('user_id, first_name, last_name, profile_image_url, is_verified')
-    .in('user_id', userIds)
-
-  const profileMap = new Map<string, any>((profiles || []).map((p: any) => [p.user_id, p]))
-
-  return data.map((c: any) => {
-    const p = profileMap.get(c.user_id)
-    const authorName = `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || 'Member'
-    const createdDate = new Date(c.created_at)
-    const diffMs = Date.now() - createdDate.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    const timeAgo = diffMins < 60 ? `${Math.max(1, diffMins)}m ago` : `${Math.floor(diffMins / 60)}h ago`
+  return (data || []).map((row: any) => {
+    const author = row.profiles || {}
+    const createdDate = new Date(row.created_at)
+    const diffHours = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60))
+    const timeAgo = diffHours < 1 ? 'Just now' : `${diffHours}h ago`
 
     return {
-      id: c.id,
-      postId: c.post_id,
-      userId: c.user_id,
-      authorName,
-      authorAvatar: p?.profile_image_url || null,
-      isVerified: Boolean(p?.is_verified),
-      text: c.content,
+      id: row.id,
+      postId: row.post_id,
+      userId: row.user_id,
+      authorName: `${author.first_name || ''} ${author.last_name || ''}`.trim() || 'Member',
+      authorAvatar: author.profile_image_url || null,
+      isVerified: Boolean(author.is_verified),
+      text: row.content || '',
       timeAgo,
       likesCount: 0,
     }
@@ -402,63 +414,53 @@ export async function loadPostComments(postId: string): Promise<PostComment[]> {
 }
 
 /**
- * Add a comment to post_comments
+ * Add comment to a post
  */
 export async function addPostComment(postId: string, text: string): Promise<PostComment> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('Sign in to leave a comment.')
 
-  const { data: commentData, error } = await (supabase as any)
+  const { data, error } = await (supabase as any)
     .from('post_comments')
     .insert({
       post_id: postId,
       user_id: auth.user.id,
       content: text.trim(),
     })
-    .select('id, post_id, user_id, content, created_at')
+    .select('id, post_id, user_id, content, created_at, profiles(first_name, last_name, profile_image_url, is_verified)')
     .single()
 
   if (error) throw error
 
-  const { data: p } = await (supabase as any)
-    .from('profiles')
-    .select('first_name, last_name, profile_image_url, is_verified')
-    .eq('user_id', auth.user.id)
-    .maybeSingle()
-
   recordFeedInteraction({ interactionType: 'comment', postId })
 
+  const author = data?.profiles || {}
   return {
-    id: commentData.id,
-    postId: commentData.post_id,
-    userId: auth.user.id,
-    authorName: `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || 'You',
-    authorAvatar: p?.profile_image_url || null,
-    isVerified: Boolean(p?.is_verified),
-    text: commentData.content,
+    id: data.id,
+    postId: data.post_id,
+    userId: data.user_id,
+    authorName: `${author.first_name || ''} ${author.last_name || ''}`.trim() || 'You',
+    authorAvatar: author.profile_image_url || null,
+    isVerified: Boolean(author.is_verified),
+    text: data.content,
     timeAgo: 'Just now',
     likesCount: 0,
   }
 }
 
 /**
- * Dismiss / hide a post from showing in feed
+ * Dismiss post
  */
-export async function dismissPost(postId: string, actionType: 'hide' | 'not_interested' | 'see_fewer' | 'see_more') {
+export async function dismissPost(
+  postId: string,
+  actionType: 'hide' | 'not_interested' | 'see_fewer' | 'see_more'
+) {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) return
 
-  await (supabase as any).from('content_dismissals').upsert(
-    {
-      user_id: auth.user.id,
-      content_id: postId,
-      content_type: 'post',
-    },
-    { onConflict: 'user_id,content_type,content_id' }
-  )
-
-  recordFeedInteraction({
-    interactionType: actionType === 'not_interested' ? 'not_interested' : 'hidden',
-    postId,
+  await (supabase as any).from('content_dismissals').upsert({
+    user_id: auth.user.id,
+    content_id: postId,
+    action_type: actionType,
   })
 }

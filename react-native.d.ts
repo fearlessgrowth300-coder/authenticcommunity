@@ -218,6 +218,21 @@ declare module 'react-native' {
   export const Alert: {
     alert: (title: string, message?: string, buttons?: any[]) => void
   }
+
+  export const Share: {
+    share: (content: { message?: string; title?: string; url?: string }, options?: any) => Promise<{ action: string; activityType?: string | null }>
+  }
+
+  export const Animated: any
+
+  export interface SwitchProps extends ViewProps {
+    value?: boolean
+    onValueChange?: (val: boolean) => void
+    trackColor?: { false?: string; true?: string }
+    thumbColor?: string
+    disabled?: boolean
+  }
+  export const Switch: React.FC<SwitchProps>
 }
 
 declare module 'react-native-safe-area-context' {
@@ -431,22 +446,22 @@ declare module 'lucide-react-native' {
   export const Info: React.FC<IconProps>
   export const BadgeCheck: React.FC<IconProps>
   export const MailCheck: React.FC<IconProps>
-  export const RefreshCw: React.FC<IconProps>
   export const ChevronLeft: React.FC<IconProps>
   export const LocateFixed: React.FC<IconProps>
   export const Video: React.FC<IconProps>
   export const Flame: React.FC<IconProps>
-  export const Globe: React.FC<IconProps>
-  export const Lock: React.FC<IconProps>
-  export const ShieldCheck: React.FC<IconProps>
-  export const CheckCircle2: React.FC<IconProps>
+  export const LayoutGrid: React.FC<IconProps>
+  export const Grid: React.FC<IconProps>
+  export const DownloadCloud: React.FC<IconProps>
+  export const Download: React.FC<IconProps>
+  export const Trash2: React.FC<IconProps>
+  export const Ban: React.FC<IconProps>
+  export const Flag: React.FC<IconProps>
   export const FileText: React.FC<IconProps>
   export const Volume2: React.FC<IconProps>
   export const VolumeX: React.FC<IconProps>
   export const Play: React.FC<IconProps>
   export const Pause: React.FC<IconProps>
-  export const Eye: React.FC<IconProps>
-  export const EyeOff: React.FC<IconProps>
   export const Trash2: React.FC<IconProps>
   export const Flag: React.FC<IconProps>
   export const Ban: React.FC<IconProps>

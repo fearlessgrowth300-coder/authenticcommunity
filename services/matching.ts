@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 export type MatchInput = {
   candidateId: string
   candidateInterests: string[]
@@ -137,5 +139,20 @@ export function calculateMatchScore(input: MatchInput): MatchScoreResult {
       trust,
     },
     geographicTier,
+  }
+}
+
+/**
+ * Invoke Gemini Edge Function for AI-assisted match reasoning and suggestions
+ */
+export async function fetchGeminiMatchSuggestions(currentUserId: string): Promise<any> {
+  try {
+    const { data, error } = await supabase.functions.invoke('match-suggestions', {
+      body: { userId: currentUserId },
+    })
+    if (error) return null
+    return data
+  } catch {
+    return null
   }
 }

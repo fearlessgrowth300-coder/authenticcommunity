@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import {
   View,
   StyleSheet,
@@ -6,18 +6,32 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
 import {
   BadgeCheck,
-  CheckCircle2,
   ShieldCheck,
 } from 'lucide-react-native'
 
 export default function VerificationResultScreen() {
   const router = useRouter()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .update({
+        is_verified: true,
+        identity_verified: true,
+      })
+      .eq('user_id', user.id)
+      .then(() => {})
+  }, [user])
 
   const handleFinish = () => {
     router.replace('/(tabs)/profile')
@@ -106,11 +120,10 @@ const styles = StyleSheet.create({
   },
   badgeSummaryText: {
     flex: 1,
-    gap: 2,
   },
   bottomBar: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
   },
   finishBtn: {
     width: '100%',
