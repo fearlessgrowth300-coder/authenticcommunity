@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentic Community - Genuine Connections & Local Hubs</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --primary-dark: #4338CA;
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    main {
+      flex: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.35rem 0.85rem;
+      background: #EEF2FF;
+      color: var(--primary);
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+    p.lead {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 650px;
+      margin: 0 auto 2.5rem;
+    }
+    .cta-row {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--primary);
+      color: #FFFFFF;
+      text-decoration: none;
+      padding: 0.875rem 1.75rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: background 0.15s ease;
+    }
+    .btn:hover {
+      background: var(--primary-dark);
+    }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: #F1F5F9;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      text-align: left;
+      margin-top: 3rem;
+    }
+    .card {
+      background: var(--surface);
+      padding: 1.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+    }
+    .card h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      text-align: center;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+      margin: 0 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="logo">Authentic</a>
+    <div>
+      <a href="/privacy.html" style="color: var(--text-muted); text-decoration: none; margin-right: 1rem; font-size: 0.9rem;">Privacy</a>
+      <a href="/terms.html" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem;">Terms</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="badge">Mobile App for iOS & Android</div>
+    <h1>Real Community. Real Connections.</h1>
+    <p class="lead">
+      Discover local groups, attend verified community events, and connect with people who share your core values and interests.
+    </p>
+
+    <div class="cta-row">
+      <a href="authentic://" class="btn">
+        Open Mobile App
+      </a>
+      <a href="#download" class="btn btn-secondary">
+        Get the App
+      </a>
+    </div>
+
+    <div class="features">
+      <div class="card">
+        <h3>📍 Local-First Discovery</h3>
+        <p>Connect with people and events in your city based on shared values and authentic interests.</p>
+      </div>
+      <div class="card">
+        <h3>🛡️ Verified Profiles</h3>
+        <p>A trusted, bot-free environment with identity verification and anti-harassment safeguards.</p>
+      </div>
+      <div class="card">
+        <h3>✨ Community Hubs</h3>
+        <p>Join focused interest groups, group discussions, and organize real-world meetups.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Authentic Community. All rights reserved. · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
+  </footer>
+</body>
+</html>
