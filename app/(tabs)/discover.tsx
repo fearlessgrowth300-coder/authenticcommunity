@@ -64,6 +64,7 @@ export default function DiscoverScreen() {
     selectedValues: [],
     verifiedOnly: false,
     minMatchScore: 60,
+    discoveryArea: 'nearby',
   })
 
   const loadDiscoverData = async () => {
@@ -100,6 +101,10 @@ export default function DiscoverScreen() {
   }
 
   // Filter and sort matches
+  const currentCountry = (user?.user_metadata?.country || user?.user_metadata?.location_country || '').toLowerCase()
+  const distanceLimitKm = Number.parseInt(filters.distance, 10) * 1.60934
+  const [minAge, maxAge] = filters.ageRange.replace('+', '').split('-').map((value) => Number.parseInt(value, 10))
+
   const filteredMatches = matches
     .filter((m) => {
       if (searchQuery.trim()) {
@@ -116,7 +121,20 @@ export default function DiscoverScreen() {
     .filter((m) => {
       if (filters.verifiedOnly && !m.isVerified) return false
       if (m.matchScore < filters.minMatchScore) return false
+      if (Number.isFinite(minAge) && m.age < minAge) return false
+      if (Number.isFinite(maxAge) && m.age > maxAge) return false
+      if (filters.discoveryArea === 'nearby' && m.distanceKm !== null && m.distanceKm !== undefined && m.distanceKm > distanceLimitKm) return false
+      if (filters.discoveryArea === 'country' && currentCountry && m.country?.toLowerCase() !== currentCountry) return false
+      if (filters.selectedInterests.length > 0 && !filters.selectedInterests.some((interest) => m.sharedInterests.some((shared) => shared.toLowerCase() === interest.toLowerCase()))) return false
+      if (filters.selectedValues.length > 0 && !filters.selectedValues.some((value) => m.sharedValues.some((shared) => shared.toLowerCase() === value.toLowerCase()))) return false
       return true
+    })
+    .sort((a, b) => {
+      if (currentSort === 'nearest') return (a.distanceKm ?? Number.MAX_SAFE_INTEGER) - (b.distanceKm ?? Number.MAX_SAFE_INTEGER)
+      if (currentSort === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      if (currentSort === 'shared_values') return b.sharedValues.length - a.sharedValues.length
+      if (currentSort === 'most_active') return b.matchScore - a.matchScore
+      return b.matchScore - a.matchScore
     })
 
   const filteredCommunities = communities.filter((c) => {

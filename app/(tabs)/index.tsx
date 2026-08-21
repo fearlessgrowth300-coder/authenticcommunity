@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
+import { Skeleton } from '@/components/primitives/Skeleton'
 import { StoriesRow } from '@/components/feed/StoriesRow'
 import { PostCard } from '@/components/feed/PostCard'
 import {
@@ -22,6 +23,7 @@ import {
 } from '@/components/feed/FeedModules'
 import { fetchFeedPosts, MobilePostItem, FeedStreamType } from '@/services/feed'
 import { getActiveStories, MobileStoryItem } from '@/services/stories'
+import { supabase } from '@/services/supabase'
 import {
   Search,
   Bell,
@@ -33,7 +35,7 @@ const FEED_TABS: FeedStreamType[] = ['For You', 'Following', 'Nearby']
 
 export default function HomeFeedScreen() {
   const router = useRouter()
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const [activeTab, setActiveTab] = useState<FeedStreamType>('For You')
   const [posts, setPosts] = useState<MobilePostItem[]>([])
   const [stories, setStories] = useState<MobileStoryItem[]>([])
@@ -42,10 +44,13 @@ export default function HomeFeedScreen() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(1)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const loadData = useCallback(
     async (pageNum = 1, isRefresh = false) => {
       try {
+        setLoadError(null)
         if (pageNum === 1) {
           const [storiesData, feedData] = await Promise.all([
             getActiveStories(),
@@ -67,7 +72,7 @@ export default function HomeFeedScreen() {
           setPage(pageNum)
         }
       } catch (err) {
-        // Feed fetch fallback handled safely
+        setLoadError(err instanceof Error ? err.message : 'Could not load your feed.')
       } finally {
         setLoading(false)
         if (isRefresh) setRefreshing(false)
@@ -81,6 +86,20 @@ export default function HomeFeedScreen() {
     setLoading(true)
     loadData(1)
   }, [loadData])
+
+  useEffect(() => {
+    if (!user) return
+    const loadUnread = async () => {
+      const { count } = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false)
+      setUnreadCount(count || 0)
+    }
+    loadUnread()
+    const channel = supabase
+      .channel(`home-notifications:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, loadUnread)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user])
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -137,11 +156,31 @@ export default function HomeFeedScreen() {
   const renderEmpty = () => {
     if (loading) {
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <AppText variant="caption" color={Colors.textSecondary} style={styles.loadingText}>
-            Loading your personalized feed...
-          </AppText>
+        <View style={styles.feedSkeleton} accessibilityLabel="Loading your personalized feed">
+          {[0, 1].map((item) => (
+            <View key={item} style={styles.skeletonCard}>
+              <View style={styles.skeletonHeader}>
+                <Skeleton width={44} height={44} borderRadius={22} />
+                <View style={styles.skeletonTextColumn}>
+                  <Skeleton width="45%" height={14} />
+                  <Skeleton width="30%" height={11} />
+                </View>
+              </View>
+              <Skeleton width="90%" height={14} />
+              <Skeleton width="100%" height={220} borderRadius={Radii.lg} />
+            </View>
+          ))}
+        </View>
+      )
+    }
+
+    if (loadError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Compass color={Colors.coral} size={40} />
+          <AppText variant="h3" weight="bold" align="center">Couldn't load your feed</AppText>
+          <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.emptySub}>Check your connection and try again. Technical details are kept out of the app.</AppText>
+          <AppButton title="Try Again" onPress={() => { setLoading(true); loadData(1) }} style={styles.emptyBtn} />
         </View>
       )
     }
@@ -233,7 +272,11 @@ export default function HomeFeedScreen() {
             accessibilityLabel="Notifications"
           >
             <Bell color={Colors.text} size={22} />
-            <View style={styles.unreadBadge} />
+            {unreadCount > 0 && (
+              <View style={styles.unreadCountBadge}>
+                <AppText variant="caption" weight="bold" color="#FFFFFF">{unreadCount > 9 ? '9+' : unreadCount}</AppText>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -312,14 +355,17 @@ const styles = StyleSheet.create({
     padding: 4,
     position: 'relative',
   },
-  unreadBadge: {
+  unreadCountBadge: {
     position: 'absolute',
     top: 3,
     right: 3,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   tabsWrapper: {
     backgroundColor: Colors.surface,
@@ -357,6 +403,25 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 4,
+  },
+  feedSkeleton: {
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  skeletonCard: {
+    padding: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    gap: 12,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  skeletonTextColumn: {
+    flex: 1,
+    gap: 7,
   },
   emptyContainer: {
     padding: Spacing.xxl,

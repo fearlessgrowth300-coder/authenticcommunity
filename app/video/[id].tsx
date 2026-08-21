@@ -9,6 +9,7 @@ import {
   Share,
   Alert,
 } from 'react-native'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
@@ -39,32 +40,58 @@ export default function VideoReelScreen() {
   const [likesCount, setLikesCount] = useState(0)
   const [isSaved, setIsSaved] = useState(false)
   const [videoData, setVideoData] = useState<any>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const player = useVideoPlayer(videoUrl, (instance) => {
+    instance.loop = true
+    instance.play()
+  })
 
   useEffect(() => {
     if (!id) return
     const loadVideo = async () => {
       setLoading(true)
       try {
-        const { data } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .from('posts')
-          .select('*, profiles(user_id, first_name, last_name, profile_image_url, is_verified, location_city)')
+          .select('id, user_id, content, content_type, interest_tags, location_label, created_at')
           .eq('id', id)
           .maybeSingle()
 
+        if (error) throw error
         if (data) {
-          setVideoData(data)
-          setLikesCount(data.likes_count || 0)
+          const [profileRes, mediaRes, likesCountRes, commentsCountRes] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('user_id, first_name, last_name, profile_image_url, is_verified, location_city')
+              .eq('user_id', data.user_id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('post_media')
+              .select('media_url')
+              .eq('post_id', id)
+              .eq('media_type', 'video')
+              .order('sort_order', { ascending: true })
+              .limit(1)
+              .maybeSingle(),
+            (supabase as any).from('post_likes').select('post_id', { count: 'exact', head: true }).eq('post_id', id),
+            (supabase as any).from('post_comments').select('id', { count: 'exact', head: true }).eq('post_id', id),
+          ])
+          setVideoData({ ...data, profiles: profileRes.data, comments_count: commentsCountRes.count || 0 })
+          setVideoUrl(mediaRes.data?.media_url || null)
+          setLikesCount(likesCountRes.count || 0)
 
           if (user) {
             const [likeRes, saveRes] = await Promise.all([
-              (supabase as any).from('post_likes').select('id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
-              (supabase as any).from('post_saves').select('id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
+              (supabase as any).from('post_likes').select('post_id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
+              (supabase as any).from('post_saves').select('post_id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
             ])
             setIsLiked(Boolean(likeRes.data))
             setIsSaved(Boolean(saveRes.data))
           }
         }
+      } catch (error: any) {
+        Alert.alert('Could Not Load Video', error?.message || 'Please try again.')
       } finally {
         setLoading(false)
       }
@@ -74,7 +101,9 @@ export default function VideoReelScreen() {
   }, [id, user])
 
   const togglePlay = () => {
-    setIsPlaying(!isPlaying)
+    if (isPlaying) player.pause()
+    else player.play()
+    setIsPlaying((current) => !current)
   }
 
   const handleToggleLike = async () => {
@@ -85,13 +114,15 @@ export default function VideoReelScreen() {
     if (!id) return
 
     if (isLiked) {
+      const { error } = await (supabase as any).from('post_likes').delete().eq('post_id', id).eq('user_id', user.id)
+      if (error) return Alert.alert('Error', error.message)
       setIsLiked(false)
       setLikesCount((prev) => Math.max(0, prev - 1))
-      await (supabase as any).from('post_likes').delete().eq('post_id', id).eq('user_id', user.id)
     } else {
+      const { error } = await (supabase as any).from('post_likes').upsert({ post_id: id, user_id: user.id })
+      if (error) return Alert.alert('Error', error.message)
       setIsLiked(true)
       setLikesCount((prev) => prev + 1)
-      await (supabase as any).from('post_likes').upsert({ post_id: id, user_id: user.id })
     }
   }
 
@@ -103,17 +134,13 @@ export default function VideoReelScreen() {
     if (!id) return
 
     if (isSaved) {
+      const { error } = await (supabase as any).from('post_saves').delete().eq('post_id', id).eq('user_id', user.id)
+      if (error) return Alert.alert('Error', error.message)
       setIsSaved(false)
-      await Promise.all([
-        (supabase as any).from('post_saves').delete().eq('post_id', id).eq('user_id', user.id),
-        (supabase as any).from('saved_posts').delete().eq('post_id', id).eq('user_id', user.id),
-      ])
     } else {
+      const { error } = await (supabase as any).from('post_saves').upsert({ post_id: id, user_id: user.id })
+      if (error) return Alert.alert('Error', error.message)
       setIsSaved(true)
-      await Promise.all([
-        (supabase as any).from('post_saves').upsert({ post_id: id, user_id: user.id }),
-        (supabase as any).from('saved_posts').upsert({ post_id: id, user_id: user.id }),
-      ])
     }
   }
 
@@ -139,12 +166,15 @@ export default function VideoReelScreen() {
   const author = videoData?.profiles
   const authorName = author ? `${author.first_name || ''} ${author.last_name || ''}`.trim() || 'Community Member' : 'Member'
   const authorAvatar = author?.profile_image_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&fit=crop&q=80'
-  const videoPoster = videoData?.media_urls?.[0] || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&fit=crop&q=80'
-
   return (
     <View style={styles.container}>
-      {/* Media Background Preview */}
-      <Image source={{ uri: videoPoster }} style={styles.videoPlayer} resizeMode="cover" />
+      {videoUrl ? (
+        <VideoView player={player} style={styles.videoPlayer} contentFit="cover" nativeControls={false} />
+      ) : (
+        <View style={[styles.videoPlayer, styles.missingVideo]}>
+          <AppText variant="body" weight="bold" color="#FFFFFF">Video unavailable</AppText>
+        </View>
+      )}
 
       <TouchableOpacity style={styles.playOverlay} activeOpacity={1} onPress={togglePlay}>
         {!isPlaying && (
@@ -254,6 +284,11 @@ const styles = StyleSheet.create({
     width,
     height,
     position: 'absolute',
+  },
+  missingVideo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111827',
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

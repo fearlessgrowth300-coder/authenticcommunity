@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -22,7 +23,8 @@ import {
   Lock,
 } from 'lucide-react-native'
 
-const EVENT_TYPES = ['Wellness', 'Social', 'Learning', 'Volunteer']
+const EVENT_TYPES = ['Wellness', 'Social', 'Business', 'Sports', 'Learning', 'Volunteer']
+const EVENT_PRIVACY = ['public', 'followers', 'connections', 'community', 'private'] as const
 
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
@@ -37,12 +39,30 @@ export default function CreateEventScreen() {
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
+  const [endTime, setEndTime] = useState('')
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
   const [attendeeLimit, setAttendeeLimit] = useState('50')
-  const [community, setCommunity] = useState('')
+  const [communityId, setCommunityId] = useState<string | null>(null)
+  const [communities, setCommunities] = useState<Array<{ id: string; name: string }>>([])
+  const [privacy, setPrivacy] = useState<(typeof EVENT_PRIVACY)[number]>('public')
   const [selectedType, setSelectedType] = useState<string>('Wellness')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('community_members')
+      .select('community_id, communities(community_name)')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .then(({ data }) => {
+        setCommunities((data || []).map((row: any) => ({
+          id: row.community_id,
+          name: row.communities?.community_name || 'Community',
+        })))
+      })
+  }, [user])
 
   const handlePickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -57,7 +77,31 @@ export default function CreateEventScreen() {
   }
 
   const handleCreate = async () => {
-    if (!title.trim()) return
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to create an event.')
+      return
+    }
+    if (!title.trim() || !description.trim() || !location.trim()) {
+      Alert.alert('Complete Required Fields', 'Add a title, location, and description.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim()) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time.trim())) {
+      Alert.alert('Check Date and Time', 'Use YYYY-MM-DD for the date and 24-hour HH:MM for the start time.')
+      return
+    }
+    if (endTime.trim() && !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime.trim())) {
+      Alert.alert('Check End Time', 'Use 24-hour HH:MM for the end time.')
+      return
+    }
+    const parsedDate = new Date(`${date.trim()}T${time.trim()}:00`)
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.getTime() <= Date.now()) {
+      Alert.alert('Choose a Future Date', 'Events must start in the future.')
+      return
+    }
+    if (privacy === 'community' && !communityId) {
+      Alert.alert('Choose a Community', 'Community-only events must belong to a community.')
+      return
+    }
     setLoading(true)
     try {
       let uploadedCoverUrl = null
@@ -72,53 +116,40 @@ export default function CreateEventScreen() {
         uploadedCoverUrl = coverPhoto
       }
 
-      let finalEventDate: Date
-      if (date.trim()) {
-        const combined = time.trim() ? `${date.trim()} ${time.trim()}` : date.trim()
-        const parsed = new Date(combined)
-        finalEventDate = isNaN(parsed.getTime()) ? new Date(Date.now() + 86400000) : parsed
-      } else {
-        finalEventDate = new Date(Date.now() + 86400000)
-      }
-
-      const { data: newEvent } = await (supabase as any)
+      const { data: newEvent, error: createError } = await (supabase as any)
         .from('events')
         .insert({
-          event_title: title.trim(),
-          title: title.trim(),
+          name: title.trim(),
           description: description.trim() || `${selectedType} meetup event.`,
-          event_date: finalEventDate.toISOString(),
-          start_time: finalEventDate.toISOString(),
-          location_name: location.trim() || 'Local Park & Gathering Spot',
-          location_city: location.trim() || 'Local Area',
-          event_type: selectedType,
+          event_date: date.trim(),
+          start_time: `${time.trim()}:00`,
+          end_time: endTime.trim() ? `${endTime.trim()}:00` : null,
+          location: location.trim(),
           category: selectedType,
-          cover_image_url: uploadedCoverUrl || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
-          attendee_limit: parseInt(attendeeLimit, 10) || 50,
-          created_by: user?.id,
+          event_image_url: uploadedCoverUrl || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80',
+          max_attendees: attendeeLimit.trim() ? Math.max(1, parseInt(attendeeLimit, 10) || 1) : null,
+          organizer_id: user.id,
+          community_id: communityId,
+          privacy,
         })
         .select('id')
         .single()
 
+      if (createError) throw createError
+
       if (newEvent?.id && user) {
-        await Promise.all([
-          (supabase as any).from('event_attendees').upsert({
-            event_id: newEvent.id,
-            user_id: user.id,
-            status: 'going',
-          }),
-          (supabase as any).from('event_rsvps').upsert({
-            event_id: newEvent.id,
-            user_id: user.id,
-            status: 'going',
-          }),
-        ])
+        const { error: attendeeError } = await (supabase as any).from('event_attendees').upsert({
+          event_id: newEvent.id,
+          user_id: user.id,
+          rsvp_status: 'going',
+        })
+        if (attendeeError) throw attendeeError
         router.replace(`/event/${newEvent.id}`)
       } else {
         router.replace('/(tabs)/events')
       }
-    } catch {
-      router.replace('/(tabs)/events')
+    } catch (error: any) {
+      Alert.alert('Could Not Create Event', error?.message || 'Please check the details and try again.')
     } finally {
       setLoading(false)
     }
@@ -179,7 +210,7 @@ export default function CreateEventScreen() {
               <TextInput
                 value={date}
                 onChangeText={setDate}
-                placeholder="Select date"
+                placeholder="YYYY-MM-DD"
                 placeholderTextColor={Colors.textMuted}
                 style={styles.inputInside}
               />
@@ -195,12 +226,20 @@ export default function CreateEventScreen() {
               <TextInput
                 value={time}
                 onChangeText={setTime}
-                placeholder="Select time"
+                placeholder="HH:MM"
                 placeholderTextColor={Colors.textMuted}
                 style={styles.inputInside}
               />
               <Clock color={Colors.textMuted} size={16} />
             </View>
+          </View>
+        </View>
+
+        <View style={styles.fieldSection}>
+          <AppText variant="label" weight="semibold">End Time</AppText>
+          <View style={styles.inputWithIcon}>
+            <TextInput value={endTime} onChangeText={setEndTime} placeholder="HH:MM (optional)" placeholderTextColor={Colors.textMuted} style={styles.inputInside} />
+            <Clock color={Colors.textMuted} size={16} />
           </View>
         </View>
 
@@ -261,22 +300,30 @@ export default function CreateEventScreen() {
           </View>
 
           <View style={styles.columnField}>
-            <AppText variant="label" weight="semibold">
-              Community
-            </AppText>
-            <View style={styles.inputWithIcon}>
-              <TextInput
-                value={community}
-                onChangeText={setCommunity}
-                placeholder="Select a community"
-                placeholderTextColor={Colors.textMuted}
-                style={styles.inputInside}
-              />
-              <ChevronDown color={Colors.textMuted} size={16} />
-            </View>
-            <AppText variant="caption" color={Colors.textMuted}>
-              Optional
-            </AppText>
+            <AppText variant="label" weight="semibold">Community</AppText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactChips}>
+              <TouchableOpacity onPress={() => setCommunityId(null)} style={[styles.typeChip, !communityId ? styles.typeChipActive : null]}>
+                <AppText variant="caption">None</AppText>
+              </TouchableOpacity>
+              {communities.map((item) => (
+                <TouchableOpacity key={item.id} onPress={() => setCommunityId(item.id)} style={[styles.typeChip, communityId === item.id ? styles.typeChipActive : null]}>
+                  <AppText variant="caption" numberOfLines={1}>{item.name}</AppText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        <View style={styles.fieldSection}>
+          <AppText variant="label" weight="semibold">Privacy</AppText>
+          <View style={styles.typesRow}>
+            {EVENT_PRIVACY.map((item) => (
+              <TouchableOpacity key={item} onPress={() => setPrivacy(item)} style={[styles.typeChip, privacy === item ? styles.typeChipActive : null]}>
+                <AppText variant="caption" weight={privacy === item ? 'bold' : 'normal'} color={privacy === item ? Colors.primary : Colors.textSecondary}>
+                  {item.charAt(0).toUpperCase() + item.slice(1)}
+                </AppText>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -304,6 +351,8 @@ export default function CreateEventScreen() {
                   >
                     {type === 'Wellness' && '🌸 '}
                     {type === 'Social' && '👥 '}
+                    {type === 'Business' && '💼 '}
+                    {type === 'Sports' && '⚽ '}
                     {type === 'Learning' && '💡 '}
                     {type === 'Volunteer' && '🤝 '}
                     {type}
@@ -435,6 +484,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  compactChips: {
+    gap: 6,
+    paddingVertical: 2,
   },
   typeChip: {
     paddingHorizontal: 14,

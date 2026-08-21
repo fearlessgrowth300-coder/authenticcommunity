@@ -12,7 +12,11 @@ CREATE TABLE IF NOT EXISTS public.conversation_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, other_user_id)
 );
+ALTER TABLE public.conversation_settings
+  ADD COLUMN IF NOT EXISTS other_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;
 ALTER TABLE public.conversation_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can manage own conversation settings" ON public.conversation_settings;
 CREATE POLICY "Users can manage own conversation settings" ON public.conversation_settings
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -25,6 +29,8 @@ CREATE TABLE IF NOT EXISTS public.event_attendees (
   UNIQUE(event_id, user_id)
 );
 ALTER TABLE public.event_attendees ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read event attendees" ON public.event_attendees;
+DROP POLICY IF EXISTS "Users can manage own event attendance" ON public.event_attendees;
 CREATE POLICY "Public read event attendees" ON public.event_attendees FOR SELECT USING (true);
 CREATE POLICY "Users can manage own event attendance" ON public.event_attendees
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
@@ -38,6 +44,8 @@ CREATE TABLE IF NOT EXISTS public.event_rsvps (
   UNIQUE(event_id, user_id)
 );
 ALTER TABLE public.event_rsvps ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read event rsvps" ON public.event_rsvps;
+DROP POLICY IF EXISTS "Users can manage own event rsvps" ON public.event_rsvps;
 CREATE POLICY "Public read event rsvps" ON public.event_rsvps FOR SELECT USING (true);
 CREATE POLICY "Users can manage own event rsvps" ON public.event_rsvps
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
@@ -50,6 +58,9 @@ CREATE TABLE IF NOT EXISTS public.post_saves (
   UNIQUE(post_id, user_id)
 );
 ALTER TABLE public.post_saves ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own post saves" ON public.post_saves;
+DROP POLICY IF EXISTS "Users can insert own post saves" ON public.post_saves;
+DROP POLICY IF EXISTS "Users can delete own post saves" ON public.post_saves;
 CREATE POLICY "Users can view own post saves" ON public.post_saves FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own post saves" ON public.post_saves FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete own post saves" ON public.post_saves FOR DELETE USING (auth.uid() = user_id);
@@ -62,6 +73,9 @@ CREATE TABLE IF NOT EXISTS public.saved_posts (
   UNIQUE(post_id, user_id)
 );
 ALTER TABLE public.saved_posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own saved posts" ON public.saved_posts;
+DROP POLICY IF EXISTS "Users can insert own saved posts" ON public.saved_posts;
+DROP POLICY IF EXISTS "Users can delete own saved posts" ON public.saved_posts;
 CREATE POLICY "Users can view own saved posts" ON public.saved_posts FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own saved posts" ON public.saved_posts FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete own saved posts" ON public.saved_posts FOR DELETE USING (auth.uid() = user_id);
@@ -78,6 +92,9 @@ CREATE TABLE IF NOT EXISTS public.message_requests (
   UNIQUE(sender_id, recipient_id)
 );
 ALTER TABLE public.message_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can read own message requests" ON public.message_requests;
+DROP POLICY IF EXISTS "Users can create message requests" ON public.message_requests;
+DROP POLICY IF EXISTS "Users can update own received message requests" ON public.message_requests;
 CREATE POLICY "Users can read own message requests" ON public.message_requests
   FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = recipient_id);
 CREATE POLICY "Users can create message requests" ON public.message_requests

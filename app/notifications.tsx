@@ -27,17 +27,18 @@ import {
   Bell,
 } from 'lucide-react-native'
 
-const FILTER_TABS = ['All', 'Messages', 'Connections', 'Communities', 'Events']
+const FILTER_TABS = ['All', 'Messages', 'Connections', 'Communities', 'Events', 'System']
 
 interface NotificationItem {
   id: string
   type: string
-  category: 'Messages' | 'Connections' | 'Communities' | 'Events'
+  category: 'Messages' | 'Connections' | 'Communities' | 'Events' | 'System'
   avatarUrl?: string | null
   title: string
   body?: string
   time: string
   isToday: boolean
+  isRead: boolean
 }
 
 export default function NotificationsScreen() {
@@ -71,18 +72,20 @@ export default function NotificationsScreen() {
           if (n.type?.includes('message') || n.type?.includes('chat')) category = 'Messages'
           else if (n.type?.includes('community')) category = 'Communities'
           else if (n.type?.includes('event')) category = 'Events'
+          else if (n.type?.includes('system') || n.type?.includes('security') || n.type?.includes('verification')) category = 'System'
 
           return {
             id: n.id,
             type: n.type || 'notification',
             category,
-            avatarUrl: n.metadata?.avatar_url || null,
+            avatarUrl: n.data?.avatar_url || n.metadata?.avatar_url || null,
             title: n.title || 'Community Update',
-            body: n.body || n.content || 'You have a new update.',
+            body: n.message || n.body || n.content || 'You have a new update.',
             time: isToday
               ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : createdAt.toLocaleDateString([], { month: 'short', day: 'numeric' }),
             isToday,
+            isRead: Boolean(n.is_read),
           }
         })
         setNotifications(parsed)
@@ -127,6 +130,16 @@ export default function NotificationsScreen() {
     }
   }
 
+  const markRead = async (id: string) => {
+    setNotifications((current) => current.map((item) => item.id === id ? { ...item, isRead: true } : item))
+    await (supabase as any).from('notifications').update({ is_read: true }).eq('id', id).eq('user_id', user?.id)
+  }
+
+  const deleteNotification = async (id: string) => {
+    setNotifications((current) => current.filter((item) => item.id !== id))
+    await (supabase as any).from('notifications').delete().eq('id', id).eq('user_id', user?.id)
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
@@ -138,7 +151,7 @@ export default function NotificationsScreen() {
           Notifications
         </AppText>
         <TouchableOpacity
-          onPress={() => router.push('/profile/privacy')}
+          onPress={() => router.push('/settings/notifications')}
           style={styles.headerBtn}
         >
           <Settings color={Colors.text} size={20} />
@@ -214,7 +227,13 @@ export default function NotificationsScreen() {
                   Today
                 </AppText>
                 {todayList.map((item) => (
-                  <View key={item.id} style={styles.notificationItem}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.notificationItem, !item.isRead && { backgroundColor: Colors.primaryLight }]}
+                    onPress={() => markRead(item.id)}
+                    onLongPress={() => deleteNotification(item.id)}
+                    accessibilityHint="Tap to mark read. Long press to delete."
+                  >
                     {item.avatarUrl ? (
                       <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
                     ) : (
@@ -235,7 +254,7 @@ export default function NotificationsScreen() {
                     <AppText variant="caption" color={Colors.textMuted}>
                       {item.time}
                     </AppText>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -246,7 +265,13 @@ export default function NotificationsScreen() {
                   Earlier
                 </AppText>
                 {earlierList.map((item) => (
-                  <View key={item.id} style={styles.notificationItem}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.notificationItem, !item.isRead && { backgroundColor: Colors.primaryLight }]}
+                    onPress={() => markRead(item.id)}
+                    onLongPress={() => deleteNotification(item.id)}
+                    accessibilityHint="Tap to mark read. Long press to delete."
+                  >
                     {item.avatarUrl ? (
                       <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
                     ) : (
@@ -267,7 +292,7 @@ export default function NotificationsScreen() {
                     <AppText variant="caption" color={Colors.textMuted}>
                       {item.time}
                     </AppText>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}

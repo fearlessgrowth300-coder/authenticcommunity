@@ -26,6 +26,7 @@ export interface FilterState {
   selectedValues: string[]
   verifiedOnly: boolean
   minMatchScore: number
+  discoveryArea: 'nearby' | 'country' | 'worldwide'
 }
 
 interface FilterModalProps {
@@ -58,6 +59,11 @@ const VALUE_OPTIONS = [
   'Health',
 ]
 const MATCH_SCORE_OPTIONS = [50, 70, 85, 90]
+const DISCOVERY_AREAS: Array<{ value: FilterState['discoveryArea']; label: string }> = [
+  { value: 'nearby', label: 'Nearby' },
+  { value: 'country', label: 'My Country' },
+  { value: 'worldwide', label: 'Worldwide' },
+]
 
 export const FilterModal: React.FC<FilterModalProps> = ({
   visible,
@@ -78,6 +84,9 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   )
   const [minMatchScore, setMinMatchScore] = useState(
     currentFilters?.minMatchScore || 70
+  )
+  const [discoveryArea, setDiscoveryArea] = useState<FilterState['discoveryArea']>(
+    currentFilters?.discoveryArea || 'nearby'
   )
 
   const toggleInterest = (interest: string) => {
@@ -107,6 +116,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
     setSelectedValues([])
     setVerifiedOnly(false)
     setMinMatchScore(50)
+    setDiscoveryArea('nearby')
   }
 
   const handleApply = () => {
@@ -117,6 +127,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
       selectedValues,
       verifiedOnly,
       minMatchScore,
+      discoveryArea,
     })
     onClose()
   }
@@ -296,6 +307,27 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           </View>
 
           {/* 5. Verified Only Switch */}
+          <View style={styles.section}>
+            <AppText variant="label" weight="semibold">Discovery Area</AppText>
+            <View style={styles.pillsRow}>
+              {DISCOVERY_AREAS.map((item) => {
+                const isSelected = discoveryArea === item.value
+                return (
+                  <TouchableOpacity
+                    key={item.value}
+                    onPress={() => setDiscoveryArea(item.value)}
+                    style={[styles.pill, isSelected ? styles.pillActive : null]}
+                  >
+                    <AppText variant="caption" weight={isSelected ? 'bold' : 'normal'} color={isSelected ? Colors.surface : Colors.textSecondary}>
+                      {item.label}
+                    </AppText>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </View>
+
+          {/* 6. Verified Only Switch */}
           <View style={styles.verifiedRow}>
             <View style={styles.verifiedLeft}>
               <Shield color={Colors.sage} size={20} />
@@ -316,7 +348,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
             />
           </View>
 
-          {/* 6. Minimum Match Score */}
+          {/* 7. Minimum Match Score */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionTitleRow}>

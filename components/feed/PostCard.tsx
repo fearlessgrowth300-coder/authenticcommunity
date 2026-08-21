@@ -4,6 +4,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Share,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Colors, Spacing, Radii } from '@/constants/theme'
@@ -234,6 +235,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => Share.share({ message: post.text || 'View this post on Authentic Community.' })}
             style={styles.actionItem}
             accessibilityLabel="Share post"
           >

@@ -38,6 +38,9 @@ import {
 import { supabase } from '@/services/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
+import * as ImagePicker from 'expo-image-picker'
+import { uploadMediaFile } from '@/services/mediaUpload'
+import { getDirectMessagingPermission } from '@/services/realtimeChat'
 
 export default function DirectMessageChatScreen() {
   const router = useRouter()
@@ -63,6 +66,10 @@ export default function DirectMessageChatScreen() {
   const [sending, setSending] = useState(false)
   const [menuVisible, setMenuVisible] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [searchVisible, setSearchVisible] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [mediaOnly, setMediaOnly] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const scrollRef = useRef<any>(null)
 
   useEffect(() => {
@@ -101,6 +108,12 @@ export default function DirectMessageChatScreen() {
     loadConversationMessages(targetUserId)
       .then((data) => {
         setMessages(data)
+        return (supabase as any)
+          .from('messages')
+          .update({ is_read: true })
+          .eq('sender_id', targetUserId)
+          .eq('recipient_id', user.id)
+          .eq('is_read', false)
       })
       .finally(() => setLoading(false))
 
@@ -135,19 +148,12 @@ export default function DirectMessageChatScreen() {
         return [...prev, newMsg]
       })
 
-      // Also ensure message_requests entry exists if first message
-      await (supabase as any).from('message_requests').upsert({
-        sender_id: user.id,
-        recipient_id: targetUserId,
-        initial_message: textToSend,
-        status: 'pending',
-      }, { onConflict: 'sender_id,recipient_id' })
-
       setTimeout(() => {
         scrollRef.current?.scrollToEnd({ animated: true })
       }, 100)
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not send message.')
+      setInputText(textToSend)
+      Alert.alert(e.message?.includes('request') ? 'Message Request' : 'Error', e.message || 'Could not send message.')
     } finally {
       setSending(false)
     }
@@ -159,14 +165,16 @@ export default function DirectMessageChatScreen() {
     setIsMuted(newMuted)
     setMenuVisible(false)
     try {
-      await (supabase as any).from('conversation_settings').upsert({
+      const { error } = await (supabase as any).from('conversation_settings').upsert({
         user_id: user.id,
         other_user_id: targetUserId,
         is_muted: newMuted,
       }, { onConflict: 'user_id,other_user_id' })
+      if (error) throw error
       Alert.alert(newMuted ? 'Muted' : 'Unmuted', `Conversation notifications ${newMuted ? 'muted' : 'unmuted'}.`)
-    } catch {
-      // Graceful
+    } catch (error: any) {
+      setIsMuted(!newMuted)
+      Alert.alert('Could Not Save', error?.message || 'Please try again.')
     }
   }
 
@@ -201,28 +209,53 @@ export default function DirectMessageChatScreen() {
       {
         text: 'Harassment / Spam',
         onPress: async () => {
-          await (supabase as any).from('content_reports').insert({
+          const { error } = await (supabase as any).from('reports').insert({
             reporter_id: user.id,
             reported_user_id: targetUserId,
-            reason: 'harassment_spam',
+            report_type: 'user',
+            reason: 'Harassment or spam',
           })
-          Alert.alert('Thank You', 'Our moderation team will review this report within 24 hours.')
+          Alert.alert(error ? 'Report Not Sent' : 'Thank You', error?.message || 'Our moderation team will review this report.')
         },
       },
       {
         text: 'Impersonation / Fake Profile',
         onPress: async () => {
-          await (supabase as any).from('content_reports').insert({
+          const { error } = await (supabase as any).from('reports').insert({
             reporter_id: user.id,
             reported_user_id: targetUserId,
-            reason: 'fake_profile',
+            report_type: 'user',
+            reason: 'Impersonation or fake profile',
           })
-          Alert.alert('Thank You', 'Our moderation team will review this report within 24 hours.')
+          Alert.alert(error ? 'Report Not Sent' : 'Thank You', error?.message || 'Our moderation team will review this report.')
         },
       },
       { text: 'Cancel', style: 'cancel' },
     ])
   }
+
+  const handlePickPhoto = async () => {
+    if (!targetUserId || uploading) return
+    try {
+      const permission = await getDirectMessagingPermission(targetUserId)
+      if (!permission.canSend) throw new Error('Media is available after your connection or message request is accepted.')
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, base64: true })
+      if (result.canceled || !result.assets[0]) return
+      setUploading(true)
+      const upload = await uploadMediaFile({ bucket: 'community-posts', localUri: result.assets[0].uri, base64: (result.assets[0] as any).base64, type: 'image' })
+      if (upload.error || !upload.url) throw upload.error || new Error('Upload failed')
+      const sent = await sendDirectMessage(targetUserId, inputText.trim() || 'Shared a photo', { mediaUrl: upload.url })
+      setMessages((current) => current.some((message) => message.id === sent.id) ? current : [...current, sent])
+      setInputText('')
+    } catch (error: any) { Alert.alert('Photo Not Sent', error?.message || 'Please try again.') }
+    finally { setUploading(false) }
+  }
+
+  const visibleMessages = messages.filter((message) => {
+    if (mediaOnly && !message.mediaUrl) return false
+    if (searchQuery.trim() && !message.text.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false
+    return true
+  })
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -266,6 +299,9 @@ export default function DirectMessageChatScreen() {
           </TouchableOpacity>
         </View>
 
+        {searchVisible ? <View style={styles.conversationSearch}><TextInput value={searchQuery} onChangeText={setSearchQuery} autoFocus placeholder="Search this conversation" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /><TouchableOpacity onPress={() => { setSearchVisible(false); setSearchQuery('') }}><AppText variant="caption" color={Colors.primary}>Done</AppText></TouchableOpacity></View> : null}
+        {mediaOnly ? <View style={styles.mediaFilterBar}><AppText variant="caption" weight="bold" color={Colors.primary}>Shared media</AppText><TouchableOpacity onPress={() => setMediaOnly(false)}><AppText variant="caption" color={Colors.primary}>Show all</AppText></TouchableOpacity></View> : null}
+
         {/* Messages List */}
         <ScrollView
           ref={scrollRef}
@@ -275,7 +311,7 @@ export default function DirectMessageChatScreen() {
         >
           {loading ? (
             <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 24 }} />
-          ) : messages.length === 0 ? (
+          ) : visibleMessages.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <Image
                 source={{
@@ -293,7 +329,7 @@ export default function DirectMessageChatScreen() {
               </AppText>
             </View>
           ) : (
-            messages.map((msg) => (
+            visibleMessages.map((msg) => (
               <View
                 key={msg.id}
                 style={[
@@ -313,6 +349,7 @@ export default function DirectMessageChatScreen() {
                   >
                     {msg.text}
                   </AppText>
+                  {msg.mediaUrl ? <Image source={{ uri: msg.mediaUrl }} style={styles.messageImage} /> : null}
                   <View style={styles.bubbleFooter}>
                     <AppText
                       variant="caption"
@@ -331,7 +368,7 @@ export default function DirectMessageChatScreen() {
 
         {/* Input Bar */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.plusBtn}>
+          <TouchableOpacity onPress={handlePickPhoto} disabled={uploading} style={styles.plusBtn}>
             <Plus color={Colors.textSecondary} size={20} />
           </TouchableOpacity>
 
@@ -343,7 +380,7 @@ export default function DirectMessageChatScreen() {
             style={styles.input}
           />
 
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity onPress={() => setInputText((current) => `${current}😊`)} style={styles.iconBtn}>
             <Smile color={Colors.textSecondary} size={20} />
           </TouchableOpacity>
 
@@ -372,6 +409,16 @@ export default function DirectMessageChatScreen() {
               <TouchableOpacity onPress={handleToggleMute} style={styles.menuItem}>
                 <VolumeX color={isMuted ? Colors.primary : Colors.text} size={18} />
                 <AppText variant="bodySm">{isMuted ? 'Unmute Notifications' : 'Mute Notifications'}</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { setMenuVisible(false); setMediaOnly(false); setSearchVisible(true) }} style={styles.menuItem}>
+                <Smile color={Colors.text} size={18} />
+                <AppText variant="bodySm">Search Conversation</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { setMenuVisible(false); setMediaOnly(true); setSearchVisible(false) }} style={styles.menuItem}>
+                <Plus color={Colors.text} size={18} />
+                <AppText variant="bodySm">Shared Media</AppText>
               </TouchableOpacity>
 
               <TouchableOpacity onPress={handleBlockUser} style={styles.menuItem}>
@@ -437,6 +484,9 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     paddingBottom: Spacing.lg,
   },
+  conversationSearch: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: Spacing.md, paddingVertical: 8, backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  searchInput: { flex: 1, minHeight: 40, paddingHorizontal: 12, borderRadius: Radii.full, backgroundColor: Colors.background, color: Colors.text },
+  mediaFilterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.md, paddingVertical: 8, backgroundColor: Colors.primaryLight },
   emptyStateContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -482,6 +532,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 4,
   },
+  messageImage: { width: 220, height: 170, borderRadius: Radii.md, marginTop: 8, backgroundColor: Colors.border },
   timeText: {
     fontSize: 10,
   },

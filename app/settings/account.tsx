@@ -83,15 +83,14 @@ export default function AccountSettingsScreen() {
           onPress: async () => {
             try {
               if (user) {
-                await (supabase.functions as any).invoke('delete-account', {
-                  body: { userId: user.id },
-                })
+                const { data, error } = await (supabase.functions as any).invoke('delete-account')
+                if (error) throw error
+                if (!data?.success) throw new Error(data?.error || 'Account deletion was not confirmed.')
               }
               await signOut()
               router.replace('/(auth)/login')
-            } catch {
-              await signOut()
-              router.replace('/(auth)/login')
+            } catch (error: any) {
+              Alert.alert('Account Not Deleted', error?.message || 'Please try again or contact support.')
             }
           },
         },

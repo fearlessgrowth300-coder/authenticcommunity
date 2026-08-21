@@ -7,6 +7,7 @@ import {
   TextInput,
   Dimensions,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -14,6 +15,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { sendDirectMessage } from '@/services/realtimeChat'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import {
   X,
   Heart,
@@ -32,29 +35,46 @@ export default function StoryViewerScreen() {
   const [replyText, setReplyText] = useState('')
   const [liked, setLiked] = useState(false)
   const [storyData, setStoryData] = useState<any>(null)
+  const [storyProfile, setStoryProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const videoPlayer = useVideoPlayer(
+    storyData?.content_type === 'video' ? storyData.content_url : null,
+    (player) => {
+      player.loop = true
+      player.play()
+    }
+  )
 
   useEffect(() => {
     if (!id) return
     const loadStory = async () => {
       setLoading(true)
       try {
-        const { data } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .from('stories')
-          .select('*, profiles(first_name, last_name, profile_image_url)')
+          .select('id, user_id, content_type, content_url, text_content, background_color, created_at, expires_at, is_deleted')
           .eq('id', id)
+          .eq('is_deleted', false)
           .maybeSingle()
+        if (error) throw error
 
         if (data) {
           setStoryData(data)
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, profile_image_url')
+            .eq('user_id', data.user_id)
+            .maybeSingle()
+          setStoryProfile(profile)
           // Record story view
-          if (user) {
+          if (user && data.user_id !== user.id) {
             await (supabase as any)
               .from('story_views')
-              .insert({ story_id: id, viewer_id: user.id })
-              .catch(() => {})
+              .upsert({ story_id: id, viewer_id: user.id }, { onConflict: 'story_id,viewer_id' })
           }
         }
+      } catch {
+        setStoryData(null)
       } finally {
         setLoading(false)
       }
@@ -88,29 +108,76 @@ export default function StoryViewerScreen() {
     setReplyText('')
 
     try {
-      // Send as direct message referencing story
-      await (supabase as any).from('messages').insert({
-        sender_id: user.id,
-        recipient_id: storyData.user_id,
-        content: `Replied to your story: "${text}"`,
-      })
-    } catch {
-      // Graceful
+      await sendDirectMessage(storyData.user_id, `Replied to your story: "${text}"`)
+    } catch (error: any) {
+      Alert.alert(
+        error?.message?.includes('request sent') ? 'Message Request Sent' : 'Reply Not Sent',
+        error?.message || 'Please try again.'
+      )
     }
   }
 
   const story = {
     userName:
-      `${storyData?.profiles?.first_name || ''} ${storyData?.profiles?.last_name || ''}`.trim() ||
+      `${storyProfile?.first_name || ''} ${storyProfile?.last_name || ''}`.trim() ||
       'Community Member',
     userAvatar:
-      storyData?.profiles?.profile_image_url ||
+      storyProfile?.profile_image_url ||
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80',
     timeAgo: 'Recently',
     imageUrl:
-      storyData?.media_url ||
+      storyData?.content_url ||
       'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=900&fit=crop&q=80',
-    caption: storyData?.caption || '',
+    caption: storyData?.text_content || '',
+  }
+
+  const handleStoryMenu = () => {
+    if (!storyData || !id) return
+    if (storyData.user_id === user?.id) {
+      Alert.alert('Your story', undefined, [
+        {
+          text: 'View viewers',
+          onPress: async () => {
+            const { count } = await (supabase as any)
+              .from('story_views')
+              .select('id', { count: 'exact', head: true })
+              .eq('story_id', id)
+            Alert.alert('Story viewers', `${count || 0} people viewed this story.`)
+          },
+        },
+        {
+          text: 'Delete story',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return
+            const { error } = await (supabase as any).from('stories').update({ is_deleted: true }).eq('id', id).eq('user_id', user.id)
+            if (error) Alert.alert('Could Not Delete Story', 'Please try again.')
+            else router.back()
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ])
+      return
+    }
+    Alert.alert('Story options', undefined, [
+      {
+        text: 'Report story',
+        style: 'destructive',
+        onPress: async () => {
+          if (!user) return
+          const { error } = await (supabase as any).from('reports').insert({
+            reporter_id: user.id,
+            reported_user_id: storyData.user_id,
+            report_type: 'story',
+            reason: 'other',
+            description: `Story ${id} reported from the story viewer`,
+            status: 'pending',
+          })
+          Alert.alert(error ? 'Report Not Sent' : 'Report Sent', error ? 'Please try again.' : 'Our safety team will review it.')
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ])
   }
 
   const handleNext = () => {
@@ -120,7 +187,11 @@ export default function StoryViewerScreen() {
   return (
     <View style={styles.container}>
       {/* Fullscreen Story Image */}
-      <Image source={{ uri: story.imageUrl }} style={styles.backgroundImage} resizeMode="cover" />
+      {storyData?.content_type === 'video' ? (
+        <VideoView player={videoPlayer} style={styles.backgroundImage} nativeControls={false} contentFit="cover" />
+      ) : (
+        <Image source={{ uri: story.imageUrl }} style={styles.backgroundImage} resizeMode="cover" />
+      )}
 
       {/* Dark Gradient Overlay */}
       <View style={styles.darkOverlay} />
@@ -148,7 +219,7 @@ export default function StoryViewerScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerBtn}>
+            <TouchableOpacity onPress={handleStoryMenu} style={styles.headerBtn} accessibilityLabel="Story options">
               <MoreHorizontal color="#FFFFFF" size={20} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
@@ -163,6 +234,10 @@ export default function StoryViewerScreen() {
           onPress={handleNext}
           style={styles.touchArea}
         />
+
+        {loading ? <ActivityIndicator color="#FFFFFF" size="large" style={styles.loading} /> : !storyData ? (
+          <View style={styles.unavailable}><AppText variant="body" color="#FFFFFF">This story is no longer available.</AppText></View>
+        ) : null}
 
         {/* Story Caption Overlay */}
         {story.caption ? (
@@ -322,4 +397,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.2)',
     borderColor: '#EF4444',
   },
+  loading: { position: 'absolute', alignSelf: 'center', top: '48%' },
+  unavailable: { position: 'absolute', top: '45%', alignSelf: 'center', padding: Spacing.lg },
 })

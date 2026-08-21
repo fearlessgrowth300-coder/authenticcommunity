@@ -151,6 +151,7 @@ export default function ExploreScreen() {
     selectedValues: ['Kindness', 'Growth', 'Community'],
     verifiedOnly: true,
     minMatchScore: 70,
+    discoveryArea: 'nearby',
   })
 
   // Communities State
