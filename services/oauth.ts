@@ -1,9 +1,12 @@
 import * as WebBrowser from 'expo-web-browser'
+import * as Linking from 'expo-linking'
 import { supabase } from './supabase'
 
 export type SocialAuthProvider = 'google' | 'apple'
 
-export const OAUTH_REDIRECT_URL = 'authentic://auth/callback'
+// Expo Go receives an exp:// callback while signed development/production
+// builds receive the app-owned authentic:// callback from app.json.
+export const OAUTH_REDIRECT_URL = Linking.createURL('auth/callback')
 
 WebBrowser.maybeCompleteAuthSession()
 

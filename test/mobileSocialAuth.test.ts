@@ -14,7 +14,8 @@ describe('Mobile social authentication', () => {
     expect(oauth).toContain("skipBrowserRedirect: true")
     expect(oauth).toContain("exchangeCodeForSession")
     expect(oauth).toContain("openAuthSessionAsync")
-    expect(oauth).toContain("authentic://auth/callback")
+    expect(oauth).toContain("Linking.createURL('auth/callback')")
+    expect(source('app.json')).toContain('"scheme": "authentic"')
   })
 
   it('offers working Google and Apple actions on login and signup', () => {
