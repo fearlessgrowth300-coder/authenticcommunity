@@ -87,17 +87,21 @@ export async function fetchFeedPosts(params: {
   const currentUserId = auth?.user?.id || null
 
   let myProfile: any = null
+  let myInterests: string[] = []
+  let myValues: string[] = []
   const followSet = new Set<string>()
   const blockedSet = new Set<string>()
   const dismissedSet = new Set<string>()
 
   if (currentUserId) {
-    const [pRes, fRes, bRes, dRes] = await Promise.all([
+    const [pRes, interestsRes, valuesRes, fRes, bRes, dRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('location_city, location_state, location_country, interests, values')
+        .select('user_id, first_name, last_name, profile_image_url, location_city, location_state, location_country, is_verified, is_active, account_status')
         .eq('user_id', currentUserId)
         .maybeSingle(),
+      supabase.from('user_interests').select('interest_name').eq('user_id', currentUserId),
+      supabase.from('user_values').select('value_name').eq('user_id', currentUserId),
       supabase.from('user_follows').select('following_id').eq('follower_id', currentUserId),
       supabase
         .from('blocked_users')
@@ -110,6 +114,8 @@ export async function fetchFeedPosts(params: {
     ])
 
     myProfile = pRes.data
+    myInterests = (interestsRes.data || []).map((row: any) => row.interest_name)
+    myValues = (valuesRes.data || []).map((row: any) => row.value_name)
     ;(fRes.data || []).forEach((row: any) => followSet.add(row.following_id))
     ;(bRes.data || []).forEach((row: any) => {
       if (row.blocker_id === currentUserId) blockedSet.add(row.blocked_id)
@@ -149,13 +155,19 @@ export async function fetchFeedPosts(params: {
   const authorIds = Array.from(new Set(filteredPosts.map((p: any) => p.user_id))) as string[]
 
   // Parallel fetch media, authors, likes, saves, comments count
-  const [mediaRes, authorsRes, likesRes, savesRes, commentsRes] = await Promise.all([
+  const [mediaRes, authorsRes, authorInterestsRes, authorValuesRes, likesRes, savesRes, commentsRes] = await Promise.all([
     (supabase as any).from('post_media').select('post_id, media_url, media_type, sort_order').in('post_id', postIds),
     authorIds.length > 0
       ? (supabase as any)
           .from('profiles')
-          .select('id, user_id, first_name, last_name, profile_image_url, location_city, location_country, interests, values, is_verified, is_active, account_status')
+          .select('id, user_id, first_name, last_name, profile_image_url, location_city, location_country, is_verified, is_active, account_status')
           .in('user_id', authorIds)
+      : Promise.resolve({ data: [] }),
+    authorIds.length > 0
+      ? (supabase as any).from('user_interests').select('user_id, interest_name').in('user_id', authorIds)
+      : Promise.resolve({ data: [] }),
+    authorIds.length > 0
+      ? (supabase as any).from('user_values').select('user_id, value_name').in('user_id', authorIds)
       : Promise.resolve({ data: [] }),
     currentUserId
       ? (supabase as any).from('post_likes').select('post_id').eq('user_id', currentUserId).in('post_id', postIds)
@@ -186,6 +198,15 @@ export async function fetchFeedPosts(params: {
     }
   })
 
+  const authorInterestsMap = new Map<string, string[]>()
+  ;(authorInterestsRes.data || []).forEach((row: any) => {
+    authorInterestsMap.set(row.user_id, [...(authorInterestsMap.get(row.user_id) || []), row.interest_name])
+  })
+  const authorValuesMap = new Map<string, string[]>()
+  ;(authorValuesRes.data || []).forEach((row: any) => {
+    authorValuesMap.set(row.user_id, [...(authorValuesMap.get(row.user_id) || []), row.value_name])
+  })
+
   const myLikedPostIds = new Set((likesRes.data || []).map((l: any) => l.post_id))
   const mySavedPostIds = new Set((savesRes.data || []).map((s: any) => s.post_id))
 
@@ -195,9 +216,6 @@ export async function fetchFeedPosts(params: {
   })
 
   const posts: MobilePostItem[] = []
-  const myInterests: string[] = myProfile?.interests || []
-  const myValues: string[] = myProfile?.values || []
-
   for (const post of filteredPosts) {
     const isMe = Boolean(currentUserId && post.user_id === currentUserId)
     const author = authorMap.get(post.user_id) || (isMe ? myProfile : null) || {}
@@ -221,13 +239,13 @@ export async function fetchFeedPosts(params: {
 
     // Calculate Interest & Value Affinity
     const postTags: string[] = post.interest_tags || []
-    const authorInterests: string[] = author.interests || []
+    const authorInterests = authorInterestsMap.get(post.user_id) || []
     const sharedInterestsCount = myInterests.filter(i => 
       postTags.map(t => t.toLowerCase()).includes(i.toLowerCase()) || 
       authorInterests.map(ai => ai.toLowerCase()).includes(i.toLowerCase())
     ).length
 
-    const authorValues: string[] = author.values || []
+    const authorValues = authorValuesMap.get(post.user_id) || []
     const sharedValuesCount = myValues.filter(v =>
       authorValues.map(av => av.toLowerCase()).includes(v.toLowerCase())
     ).length
@@ -311,7 +329,7 @@ export async function createNewPost(params: {
       user_id: auth.user.id,
       content,
       content_type: contentType,
-      visibility: audience,
+      visibility: audience === 'only_me' ? 'private' : audience,
       community_id: communityId || null,
       interest_tags: interestTags,
       location_label: locationLabel || null,
@@ -329,7 +347,11 @@ export async function createNewPost(params: {
       media_type: contentType === 'video' ? 'video' : 'image',
       sort_order: index,
     }))
-    await (supabase as any).from('post_media').insert(mediaPayload)
+    const { error: mediaError } = await (supabase as any).from('post_media').insert(mediaPayload)
+    if (mediaError) {
+      await (supabase as any).from('posts').delete().eq('id', post.id).eq('user_id', auth.user.id)
+      throw mediaError
+    }
   }
 
   return { id: post.id }
@@ -366,16 +388,18 @@ export async function togglePostSave(postId: string, isCurrentlySaved: boolean):
   if (!auth.user) throw new Error('Sign in to save posts.')
 
   if (isCurrentlySaved) {
-    await Promise.all([
-      (supabase as any).from('post_saves').delete().eq('post_id', postId).eq('user_id', auth.user.id),
-      (supabase as any).from('saved_posts').delete().eq('post_id', postId).eq('user_id', auth.user.id),
-    ])
+    const { error } = await (supabase as any)
+      .from('post_saves')
+      .delete()
+      .eq('post_id', postId)
+      .eq('user_id', auth.user.id)
+    if (error) throw error
     return false
   } else {
-    await Promise.all([
-      (supabase as any).from('post_saves').upsert({ post_id: postId, user_id: auth.user.id }),
-      (supabase as any).from('saved_posts').upsert({ post_id: postId, user_id: auth.user.id }),
-    ])
+    const { error } = await (supabase as any)
+      .from('post_saves')
+      .upsert({ post_id: postId, user_id: auth.user.id })
+    if (error) throw error
     recordFeedInteraction({ interactionType: 'save', postId })
     return true
   }
@@ -387,14 +411,20 @@ export async function togglePostSave(postId: string, isCurrentlySaved: boolean):
 export async function loadPostComments(postId: string): Promise<PostComment[]> {
   const { data, error } = await (supabase as any)
     .from('post_comments')
-    .select('id, post_id, user_id, content, created_at, profiles(first_name, last_name, profile_image_url, is_verified)')
+    .select('id, post_id, user_id, content, created_at')
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
 
   if (error) return []
 
+  const userIds = Array.from(new Set((data || []).map((row: any) => row.user_id))) as string[]
+  const { data: profiles } = userIds.length
+    ? await supabase.from('profiles').select('user_id, first_name, last_name, profile_image_url, is_verified').in('user_id', userIds)
+    : { data: [] as any[] }
+  const profileMap = new Map((profiles || []).map((profile: any) => [profile.user_id, profile]))
+
   return (data || []).map((row: any) => {
-    const author = row.profiles || {}
+    const author: any = profileMap.get(row.user_id) || {}
     const createdDate = new Date(row.created_at)
     const diffHours = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60))
     const timeAgo = diffHours < 1 ? 'Just now' : `${diffHours}h ago`
@@ -427,21 +457,25 @@ export async function addPostComment(postId: string, text: string): Promise<Post
       user_id: auth.user.id,
       content: text.trim(),
     })
-    .select('id, post_id, user_id, content, created_at, profiles(first_name, last_name, profile_image_url, is_verified)')
+    .select('id, post_id, user_id, content, created_at')
     .single()
 
   if (error) throw error
 
   recordFeedInteraction({ interactionType: 'comment', postId })
 
-  const author = data?.profiles || {}
+  const { data: author } = await supabase
+    .from('profiles')
+    .select('first_name, last_name, profile_image_url, is_verified')
+    .eq('user_id', auth.user.id)
+    .maybeSingle()
   return {
     id: data.id,
     postId: data.post_id,
     userId: data.user_id,
-    authorName: `${author.first_name || ''} ${author.last_name || ''}`.trim() || 'You',
-    authorAvatar: author.profile_image_url || null,
-    isVerified: Boolean(author.is_verified),
+    authorName: `${author?.first_name || ''} ${author?.last_name || ''}`.trim() || 'You',
+    authorAvatar: author?.profile_image_url || null,
+    isVerified: Boolean(author?.is_verified),
     text: data.content,
     timeAgo: 'Just now',
     likesCount: 0,
@@ -458,9 +492,10 @@ export async function dismissPost(
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) return
 
-  await (supabase as any).from('content_dismissals').upsert({
+  const { error } = await (supabase as any).from('content_dismissals').upsert({
     user_id: auth.user.id,
     content_id: postId,
-    action_type: actionType,
-  })
+    content_type: actionType,
+  }, { onConflict: 'user_id,content_type,content_id' })
+  if (error) throw error
 }

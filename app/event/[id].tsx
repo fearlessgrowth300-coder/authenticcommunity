@@ -47,7 +47,7 @@ export default function EventDetailScreen() {
         const [eRes, attRes] = await Promise.all([
           supabase
             .from('events')
-            .select('*, communities(community_name, photo_url)')
+            .select('*, communities(community_name, profile_image_url)')
             .eq('id', id)
             .maybeSingle(),
           (supabase as any)
@@ -87,32 +87,28 @@ export default function EventDetailScreen() {
     if (isRsvped) {
       setIsRsvped(false)
       setAttendeeCount((prev) => Math.max(1, prev - 1))
-      await Promise.all([
-        (supabase as any).from('event_attendees').delete().eq('event_id', id).eq('user_id', user.id),
-        (supabase as any).from('event_rsvps').delete().eq('event_id', id).eq('user_id', user.id),
-      ])
+      const { error } = await (supabase as any)
+        .from('event_attendees')
+        .delete()
+        .eq('event_id', id)
+        .eq('user_id', user.id)
+      if (error) throw error
     } else {
       setIsRsvped(true)
       setAttendeeCount((prev) => prev + 1)
-      await Promise.all([
-        (supabase as any).from('event_attendees').upsert({
-          event_id: id,
-          user_id: user.id,
-          status: 'going',
-        }),
-        (supabase as any).from('event_rsvps').upsert({
-          event_id: id,
-          user_id: user.id,
-          status: 'going',
-        }),
-      ])
+      const { error } = await (supabase as any).from('event_attendees').upsert({
+        event_id: id,
+        user_id: user.id,
+        rsvp_status: 'going',
+      })
+      if (error) throw error
     }
   }
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Join me at ${eventData?.event_title || eventData?.title || 'this event'} on Authentic Community!`,
+        message: `Join me at ${eventData?.name || 'this event'} on Authentic Community!`,
         url: `https://authenticcommunity.fun/event/${id}`,
       })
     } catch {
@@ -120,14 +116,14 @@ export default function EventDetailScreen() {
     }
   }
 
-  const d = eventData?.event_date || eventData?.start_time ? new Date(eventData.event_date || eventData.start_time) : new Date()
+  const d = eventData?.event_date ? new Date(`${eventData.event_date}T${eventData.start_time || '00:00:00'}`) : new Date()
   const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-  const eventTitle = eventData?.event_title || eventData?.title || 'Community Gathering'
+  const eventTitle = eventData?.name || 'Community Gathering'
   const eventHost = eventData?.communities?.community_name || 'Authentic Community'
-  const eventHostAvatar = eventData?.communities?.photo_url || 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=150&fit=crop&q=80'
-  const eventLocation = eventData?.location_name || eventData?.location_city || 'Community Space'
-  const eventCover = eventData?.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
+  const eventHostAvatar = eventData?.communities?.profile_image_url || 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=150&fit=crop&q=80'
+  const eventLocation = eventData?.location || 'Community Space'
+  const eventCover = eventData?.event_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
 
   if (loading) {
     return (
@@ -223,7 +219,7 @@ export default function EventDetailScreen() {
             <Users color={Colors.sage} size={20} />
             <View>
               <AppText variant="bodySm" weight="bold">
-                {attendeeCount} going · Limit {eventData?.attendee_limit || 50}
+                {attendeeCount} going · Limit {eventData?.max_attendees || 50}
               </AppText>
               <AppText variant="caption" color={Colors.textSecondary}>
                 Spots filling up

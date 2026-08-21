@@ -25,6 +25,7 @@ export interface EventItem {
   description?: string
   location?: string
   timeRange?: string
+  eventDate?: string
   organizer?: {
     name: string
     followers: string
@@ -82,7 +83,10 @@ export const EventCard: React.FC<EventCardProps> = ({
           </View>
 
           <TouchableOpacity
-            onPress={() => onToggleSave?.()}
+            onPress={(event) => {
+              event.stopPropagation()
+              onToggleSave?.()
+            }}
             style={styles.bookmarkBtn}
             accessibilityLabel="Save event"
           >

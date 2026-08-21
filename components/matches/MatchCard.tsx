@@ -39,6 +39,9 @@ export interface MatchProfile {
     members: string
     image: string
   }
+  distanceKm?: number | null
+  country?: string | null
+  createdAt?: string
 }
 
 interface MatchCardProps {

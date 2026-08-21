@@ -6,10 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -50,6 +53,24 @@ export default function CreateCommunityScreen() {
   const [showPrivacyPicker, setShowPrivacyPicker] = useState(false)
   const [photoUri, setPhotoUri] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
+
+  const handleDetectLocation = async () => {
+    setDetectingLocation(true)
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync()
+      if (permission.status !== 'granted') throw new Error('Location permission was not granted.')
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      const [place] = await Location.reverseGeocodeAsync(position.coords)
+      const parts = [place?.city || place?.district, place?.region, place?.country].filter(Boolean)
+      if (!parts.length) throw new Error('We could not identify your area.')
+      setLocation(parts.join(', '))
+    } catch (error: any) {
+      Alert.alert('Location Not Available', error?.message || 'Enter your city manually.')
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
 
   const handlePickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -81,20 +102,23 @@ export default function CreateCommunityScreen() {
         if (uploadRes.url) uploadedPhotoUrl = uploadRes.url
       }
 
-      const { data: newComm } = await (supabase as any)
+      const { data: newComm, error: communityError } = await (supabase as any)
         .from('communities')
         .insert({
           community_name: name || 'New Community',
           category,
           location_city: location || 'Local Area',
-          is_private: privacy === 'Private',
+          community_type: privacy === 'Private' ? 'private' : 'public',
+          visibility: privacy === 'Private' ? 'private' : 'public',
           profile_image_url: uploadedPhotoUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
           description: `${category} community based in ${location}.`,
-          created_by: user?.id,
+          creator_id: user?.id,
           member_count: 1,
         })
         .select('id')
         .single()
+
+      if (communityError) throw communityError
 
       if (newComm?.id && user) {
         await supabase.from('community_members').insert({
@@ -106,8 +130,8 @@ export default function CreateCommunityScreen() {
       } else {
         router.replace('/(tabs)/discover')
       }
-    } catch {
-      router.replace('/(tabs)/discover')
+    } catch (error: any) {
+      Alert.alert('Could Not Create Community', error?.message || 'Please check the details and try again.')
     } finally {
       setLoading(false)
     }
@@ -228,8 +252,8 @@ export default function CreateCommunityScreen() {
                 placeholderTextColor={Colors.textMuted}
                 style={styles.inputInner}
               />
-              <TouchableOpacity style={styles.iconInside}>
-                <Navigation color={Colors.primary} size={16} />
+              <TouchableOpacity onPress={handleDetectLocation} disabled={detectingLocation} style={styles.iconInside} accessibilityLabel="Use current location">
+                {detectingLocation ? <ActivityIndicator size="small" color={Colors.primary} /> : <Navigation color={Colors.primary} size={16} />}
               </TouchableOpacity>
             </View>
           </View>

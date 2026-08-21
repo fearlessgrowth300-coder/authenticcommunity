@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
@@ -12,6 +12,8 @@ import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
+import { supabase } from '@/services/supabase'
+import { loadUserPreferences, saveUserPreferences } from '@/services/preferences'
 import {
   ArrowLeft,
   SlidersHorizontal,
@@ -28,20 +30,35 @@ export default function ContentDiscoverySettingsScreen() {
   const [discoveryArea, setDiscoveryArea] = useState<'nearby' | 'country' | 'worldwide'>('nearby')
   const [feedBalance, setFeedBalance] = useState<'local' | 'balanced' | 'global'>('local')
 
-  const [myInterests, setMyInterests] = useState([
-    { id: '1', name: 'Startups & Entrepreneurship', strength: 'High' },
-    { id: '2', name: 'Technology & AI', strength: 'High' },
-    { id: '3', name: 'Hiking & Outdoors', strength: 'Medium' },
-    { id: '4', name: 'Community Building', strength: 'High' },
-  ])
+  const [myInterests, setMyInterests] = useState<Array<{ id: string; name: string; strength: string }>>([])
 
-  const [learnedInterests, setLearnedInterests] = useState([
-    { id: 'l1', name: 'Photography', strength: 'Medium' },
-    { id: 'l2', name: 'Travel & Culture', strength: 'Low' },
-  ])
+  const [learnedInterests, setLearnedInterests] = useState<Array<{ id: string; name: string; strength: 'High' | 'Medium' | 'Low' }>>([])
+
+  useEffect(() => {
+    Promise.all([supabase.auth.getUser(), loadUserPreferences()]).then(async ([auth, preferences]) => {
+      setDiscoveryArea(preferences.discoveryArea)
+      setFeedBalance(preferences.feedBalance)
+      setLearnedInterests(preferences.learnedInterests)
+      if (auth.data.user) {
+        const { data } = await supabase
+          .from('user_interests')
+          .select('id, interest_name, proficiency_level')
+          .eq('user_id', auth.data.user.id)
+        setMyInterests((data || []).map((row: any) => ({
+          id: row.id,
+          name: row.interest_name,
+          strength: row.proficiency_level === 'expert' ? 'High' : row.proficiency_level === 'experienced' ? 'Medium' : 'Low',
+        })))
+      }
+    })
+  }, [])
 
   const handleRemoveLearned = (id: string) => {
-    setLearnedInterests((prev) => prev.filter((i) => i.id !== id))
+    setLearnedInterests((prev) => {
+      const next = prev.filter((interest) => interest.id !== id)
+      saveUserPreferences({ learnedInterests: next }).catch(() => {})
+      return next
+    })
   }
 
   const handleResetAlgorithm = () => {
@@ -53,9 +70,20 @@ export default function ContentDiscoverySettingsScreen() {
         {
           text: 'Reset',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            const { data: auth } = await supabase.auth.getUser()
+            if (!auth.user) return
+            const [interactions, dismissals] = await Promise.all([
+              (supabase as any).from('feed_interactions').delete().eq('user_id', auth.user.id),
+              (supabase as any).from('content_dismissals').delete().eq('user_id', auth.user.id),
+              saveUserPreferences({ learnedInterests: [] }),
+            ])
+            if (interactions.error || dismissals.error) {
+              Alert.alert('Reset Failed', interactions.error?.message || dismissals.error?.message || 'Please try again.')
+              return
+            }
             setLearnedInterests([])
-            Alert.alert('Reset Complete', 'Your recommendations algorithm has been reset.')
+            Alert.alert('Reset Complete', 'Your recommendation history has been cleared.')
           },
         },
       ]
@@ -101,7 +129,11 @@ export default function ContentDiscoverySettingsScreen() {
             ].map((item) => (
               <TouchableOpacity
                 key={item.id}
-                onPress={() => setDiscoveryArea(item.id as any)}
+                onPress={() => {
+                  const value = item.id as 'nearby' | 'country' | 'worldwide'
+                  setDiscoveryArea(value)
+                  saveUserPreferences({ discoveryArea: value }).catch(() => Alert.alert('Could Not Save', 'Please try again.'))
+                }}
                 style={[
                   styles.pillBtn,
                   discoveryArea === item.id ? styles.pillBtnActive : null,
@@ -136,7 +168,11 @@ export default function ContentDiscoverySettingsScreen() {
             ].map((item) => (
               <TouchableOpacity
                 key={item.id}
-                onPress={() => setFeedBalance(item.id as any)}
+                onPress={() => {
+                  const value = item.id as 'local' | 'balanced' | 'global'
+                  setFeedBalance(value)
+                  saveUserPreferences({ feedBalance: value }).catch(() => Alert.alert('Could Not Save', 'Please try again.'))
+                }}
                 style={[
                   styles.pillBtn,
                   feedBalance === item.id ? styles.pillBtnActive : null,

@@ -62,17 +62,17 @@ export default function GlobalSearchScreen() {
             .limit(10),
           supabase
             .from('communities')
-            .select('id, community_name, category, photo_url, member_count, location_city')
+            .select('id, community_name, category, profile_image_url, member_count, location_city')
             .or(`community_name.ilike.%${q}%,category.ilike.%${q}%,location_city.ilike.%${q}%`)
             .limit(10),
           (supabase as any)
             .from('events')
-            .select('id, title, event_title, location_city, start_time, event_date, cover_image_url')
-            .or(`title.ilike.%${q}%,event_title.ilike.%${q}%,location_city.ilike.%${q}%`)
+            .select('id, name, location, start_time, event_date, event_image_url')
+            .or(`name.ilike.%${q}%,location.ilike.%${q}%`)
             .limit(10),
           (supabase as any)
             .from('posts')
-            .select('id, content, created_at, profiles(first_name, last_name, profile_image_url, is_verified)')
+            .select('id, user_id, content, created_at')
             .ilike('content', `%${q}%`)
             .limit(10),
         ])
@@ -80,7 +80,17 @@ export default function GlobalSearchScreen() {
         if (peopleRes.data) setPeople(peopleRes.data)
         if (commRes.data) setCommunities(commRes.data)
         if (eventRes.data) setEvents(eventRes.data)
-        if (postRes.data) setPosts(postRes.data)
+        if (postRes.data) {
+          const authorIds = Array.from(new Set(postRes.data.map((post: any) => post.user_id))) as string[]
+          const { data: authors } = authorIds.length
+            ? await supabase
+                .from('profiles')
+                .select('user_id, first_name, last_name, profile_image_url, is_verified')
+                .in('user_id', authorIds)
+            : { data: [] as any[] }
+          const authorMap = new Map((authors || []).map((author: any) => [author.user_id, author]))
+          setPosts(postRes.data.map((post: any) => ({ ...post, profiles: authorMap.get(post.user_id) })))
+        }
       } finally {
         setLoading(false)
       }
@@ -235,8 +245,8 @@ export default function GlobalSearchScreen() {
                       <Calendar color={Colors.amber} size={18} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <AppText variant="bodySm" weight="bold">{ev.title || ev.event_title}</AppText>
-                      <AppText variant="caption" color={Colors.textMuted}>{ev.location_city || 'Local Area'}</AppText>
+                      <AppText variant="bodySm" weight="bold">{ev.name}</AppText>
+                      <AppText variant="caption" color={Colors.textMuted}>{ev.location || 'Local Area'}</AppText>
                     </View>
                     <ChevronRight color={Colors.textMuted} size={18} />
                   </TouchableOpacity>

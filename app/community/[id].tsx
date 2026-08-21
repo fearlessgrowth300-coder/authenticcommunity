@@ -71,19 +71,19 @@ export default function CommunityDetailScreen() {
           : Promise.resolve({ data: null }),
         (supabase as any)
           .from('posts')
-          .select('*, profiles(first_name, last_name, profile_image_url, is_verified, location_city)')
-          .or(`community_id.eq.${id},audience.eq.community`)
+          .select('id, user_id, community_id, content, content_type, created_at')
+          .eq('community_id', id)
           .order('created_at', { ascending: false })
           .limit(10),
         (supabase as any)
           .from('events')
-          .select('*, communities(community_name, photo_url)')
-          .or(`community_id.eq.${id}`)
+          .select('id, name, event_date, start_time, location, event_image_url')
+          .eq('community_id', id)
           .order('created_at', { ascending: false })
           .limit(10),
         (supabase as any)
           .from('community_members')
-          .select('role, user_id, profiles(user_id, first_name, last_name, profile_image_url, is_verified, location_city)')
+          .select('role, user_id')
           .eq('community_id', id)
           .limit(20),
       ])
@@ -101,14 +101,28 @@ export default function CommunityDetailScreen() {
         setUserRole('guest')
       }
 
-      if (postsRes.data) setFeedPosts(postsRes.data)
+      const profileUserIds = Array.from(new Set([
+        ...(postsRes.data || []).map((post: any) => post.user_id),
+        ...(allMemsRes.data || []).map((member: any) => member.user_id),
+      ])) as string[]
+      const { data: relatedProfiles } = profileUserIds.length
+        ? await supabase
+            .from('profiles')
+            .select('user_id, first_name, last_name, profile_image_url, is_verified, location_city')
+            .in('user_id', profileUserIds)
+        : { data: [] as any[] }
+      const profileMap = new Map((relatedProfiles || []).map((profile: any) => [profile.user_id, profile]))
+
+      if (postsRes.data) {
+        setFeedPosts(postsRes.data.map((post: any) => ({ ...post, profiles: profileMap.get(post.user_id) })))
+      }
       if (eventsRes.data) setCommunityEvents(eventsRes.data)
       if (allMemsRes.data) {
         setMembersList(
           allMemsRes.data.map((m: any) => ({
             role: m.role,
             userId: m.user_id,
-            profile: m.profiles,
+            profile: profileMap.get(m.user_id),
           }))
         )
       }
@@ -172,7 +186,7 @@ export default function CommunityDetailScreen() {
   const name = communityData?.community_name || 'Community Hub'
   const category = communityData?.category || 'General'
   const location = communityData?.location_city || 'Local Area'
-  const photo = communityData?.photo_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
+  const photo = communityData?.profile_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&fit=crop&q=80'
   const description = communityData?.description || 'A welcoming space for creators, builders, and community members.'
 
   return (
@@ -299,7 +313,7 @@ export default function CommunityDetailScreen() {
                   title="Create Post"
                   variant="outline"
                   leftIcon={<Plus color={Colors.primary} size={16} />}
-                  onPress={() => router.push('/post/create')}
+                  onPress={() => router.push(`/post/create?communityId=${id}`)}
                   style={{ marginTop: 12 }}
                 />
               </View>
@@ -378,8 +392,8 @@ export default function CommunityDetailScreen() {
                 >
                   <Calendar color={Colors.primary} size={20} />
                   <View style={{ flex: 1 }}>
-                    <AppText variant="bodySm" weight="bold">{ev.title || ev.event_title}</AppText>
-                    <AppText variant="caption" color={Colors.textMuted}>{ev.location_city || 'Local'}</AppText>
+                    <AppText variant="bodySm" weight="bold">{ev.name}</AppText>
+                    <AppText variant="caption" color={Colors.textMuted}>{ev.location || 'Local'}</AppText>
                   </View>
                   <ChevronRight color={Colors.textMuted} size={18} />
                 </TouchableOpacity>
