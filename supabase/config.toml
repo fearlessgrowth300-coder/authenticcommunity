@@ -5,3 +5,5 @@ project_id = "sqzeghkabqhhhiuidnvd"
     verify_jwt = false
   [functions.match-suggestions]
     verify_jwt = false
+  [functions.ai-process-enrichment]
+    verify_jwt = true
