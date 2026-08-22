@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -24,6 +24,7 @@ import {
 import { fetchFeedPosts, MobilePostItem, FeedStreamType } from '@/services/feed'
 import { getActiveStories, MobileStoryItem } from '@/services/stories'
 import { supabase } from '@/services/supabase'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import {
   Search,
   Bell,
@@ -46,6 +47,32 @@ export default function HomeFeedScreen() {
   const [page, setPage] = useState(1)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const viewedPostIds = useRef(new Set<string>())
+  const activeTabRef = useRef(activeTab)
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 500 }).current
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item: MobilePostItem }> }) => {
+    for (const viewable of viewableItems) {
+      const post = viewable.item
+      if (!post || viewedPostIds.current.has(post.id)) continue
+      viewedPostIds.current.add(post.id)
+      const currentTab = activeTabRef.current
+      const surface = currentTab === 'Following' ? 'following' : currentTab === 'Nearby' ? 'nearby' : 'for_you'
+      recommendationEventBuffer.enqueue({
+        surface,
+        event_type: 'recommendation_impression',
+        item_type: 'post',
+        item_id: post.id,
+        algorithm_version: post.algorithmVersion || (surface === 'following' ? 'feed_following_v1' : surface === 'nearby' ? 'feed_nearby_v1' : 'feed_foryou_v1'),
+        rank_position: post.rankPosition,
+        reason_codes: post.reasonCodes,
+      })
+    }
+  }).current
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+    viewedPostIds.current.clear()
+  }, [activeTab])
 
   const loadData = useCallback(
     async (pageNum = 1, isRefresh = false) => {
@@ -311,6 +338,8 @@ export default function HomeFeedScreen() {
           />
         }
         onEndReached={handleEndReached}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         onEndReachedThreshold={0.5}
         contentContainerStyle={styles.listContent}
       />

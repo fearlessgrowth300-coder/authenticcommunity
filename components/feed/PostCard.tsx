@@ -12,7 +12,7 @@ import { AppText } from '@/components/primitives/AppText'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import { PostMenuModal } from '@/components/feed/PostMenuModal'
 import { WhyAmISeeingThisModal } from '@/components/feed/WhyAmISeeingThisModal'
-import { togglePostLike, togglePostSave, MobilePostItem, dismissPost } from '@/services/feed'
+import { togglePostLike, togglePostSave, MobilePostItem, dismissPost, recordFeedInteraction } from '@/services/feed'
 import { followUser } from '@/services/socialGraph'
 import {
   Heart,
@@ -49,7 +49,10 @@ export const PostCard: React.FC<PostCardProps> = ({
     setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1)
 
     try {
-      await togglePostLike(post.id, prevLiked)
+      await togglePostLike(post.id, prevLiked, {
+        surface: post.recommendationSurface,
+        algorithmVersion: post.algorithmVersion,
+      })
     } catch {
       // Rollback on failure
       setIsLiked(prevLiked)
@@ -62,7 +65,10 @@ export const PostCard: React.FC<PostCardProps> = ({
     setIsSaved(!prevSaved)
 
     try {
-      await togglePostSave(post.id, prevSaved)
+      await togglePostSave(post.id, prevSaved, {
+        surface: post.recommendationSurface,
+        algorithmVersion: post.algorithmVersion,
+      })
     } catch {
       setIsSaved(prevSaved)
     }
@@ -72,15 +78,24 @@ export const PostCard: React.FC<PostCardProps> = ({
     setIsFollowing(true)
     try {
       await followUser(post.authorId)
+      recordFeedInteraction({
+        interactionType: 'follow',
+        targetUserId: post.authorId,
+        surface: post.recommendationSurface,
+        algorithmVersion: post.algorithmVersion,
+      })
     } catch {
       setIsFollowing(false)
     }
   }
 
   const handleMenuAction = async (action: string) => {
-    if (action === 'hide' || action === 'not_interested') {
-      await dismissPost(post.id, action as any)
-      onPostDismissed?.(post.id)
+    if (action === 'hide' || action === 'not_interested' || action === 'see_fewer' || action === 'see_more') {
+      await dismissPost(post.id, action as any, {
+        surface: post.recommendationSurface,
+        algorithmVersion: post.algorithmVersion,
+      })
+      if (action !== 'see_more') onPostDismissed?.(post.id)
     }
   }
 
@@ -235,7 +250,17 @@ export const PostCard: React.FC<PostCardProps> = ({
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => Share.share({ message: post.text || 'View this post on Authentic Community.' })}
+            onPress={async () => {
+              const result = await Share.share({ message: post.text || 'View this post on Authentic Community.' })
+              if (result.action === Share.sharedAction) {
+                recordFeedInteraction({
+                  interactionType: 'share',
+                  postId: post.id,
+                  surface: post.recommendationSurface,
+                  algorithmVersion: post.algorithmVersion,
+                })
+              }
+            }}
             style={styles.actionItem}
             accessibilityLabel="Share post"
           >
@@ -271,6 +296,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         onClose={() => setWhyVisible(false)}
         topic={post.topic || 'Community'}
         location={post.location || 'Local area'}
+        reasons={post.whyReasons}
       />
     </View>
   )

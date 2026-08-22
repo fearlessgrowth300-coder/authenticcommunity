@@ -7,3 +7,5 @@ project_id = "sqzeghkabqhhhiuidnvd"
     verify_jwt = false
   [functions.ai-process-enrichment]
     verify_jwt = true
+  [functions.recommend-feed]
+    verify_jwt = true

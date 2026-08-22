@@ -23,6 +23,7 @@ interface WhyAmISeeingThisModalProps {
   onClose: () => void
   topic?: string
   location?: string
+  reasons?: string[]
 }
 
 export const WhyAmISeeingThisModal: React.FC<WhyAmISeeingThisModalProps> = ({
@@ -30,6 +31,7 @@ export const WhyAmISeeingThisModal: React.FC<WhyAmISeeingThisModalProps> = ({
   onClose,
   topic = 'Entrepreneurship',
   location = 'Lagos',
+  reasons,
 }) => {
   const router = useRouter()
 
@@ -64,6 +66,18 @@ export const WhyAmISeeingThisModal: React.FC<WhyAmISeeingThisModalProps> = ({
                 We prioritize transparent recommendations driven by your interests and local community.
               </AppText>
 
+              {reasons && reasons.length > 0 ? (
+                <View style={styles.reasonsList}>
+                  {reasons.slice(0, 4).map((reason) => (
+                    <View style={styles.reasonRow} key={reason}>
+                      <View style={styles.iconCircle}>
+                        <Sparkles color={Colors.primary} size={16} />
+                      </View>
+                      <AppText variant="bodySm" color={Colors.text} style={styles.reasonText}>{reason}</AppText>
+                    </View>
+                  ))}
+                </View>
+              ) : (
               <View style={styles.reasonsList}>
                 <View style={styles.reasonRow}>
                   <View style={styles.iconCircle}>
@@ -92,6 +106,7 @@ export const WhyAmISeeingThisModal: React.FC<WhyAmISeeingThisModalProps> = ({
                   </AppText>
                 </View>
               </View>
+              )}
 
               <AppButton
                 title="Manage Recommendations"

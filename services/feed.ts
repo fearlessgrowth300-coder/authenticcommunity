@@ -22,6 +22,11 @@ export interface MobilePostItem {
   isFollowing: boolean
   isConnection?: boolean
   score?: number
+  rankPosition?: number
+  reasonCodes?: string[]
+  whyReasons?: string[]
+  algorithmVersion?: string
+  recommendationSurface?: RecommendationSurface
 }
 
 export interface PostComment {
@@ -97,7 +102,84 @@ export async function recordFeedInteraction(params: {
 /**
  * Fetch real posts for Mobile Home feed with interest and value affinity scoring
  */
+function reasonLabel(code: string) {
+  const labels: Record<string, string> = {
+    explicit_interest: 'It matches an interest you selected',
+    learned_interest: 'It relates to topics you engage with',
+    relationship_strength: 'You interact with this person',
+    following: 'You follow this person',
+    shared_community: 'You share a community',
+    nearby: 'It is near your general area',
+    fresh_content: 'It was posted recently',
+    quality_content: 'It is creating useful community interaction',
+    discovery: 'It adds something new to your recommendations',
+  }
+  return labels[code] || 'It may help you discover a meaningful connection'
+}
+
+async function fetchServerFeedPosts(params: {
+  stream: FeedStreamType
+  page?: number
+  pageSize?: number
+}): Promise<{ posts: MobilePostItem[]; hasMore: boolean } | null> {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return null
+  const surface = params.stream === 'Following' ? 'following' : params.stream === 'Nearby' ? 'nearby' : 'for_you'
+  const { data, error } = await supabase.functions.invoke('recommend-feed', {
+    body: { surface, page: params.page || 1, page_size: params.pageSize || 10 },
+  })
+  if (error || !data || !Array.isArray(data.items)) return null
+
+  return {
+    hasMore: Boolean(data.has_more),
+    posts: data.items.map((item: any) => {
+      const created = new Date(item.created_at).getTime()
+      const ageHours = Math.max(0, Math.floor((Date.now() - created) / 3_600_000))
+      const reasonCodes = Array.isArray(item.reason_codes) ? item.reason_codes : []
+      return {
+        id: item.id,
+        authorId: item.authorId,
+        authorName: item.author_name,
+        authorAvatar: item.author_avatar || null,
+        isVerified: Boolean(item.is_verified),
+        location: item.location,
+        topic: item.topic,
+        timeAgo: ageHours < 1 ? 'Just now' : ageHours < 24 ? `${ageHours}h ago` : `${Math.floor(ageHours / 24)}d ago`,
+        text: item.text || '',
+        images: item.images || [],
+        videoUrl: item.video_url || undefined,
+        likesCount: Number(item.likes_count || 0),
+        commentsCount: Number(item.comments_count || 0),
+        isLiked: Boolean(item.is_liked),
+        isSaved: Boolean(item.is_saved),
+        isFollowing: Boolean(item.is_following),
+        isConnection: Boolean(item.is_connection),
+        score: Number(item.score || 0),
+        rankPosition: Number(item.rank_position || 0),
+        reasonCodes,
+        whyReasons: reasonCodes.map(reasonLabel),
+        algorithmVersion: item.algorithm_version || data.algorithm_version,
+        recommendationSurface: surface,
+      }
+    }),
+  }
+}
+
 export async function fetchFeedPosts(params: {
+  stream: FeedStreamType
+  page?: number
+  pageSize?: number
+}): Promise<{ posts: MobilePostItem[]; hasMore: boolean }> {
+  try {
+    const serverResult = await fetchServerFeedPosts(params)
+    if (serverResult) return serverResult
+  } catch {
+    // The deterministic local feed remains available during function rollout.
+  }
+  return fetchFeedPostsLegacy(params)
+}
+
+async function fetchFeedPostsLegacy(params: {
   stream: FeedStreamType
   page?: number
   pageSize?: number
@@ -380,7 +462,11 @@ export async function createNewPost(params: {
 /**
  * Toggle post like
  */
-export async function togglePostLike(postId: string, isCurrentlyLiked: boolean): Promise<boolean> {
+export async function togglePostLike(
+  postId: string,
+  isCurrentlyLiked: boolean,
+  telemetry?: { surface?: RecommendationSurface; algorithmVersion?: string },
+): Promise<boolean> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('Sign in to like posts.')
 
@@ -395,7 +481,7 @@ export async function togglePostLike(postId: string, isCurrentlyLiked: boolean):
     await (supabase as any)
       .from('post_likes')
       .upsert({ post_id: postId, user_id: auth.user.id })
-    recordFeedInteraction({ interactionType: 'like', postId })
+    recordFeedInteraction({ interactionType: 'like', postId, ...telemetry })
     return true
   }
 }
@@ -403,7 +489,11 @@ export async function togglePostLike(postId: string, isCurrentlyLiked: boolean):
 /**
  * Toggle post save
  */
-export async function togglePostSave(postId: string, isCurrentlySaved: boolean): Promise<boolean> {
+export async function togglePostSave(
+  postId: string,
+  isCurrentlySaved: boolean,
+  telemetry?: { surface?: RecommendationSurface; algorithmVersion?: string },
+): Promise<boolean> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('Sign in to save posts.')
 
@@ -420,7 +510,7 @@ export async function togglePostSave(postId: string, isCurrentlySaved: boolean):
       .from('post_saves')
       .upsert({ post_id: postId, user_id: auth.user.id })
     if (error) throw error
-    recordFeedInteraction({ interactionType: 'save', postId })
+    recordFeedInteraction({ interactionType: 'save', postId, ...telemetry })
     return true
   }
 }
@@ -507,10 +597,21 @@ export async function addPostComment(postId: string, text: string): Promise<Post
  */
 export async function dismissPost(
   postId: string,
-  actionType: 'hide' | 'not_interested' | 'see_fewer' | 'see_more'
+  actionType: 'hide' | 'not_interested' | 'see_fewer' | 'see_more',
+  telemetry?: { surface?: RecommendationSurface; algorithmVersion?: string },
 ) {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) return
+
+  recommendationEventBuffer.enqueue({
+    surface: telemetry?.surface || 'for_you',
+    event_type: actionType,
+    item_type: 'post',
+    item_id: postId,
+    algorithm_version: telemetry?.algorithmVersion || 'feed_foryou_v1',
+  })
+
+  if (actionType === 'see_more') return
 
   const { error } = await (supabase as any).from('content_dismissals').upsert({
     user_id: auth.user.id,

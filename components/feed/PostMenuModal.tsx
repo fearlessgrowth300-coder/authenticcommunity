@@ -65,6 +65,15 @@ export const PostMenuModal: React.FC<PostMenuModalProps> = ({
       },
     },
     {
+      id: 'see_fewer',
+      label: 'See fewer posts like this',
+      icon: <Flame color={Colors.textSecondary} size={20} />,
+      onPress: () => {
+        onAction?.('see_fewer')
+        onClose()
+      },
+    },
+    {
       id: 'mute',
       label: `Mute @${authorName.toLowerCase().replace(/\s+/g, '')}`,
       icon: <VolumeX color={Colors.textSecondary} size={20} />,
