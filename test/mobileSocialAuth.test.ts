@@ -18,10 +18,11 @@ describe('Mobile social authentication', () => {
     expect(source('app.json')).toContain('"scheme": "authentic"')
   })
 
-  it('offers working Google and Apple actions on login and signup', () => {
+  it('offers Google login and signup without exposing an unconfigured Apple action', () => {
     const buttons = source('components/auth/SocialAuthButtons.tsx')
     expect(buttons).toContain("handleSocialAuth('google')")
-    expect(buttons).toContain("handleSocialAuth('apple')")
+    expect(buttons).not.toContain("handleSocialAuth('apple')")
+    expect(buttons).not.toContain('Continue with Apple')
     expect(source('app/(auth)/login.tsx')).toContain('<SocialAuthButtons')
     expect(source('app/(auth)/signup.tsx')).toContain('<SocialAuthButtons')
     expect(source('app/(auth)/login.tsx')).not.toContain('Social login will be available soon')

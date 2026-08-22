@@ -46,19 +46,6 @@ export function SocialAuthButtons({ onError }: SocialAuthButtonsProps) {
           {loadingProvider === 'google' ? 'Connecting to Google…' : 'Continue with Google'}
         </AppText>
       </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.socialButton}
-        onPress={() => handleSocialAuth('apple')}
-        disabled={Boolean(loadingProvider)}
-        accessibilityRole="button"
-        accessibilityLabel="Continue with Apple"
-      >
-        <AppText variant="body" style={styles.appleIcon}>●</AppText>
-        <AppText variant="bodySm" weight="medium">
-          {loadingProvider === 'apple' ? 'Connecting to Apple…' : 'Continue with Apple'}
-        </AppText>
-      </TouchableOpacity>
     </View>
   )
 }
@@ -78,5 +65,4 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   googleIcon: { color: '#4285F4', fontWeight: 'bold' },
-  appleIcon: { color: Colors.text, fontSize: 18, lineHeight: 18 },
 })
