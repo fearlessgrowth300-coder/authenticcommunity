@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { recommendationEventBuffer, RecommendationSurface } from './recommendationEventBuffer'
 
 export type FeedStreamType = 'For You' | 'Following' | 'Nearby'
 
@@ -37,7 +38,8 @@ export interface PostComment {
 }
 
 /**
- * Record interaction telemetry in Supabase feed_interactions
+ * Queue safe recommendation telemetry. The authenticated database RPC derives
+ * user identity and validates every bounded batch.
  */
 export async function recordFeedInteraction(params: {
   interactionType:
@@ -50,28 +52,46 @@ export async function recordFeedInteraction(params: {
     | 'follow'
     | 'connect'
     | 'rsvp'
+  surface?: RecommendationSurface
+  algorithmVersion?: string
   postId?: string
   targetUserId?: string
   communityId?: string
   eventId?: string
   dwellTimeMs?: number
 }) {
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return
+  const target = params.postId
+    ? { item_type: 'post' as const, item_id: params.postId }
+    : params.targetUserId
+      ? { item_type: 'profile' as const, item_id: params.targetUserId }
+      : params.communityId
+        ? { item_type: 'community' as const, item_id: params.communityId }
+        : params.eventId
+          ? { item_type: 'event' as const, item_id: params.eventId }
+          : null
+  if (!target) return
 
-  try {
-    await (supabase as any).from('feed_interactions').insert({
-      user_id: auth.user.id,
-      interaction_type: params.interactionType,
-      post_id: params.postId || null,
-      target_user_id: params.targetUserId || null,
-      community_id: params.communityId || null,
-      event_id: params.eventId || null,
-      dwell_time_ms: params.dwellTimeMs || null,
-    })
-  } catch {
-    // Telemetry errors fail silently without interrupting UI
-  }
+  const eventMap = {
+    impression: 'recommendation_impression',
+    like: 'post_like',
+    comment: 'post_comment',
+    save: 'post_save',
+    share: 'post_share',
+    profile_open: 'profile_view',
+    follow: 'follow',
+    connect: 'connection_request',
+    rsvp: 'event_rsvp',
+  } as const
+  const surface = params.surface || 'for_you'
+  recommendationEventBuffer.enqueue({
+    surface,
+    event_type: eventMap[params.interactionType],
+    ...target,
+    algorithm_version: params.algorithmVersion || (
+      surface === 'following' ? 'feed_following_v1' : surface === 'nearby' ? 'feed_nearby_v1' : 'feed_foryou_v1'
+    ),
+    safe_metadata: params.dwellTimeMs ? { dwell_time_ms: params.dwellTimeMs } : undefined,
+  })
 }
 
 /**

@@ -9,6 +9,7 @@
     "jsx": "react-native",
     "noEmit": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,

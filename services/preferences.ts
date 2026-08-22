@@ -6,7 +6,10 @@ export type UserPreferences = {
   showOnlineStatus: boolean
   readReceipts: boolean
   discoveryArea: 'nearby' | 'country' | 'worldwide'
-  feedBalance: 'local' | 'balanced' | 'global'
+  feedBalance: 'local_first' | 'balanced' | 'global_heavy'
+  personalizationEnabled: boolean
+  explorationEnabled: boolean
+  recommendationResetAt: string | null
   learnedInterests: Array<{ id: string; name: string; strength: 'High' | 'Medium' | 'Low' }>
 }
 
@@ -17,6 +20,9 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   readReceipts: true,
   discoveryArea: 'nearby',
   feedBalance: 'balanced',
+  personalizationEnabled: true,
+  explorationEnabled: true,
+  recommendationResetAt: null,
   learnedInterests: [],
 }
 
@@ -38,7 +44,10 @@ export async function loadUserPreferences(): Promise<UserPreferences> {
     showOnlineStatus: data.show_online_status ?? true,
     readReceipts: data.read_receipts ?? true,
     discoveryArea: data.discovery_area || DEFAULT_USER_PREFERENCES.discoveryArea,
-    feedBalance: data.feed_balance || DEFAULT_USER_PREFERENCES.feedBalance,
+    feedBalance: data.feed_balance === 'local' ? 'local_first' : data.feed_balance === 'global' ? 'global_heavy' : data.feed_balance || DEFAULT_USER_PREFERENCES.feedBalance,
+    personalizationEnabled: data.personalization_enabled ?? true,
+    explorationEnabled: data.exploration_enabled ?? true,
+    recommendationResetAt: data.recommendation_reset_at || null,
     learnedInterests: Array.isArray(data.learned_interests) ? data.learned_interests : [],
   }
 }
@@ -57,12 +66,20 @@ export async function saveUserPreferences(preferences: Partial<UserPreferences>)
   if (preferences.readReceipts !== undefined) payload.read_receipts = preferences.readReceipts
   if (preferences.discoveryArea) payload.discovery_area = preferences.discoveryArea
   if (preferences.feedBalance) payload.feed_balance = preferences.feedBalance
+  if (preferences.personalizationEnabled !== undefined) payload.personalization_enabled = preferences.personalizationEnabled
+  if (preferences.explorationEnabled !== undefined) payload.exploration_enabled = preferences.explorationEnabled
   if (preferences.learnedInterests) payload.learned_interests = preferences.learnedInterests
 
   const { error } = await (supabase as any)
     .from('user_preferences')
     .upsert(payload, { onConflict: 'user_id' })
   if (error) throw error
+}
+
+export async function resetMyRecommendations() {
+  const { data, error } = await (supabase as any).rpc('reset_my_recommendations')
+  if (error) throw error
+  return data as string
 }
 
 export async function loadNotificationPreferences() {

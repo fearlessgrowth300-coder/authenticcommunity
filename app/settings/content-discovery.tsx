@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -13,12 +14,9 @@ import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
 import { supabase } from '@/services/supabase'
-import { loadUserPreferences, saveUserPreferences } from '@/services/preferences'
+import { loadUserPreferences, resetMyRecommendations, saveUserPreferences } from '@/services/preferences'
 import {
   ArrowLeft,
-  SlidersHorizontal,
-  Globe,
-  MapPin,
   RefreshCw,
   X,
   Sparkles,
@@ -28,7 +26,9 @@ export default function ContentDiscoverySettingsScreen() {
   const router = useRouter()
 
   const [discoveryArea, setDiscoveryArea] = useState<'nearby' | 'country' | 'worldwide'>('nearby')
-  const [feedBalance, setFeedBalance] = useState<'local' | 'balanced' | 'global'>('local')
+  const [feedBalance, setFeedBalance] = useState<'local_first' | 'balanced' | 'global_heavy'>('local_first')
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(true)
+  const [explorationEnabled, setExplorationEnabled] = useState(true)
 
   const [myInterests, setMyInterests] = useState<Array<{ id: string; name: string; strength: string }>>([])
 
@@ -38,6 +38,8 @@ export default function ContentDiscoverySettingsScreen() {
     Promise.all([supabase.auth.getUser(), loadUserPreferences()]).then(async ([auth, preferences]) => {
       setDiscoveryArea(preferences.discoveryArea)
       setFeedBalance(preferences.feedBalance)
+      setPersonalizationEnabled(preferences.personalizationEnabled)
+      setExplorationEnabled(preferences.explorationEnabled)
       setLearnedInterests(preferences.learnedInterests)
       if (auth.data.user) {
         const { data } = await supabase
@@ -73,13 +75,12 @@ export default function ContentDiscoverySettingsScreen() {
           onPress: async () => {
             const { data: auth } = await supabase.auth.getUser()
             if (!auth.user) return
-            const [interactions, dismissals] = await Promise.all([
-              (supabase as any).from('feed_interactions').delete().eq('user_id', auth.user.id),
+            const [reset, dismissals] = await Promise.all([
+              resetMyRecommendations().then(() => ({ error: null as Error | null })).catch((error) => ({ error: error as Error })),
               (supabase as any).from('content_dismissals').delete().eq('user_id', auth.user.id),
-              saveUserPreferences({ learnedInterests: [] }),
             ])
-            if (interactions.error || dismissals.error) {
-              Alert.alert('Reset Failed', interactions.error?.message || dismissals.error?.message || 'Please try again.')
+            if (reset.error || dismissals.error) {
+              Alert.alert('Reset Failed', reset.error?.message || dismissals.error?.message || 'Please try again.')
               return
             }
             setLearnedInterests([])
@@ -162,14 +163,14 @@ export default function ContentDiscoverySettingsScreen() {
 
           <View style={styles.pillGroup}>
             {[
-              { id: 'local', label: 'Local-First' },
+              { id: 'local_first', label: 'Local-First' },
               { id: 'balanced', label: 'Balanced' },
-              { id: 'global', label: 'Global-Heavy' },
+              { id: 'global_heavy', label: 'Global-Heavy' },
             ].map((item) => (
               <TouchableOpacity
                 key={item.id}
                 onPress={() => {
-                  const value = item.id as 'local' | 'balanced' | 'global'
+                  const value = item.id as 'local_first' | 'balanced' | 'global_heavy'
                   setFeedBalance(value)
                   saveUserPreferences({ feedBalance: value }).catch(() => Alert.alert('Could Not Save', 'Please try again.'))
                 }}
@@ -187,6 +188,51 @@ export default function ContentDiscoverySettingsScreen() {
                 </AppText>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <AppText variant="label" weight="bold">Personalized Recommendations</AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Use your selected interests and safe activity signals to improve recommendations.
+              </AppText>
+            </View>
+            <Switch
+              accessibilityLabel="Personalized recommendations"
+              value={personalizationEnabled}
+              onValueChange={(value) => {
+                setPersonalizationEnabled(value)
+                saveUserPreferences({ personalizationEnabled: value }).catch(() => {
+                  setPersonalizationEnabled(!value)
+                  Alert.alert('Could Not Save', 'Please try again.')
+                })
+              }}
+              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+              thumbColor={personalizationEnabled ? Colors.primary : Colors.textMuted}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <AppText variant="label" weight="bold">Discovery & Exploration</AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Include a small amount of adjacent content so your feed stays useful and varied.
+              </AppText>
+            </View>
+            <Switch
+              accessibilityLabel="Discovery and exploration recommendations"
+              value={explorationEnabled}
+              onValueChange={(value) => {
+                setExplorationEnabled(value)
+                saveUserPreferences({ explorationEnabled: value }).catch(() => {
+                  setExplorationEnabled(!value)
+                  Alert.alert('Could Not Save', 'Please try again.')
+                })
+              }}
+              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+              thumbColor={explorationEnabled ? Colors.primary : Colors.textMuted}
+            />
           </View>
         </View>
 
@@ -343,6 +389,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.surface,
+  },
+  toggleCopy: {
+    flex: 1,
+    gap: 3,
   },
   removeBtn: {
     padding: 4,
