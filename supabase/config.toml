@@ -21,3 +21,6 @@ verify_jwt = true
 
 [functions.recommend-events]
 verify_jwt = true
+
+[functions.search-recommendations]
+verify_jwt = true

@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '@/services/supabase'
+import { searchRecommendations, type SearchCategory } from '@/services/search'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
@@ -23,10 +25,12 @@ import {
   Compass,
   Calendar,
   FileText,
+  Play,
+  Tags,
   ChevronRight,
 } from 'lucide-react-native'
 
-const SEARCH_TABS = ['All', 'People', 'Hubs', 'Events', 'Posts'] as const
+const SEARCH_TABS = ['All', 'People', 'Communities', 'Events', 'Posts', 'Videos', 'Topics'] as const
 type SearchTab = (typeof SEARCH_TABS)[number]
 
 export default function GlobalSearchScreen() {
@@ -39,6 +43,9 @@ export default function GlobalSearchScreen() {
   const [communities, setCommunities] = useState<any[]>([])
   const [events, setEvents] = useState<any[]>([])
   const [posts, setPosts] = useState<any[]>([])
+  const [videos, setVideos] = useState<any[]>([])
+  const [topics, setTopics] = useState<any[]>([])
+  const [algorithmVersion, setAlgorithmVersion] = useState('search_v1')
 
   useEffect(() => {
     if (!query.trim()) {
@@ -46,6 +53,8 @@ export default function GlobalSearchScreen() {
       setCommunities([])
       setEvents([])
       setPosts([])
+      setVideos([])
+      setTopics([])
       return
     }
 
@@ -54,6 +63,26 @@ export default function GlobalSearchScreen() {
       const q = query.trim()
 
       try {
+        const selectedType: SearchCategory[] | undefined = activeTab === 'All'
+          ? undefined
+          : [activeTab.toLowerCase() === 'communities' ? 'communities' : activeTab.toLowerCase() as SearchCategory]
+        const ranked = await searchRecommendations(q, selectedType)
+        if (ranked) {
+          setPeople(ranked.people)
+          setCommunities(ranked.communities)
+          setEvents(ranked.events)
+          setPosts(ranked.posts)
+          setVideos(ranked.videos)
+          setTopics(ranked.topics)
+          setAlgorithmVersion(ranked.algorithmVersion)
+          recommendationEventBuffer.enqueue({
+            surface: 'search', event_type: 'recommendation_impression', item_type: 'search_result',
+            algorithm_version: ranked.algorithmVersion, safe_metadata: { query_category: ranked.intent.entityTypes.join(',').slice(0, 120), result_count: ranked.people.length + ranked.communities.length + ranked.events.length + ranked.posts.length + ranked.videos.length + ranked.topics.length },
+          })
+          return
+        }
+        setVideos([])
+        setTopics([])
         const [peopleRes, commRes, eventRes, postRes] = await Promise.all([
           supabase
             .from('profiles')
@@ -97,9 +126,14 @@ export default function GlobalSearchScreen() {
     }, 250)
 
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, activeTab])
 
-  const hasResults = people.length > 0 || communities.length > 0 || events.length > 0 || posts.length > 0
+  const hasResults = people.length > 0 || communities.length > 0 || events.length > 0 || posts.length > 0 || videos.length > 0 || topics.length > 0
+
+  const openSearchResult = (route: string) => {
+    recommendationEventBuffer.enqueue({ surface: 'search', event_type: 'recommendation_open', item_type: 'search_result', algorithm_version: algorithmVersion })
+    router.push(route as any)
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -128,7 +162,7 @@ export default function GlobalSearchScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.tabsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
         {SEARCH_TABS.map((tab) => (
           <TouchableOpacity
             key={tab}
@@ -144,7 +178,7 @@ export default function GlobalSearchScreen() {
             </AppText>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loading ? (
@@ -181,7 +215,7 @@ export default function GlobalSearchScreen() {
                   return (
                     <TouchableOpacity
                       key={p.user_id}
-                      onPress={() => router.push(`/profile/${p.user_id}`)}
+                      onPress={() => openSearchResult(`/profile/${p.user_id}`)}
                       style={styles.resultRow}
                     >
                       <Image
@@ -205,7 +239,7 @@ export default function GlobalSearchScreen() {
             )}
 
             {/* Hubs Section */}
-            {(activeTab === 'All' || activeTab === 'Hubs') && communities.length > 0 && (
+            {(activeTab === 'All' || activeTab === 'Communities') && communities.length > 0 && (
               <View style={styles.sectionBlock}>
                 <AppText variant="caption" weight="bold" color={Colors.textSecondary} style={styles.sectionHeader}>
                   COMMUNITY HUBS ({communities.length})
@@ -213,7 +247,7 @@ export default function GlobalSearchScreen() {
                 {communities.map((c) => (
                   <TouchableOpacity
                     key={c.id}
-                    onPress={() => router.push(`/community/${c.id}`)}
+                    onPress={() => openSearchResult(`/community/${c.id}`)}
                     style={styles.resultRow}
                   >
                     <View style={styles.iconCircle}>
@@ -238,7 +272,7 @@ export default function GlobalSearchScreen() {
                 {events.map((ev) => (
                   <TouchableOpacity
                     key={ev.id}
-                    onPress={() => router.push(`/event/${ev.id}`)}
+                    onPress={() => openSearchResult(`/event/${ev.id}`)}
                     style={styles.resultRow}
                   >
                     <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
@@ -261,7 +295,8 @@ export default function GlobalSearchScreen() {
                   DISCUSSIONS & POSTS ({posts.length})
                 </AppText>
                 {posts.map((post) => (
-                  <Card key={post.id} style={styles.postResultCard}>
+                  <TouchableOpacity key={post.id} onPress={() => openSearchResult(`/post/${post.id}`)}>
+                  <Card style={styles.postResultCard}>
                     <AppText variant="caption" weight="bold" color={Colors.primary}>
                       {post.profiles?.first_name} {post.profiles?.last_name}
                     </AppText>
@@ -269,6 +304,33 @@ export default function GlobalSearchScreen() {
                       {post.content}
                     </AppText>
                   </Card>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {(activeTab === 'All' || activeTab === 'Videos') && videos.length > 0 && (
+              <View style={styles.sectionBlock}>
+                <AppText variant="caption" weight="bold" color={Colors.textSecondary} style={styles.sectionHeader}>VIDEOS ({videos.length})</AppText>
+                {videos.map((video) => (
+                  <TouchableOpacity key={video.id} onPress={() => openSearchResult(`/video/${video.id}`)} style={styles.resultRow} accessibilityRole="button">
+                    <View style={styles.iconCircle}><Play color={Colors.primary} size={18} /></View>
+                    <View style={{ flex: 1 }}><AppText variant="bodySm" weight="bold" numberOfLines={2}>{video.content || 'Community video'}</AppText></View>
+                    <ChevronRight color={Colors.textMuted} size={18} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {(activeTab === 'All' || activeTab === 'Topics') && topics.length > 0 && (
+              <View style={styles.sectionBlock}>
+                <AppText variant="caption" weight="bold" color={Colors.textSecondary} style={styles.sectionHeader}>TOPICS ({topics.length})</AppText>
+                {topics.map((topic) => (
+                  <TouchableOpacity key={topic.name} onPress={() => setQuery(topic.name)} style={styles.resultRow} accessibilityRole="button">
+                    <View style={styles.iconCircle}><Tags color={Colors.primary} size={18} /></View>
+                    <AppText variant="bodySm" weight="bold" style={{ flex: 1 }}>{topic.name}</AppText>
+                    <ChevronRight color={Colors.textMuted} size={18} />
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
