@@ -12,6 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
+import { loadPrioritizedNotifications } from '@/services/notifications'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { Card } from '@/components/primitives/Card'
@@ -39,6 +41,8 @@ interface NotificationItem {
   time: string
   isToday: boolean
   isRead: boolean
+  priorityScore: number
+  algorithmVersion: string
 }
 
 export default function NotificationsScreen() {
@@ -53,11 +57,16 @@ export default function NotificationsScreen() {
     if (!user) return
     setLoading(true)
     try {
-      const { data } = await (supabase as any)
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      const ranked = await loadPrioritizedNotifications()
+      let data = ranked
+      if (ranked === null) {
+        const fallback = await (supabase as any)
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        data = fallback.data || []
+      }
 
       if (data && data.length > 0) {
         const today = new Date()
@@ -86,9 +95,19 @@ export default function NotificationsScreen() {
               : createdAt.toLocaleDateString([], { month: 'short', day: 'numeric' }),
             isToday,
             isRead: Boolean(n.is_read),
+            priorityScore: Number(n.priority_score || 45),
+            algorithmVersion: n.algorithm_version || 'notifications_v1',
           }
         })
         setNotifications(parsed)
+        parsed.forEach((item: NotificationItem, index: number) => {
+          recommendationEventBuffer.enqueue({
+            surface: 'notifications', event_type: 'recommendation_impression',
+            item_type: 'notification', item_id: item.id,
+            algorithm_version: item.algorithmVersion, rank_position: index + 1,
+            reason_codes: [`priority_${item.priorityScore}`],
+          })
+        })
       } else {
         setNotifications([])
       }
@@ -131,13 +150,24 @@ export default function NotificationsScreen() {
   }
 
   const markRead = async (id: string) => {
+    const item = notifications.find((notification) => notification.id === id)
     setNotifications((current) => current.map((item) => item.id === id ? { ...item, isRead: true } : item))
     await (supabase as any).from('notifications').update({ is_read: true }).eq('id', id).eq('user_id', user?.id)
+    recommendationEventBuffer.enqueue({
+      surface: 'notifications', event_type: 'recommendation_open', item_type: 'notification',
+      item_id: id, algorithm_version: item?.algorithmVersion || 'notifications_v1',
+      reason_codes: item ? [`priority_${item.priorityScore}`] : [],
+    })
   }
 
   const deleteNotification = async (id: string) => {
+    const item = notifications.find((notification) => notification.id === id)
     setNotifications((current) => current.filter((item) => item.id !== id))
     await (supabase as any).from('notifications').delete().eq('id', id).eq('user_id', user?.id)
+    recommendationEventBuffer.enqueue({
+      surface: 'notifications', event_type: 'hide', item_type: 'notification',
+      item_id: id, algorithm_version: item?.algorithmVersion || 'notifications_v1',
+    })
   }
 
   return (

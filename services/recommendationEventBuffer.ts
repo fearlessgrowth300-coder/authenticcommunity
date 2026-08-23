@@ -39,6 +39,8 @@ const ALLOWED_METADATA = new Set([
 const DEFAULT_BATCH_SIZE = 20
 const DEFAULT_FLUSH_INTERVAL_MS = 10_000
 const MAX_BUFFER_SIZE = 100
+const LEARNING_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+let lastLearningRefreshAt = 0
 
 function createSessionId() {
   return `mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -94,6 +96,10 @@ export class RecommendationEventBuffer {
         if (this.events.length > MAX_BUFFER_SIZE) this.events.length = MAX_BUFFER_SIZE
         this.scheduleFlush()
         return false
+      }
+      if (Date.now() - lastLearningRefreshAt >= LEARNING_REFRESH_INTERVAL_MS) {
+        lastLearningRefreshAt = Date.now()
+        void (supabase as any).rpc('refresh_my_recommendation_learning')
       }
       if (this.events.length > 0) this.scheduleFlush()
       return true
