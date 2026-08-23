@@ -22,13 +22,12 @@ Production migrations AI-0 through AI-8 were run successfully in project `sqzegh
 
 The database is live. `ai-process-enrichment`, `recommend-feed`, `recommend-stories`, `recommend-videos`, `recommend-people`, `recommend-communities`, `recommend-events`, and `search-recommendations` were deployed on 2026-08-23. Supabase reports every function `ACTIVE` with JWT verification enabled, and an unauthenticated probe against every endpoint returned HTTP 401.
 
-The Gemini secret is not configured. Until it is added, Gemini enrichment, semantic query embedding, AI explanations, and AI conversation starters remain unavailable; mobile services and Edge endpoints retain deterministic/text fallbacks.
+The Gemini secret is configured only in Supabase Edge Function Secrets. A temporary isolated server health check confirmed HTTP 200 from Flash-Lite generation and Embedding 2 with exactly 768 dimensions; the health function was deleted immediately. A production enrichment invocation then claimed and completed one queued public-content job successfully.
 
 Required production operations:
 
-1. Configure `GEMINI_API_KEY` in Supabase Edge Function Secrets when the key is available.
-2. Keep `AI_ENABLED=false` available as the operational kill switch.
-3. Run the two-account physical Android validation matrix below.
+1. Keep `AI_ENABLED=false` available as the operational kill switch.
+2. Run the two-account physical Android validation matrix below.
 
 ## Automated verification
 
@@ -36,6 +35,9 @@ Required production operations:
 - Vitest: provider, embeddings, retries, privacy sanitizer, eligibility, score weights, diversity, feedback, reset, RLS source contracts, Search, Notifications, and mobile integrations pass without a real Gemini call.
 - Android: Expo production export succeeds.
 - Secret scan: no Google-style Gemini key pattern is tracked.
+- Live authenticated smoke: all recommendation/search endpoints returned HTTP 200 and their expected algorithm versions. Local/global cold-start results correctly returned available Communities and Events; empty surfaces returned valid empty arrays rather than errors.
+- Live Gemini: generation, 768-dimensional embedding, and one queued public-content enrichment completed successfully.
+- Test hygiene: the temporary authentication member and temporary AI health function were removed.
 
 ## Physical Android validation still required
 
@@ -47,4 +49,4 @@ Redeploy the prior Edge Function commit and reactivate the prior algorithm versi
 
 ## Final status
 
-Code, live schema, and Edge deployment are production-structured. Full AI acceptance remains gated on Gemini secret configuration and physical two-account Android testing.
+Code, live schema, Edge deployment, Gemini generation/embedding, and authenticated algorithm smoke tests are production-structured. Final release acceptance remains gated only on physical two-account Android testing.

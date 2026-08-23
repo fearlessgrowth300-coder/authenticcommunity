@@ -73,7 +73,7 @@ The current dataset is small, so vector similarity uses exact cosine search. An 
 
 ## Deployment state
 
-All forward migrations through AI-8 were validated against the production Supabase database on 2026-08-23. Content enrichment and all seven recommendation/search Edge endpoints were deployed and verified `ACTIVE` with JWT enforcement. `GEMINI_API_KEY` was not configured during the audit, so Gemini-backed work remains unavailable until the secret is added. Deterministic fallbacks remain available.
+All forward migrations through AI-8 were validated against the production Supabase database on 2026-08-23. Content enrichment and all seven recommendation/search Edge endpoints were deployed and verified `ACTIVE` with JWT enforcement. `GEMINI_API_KEY` is configured only in Supabase Edge Function Secrets. Live checks succeeded for Flash-Lite generation, a 768-dimensional Embedding 2 response, and a queued public-content enrichment job. Deterministic fallbacks remain available for provider outages or the `AI_ENABLED=false` kill switch.
 
 ## Surface rankers
 
