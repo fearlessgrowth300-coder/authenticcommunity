@@ -16,6 +16,7 @@ import { AppButton } from '@/components/primitives/AppButton'
 import { AppInput } from '@/components/primitives/AppInput'
 import { Card } from '@/components/primitives/Card'
 import { Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native'
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons'
 
 export default function SignupScreen() {
   const router = useRouter()
@@ -223,6 +224,16 @@ export default function SignupScreen() {
               loading={loading}
               style={styles.submitButton}
             />
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <AppText variant="caption" color={Colors.textMuted} style={styles.dividerText}>
+                or continue with
+              </AppText>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <SocialAuthButtons onError={setError} />
           </Card>
 
           {/* Footer Navigation */}
@@ -301,6 +312,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.md,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  dividerText: { marginHorizontal: Spacing.sm },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

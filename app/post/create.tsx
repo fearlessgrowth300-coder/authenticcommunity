@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
@@ -21,6 +21,7 @@ import { AppText } from '@/components/primitives/AppText'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import { createNewPost } from '@/services/feed'
 import { uploadMediaFile } from '@/services/mediaUpload'
+import { supabase } from '@/services/supabase'
 import {
   X,
   Globe,
@@ -45,19 +46,45 @@ const AUDIENCES = [
 
 export default function CreatePostScreen() {
   const router = useRouter()
-  const { type } = useLocalSearchParams<{ type?: string }>()
+  const { type, communityId } = useLocalSearchParams<{ type?: string; communityId?: string }>()
   const { profile } = useAuth()
 
   const [text, setText] = useState('')
   const [mediaUri, setMediaUri] = useState<string | null>(null)
   const [mediaBase64, setMediaBase64] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<'photo' | 'video'>('photo')
-  const [selectedAudience, setSelectedAudience] = useState(AUDIENCES[0])
+  const [selectedAudience, setSelectedAudience] = useState(
+    communityId ? AUDIENCES.find((audience) => audience.id === 'community') || AUDIENCES[0] : AUDIENCES[0]
+  )
   const [audienceModalVisible, setAudienceModalVisible] = useState(false)
   const [locationTag, setLocationTag] = useState<string | null>(
     profile?.location_city ? `${profile.location_city}, ${profile.location_country || ''}` : 'Local'
   )
   const [posting, setPosting] = useState(false)
+  const [interestTags, setInterestTags] = useState<string[]>([])
+  const [joinedCommunities, setJoinedCommunities] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string | undefined>(communityId)
+
+  useEffect(() => {
+    const loadComposerContext = async () => {
+      const { data: auth } = await supabase.auth.getUser()
+      if (!auth.user) return
+      const [interests, memberships] = await Promise.all([
+        (supabase as any).from('user_interests').select('interest_name').eq('user_id', auth.user.id).limit(5),
+        (supabase as any).from('community_members').select('community_id').eq('user_id', auth.user.id).eq('status', 'active'),
+      ])
+      setInterestTags((interests.data || []).map((item: any) => item.interest_name).filter(Boolean))
+      const communityIds = (memberships.data || []).map((item: any) => item.community_id)
+      if (communityIds.length) {
+        const { data } = await (supabase as any)
+          .from('communities')
+          .select('id, community_name')
+          .in('id', communityIds)
+        setJoinedCommunities((data || []).map((item: any) => ({ id: item.id, name: item.community_name })))
+      }
+    }
+    loadComposerContext()
+  }, [])
 
   const handlePickMedia = async (mediaTypeToPick: 'photo' | 'video') => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -75,6 +102,10 @@ export default function CreatePostScreen() {
 
   const handlePost = async () => {
     if (!text.trim() && !mediaUri) return
+    if (selectedAudience.id === 'community' && !selectedCommunityId) {
+      Alert.alert('Choose a Community', 'Select one of your joined communities before posting.')
+      return
+    }
     setPosting(true)
 
     try {
@@ -101,8 +132,9 @@ export default function CreatePostScreen() {
         audience: selectedAudience.id as any,
         locationLabel: locationTag || undefined,
         mediaUrls: uploadedUrl ? [uploadedUrl] : [],
-        contentType: mediaType === 'video' ? 'video' : 'image',
-        interestTags: (profile as any)?.interests?.slice(0, 3) || ['Community'],
+        contentType: mediaUri ? (mediaType === 'video' ? 'video' : 'image') : 'text',
+        interestTags: interestTags.length ? interestTags.slice(0, 3) : ['Community'],
+        communityId: selectedAudience.id === 'community' ? selectedCommunityId : undefined,
       })
 
       if (result?.id) {
@@ -223,6 +255,29 @@ export default function CreatePostScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          {selectedAudience.id === 'community' && (
+            <View style={styles.communityPicker}>
+              <AppText variant="label" weight="bold">Post in</AppText>
+              {joinedCommunities.length ? joinedCommunities.map((community) => (
+                <TouchableOpacity
+                  key={community.id}
+                  onPress={() => setSelectedCommunityId(community.id)}
+                  style={[styles.communityOption, selectedCommunityId === community.id && styles.communityOptionSelected]}
+                >
+                  <Users color={selectedCommunityId === community.id ? Colors.primary : Colors.textMuted} size={18} />
+                  <AppText variant="bodySm" weight={selectedCommunityId === community.id ? 'bold' : 'normal'}>
+                    {community.name}
+                  </AppText>
+                  {selectedCommunityId === community.id ? <Check color={Colors.primary} size={18} /> : null}
+                </TouchableOpacity>
+              )) : (
+                <AppText variant="caption" color={Colors.textSecondary}>
+                  Join a community before publishing community-only posts.
+                </AppText>
+              )}
+            </View>
+          )}
         </ScrollView>
 
         {/* Bottom Attachment Toolbar */}
@@ -259,7 +314,7 @@ export default function CreatePostScreen() {
             <Calendar color={Colors.amber} size={22} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.toolbarBtn} accessibilityLabel="Add emoji">
+          <TouchableOpacity onPress={() => setText((current) => `${current}${current ? ' ' : ''}😊`)} style={styles.toolbarBtn} accessibilityLabel="Add emoji">
             <Smile color={Colors.textSecondary} size={22} />
           </TouchableOpacity>
         </View>
@@ -422,6 +477,25 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignSelf: 'flex-start',
     marginTop: Spacing.sm,
+  },
+  communityPicker: {
+    marginTop: Spacing.lg,
+    gap: 8,
+  },
+  communityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  communityOptionSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
   },
   toolbar: {
     flexDirection: 'row',

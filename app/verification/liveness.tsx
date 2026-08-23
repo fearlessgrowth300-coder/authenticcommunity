@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -19,16 +22,29 @@ import {
 
 export default function VerificationLivenessScreen() {
   const router = useRouter()
-  const [step, setStep] = useState<'position' | 'processing' | 'done'>('position')
+  const { country = 'NG', documentType = 'passport' } = useLocalSearchParams<{
+    country?: string
+    documentType?: string
+  }>()
+  const [step, setStep] = useState<'position' | 'processing'>('position')
 
-  const handleStartCheck = () => {
+  const handleStartCheck = async () => {
     setStep('processing')
-    setTimeout(() => {
-      setStep('done')
-      setTimeout(() => {
-        router.replace('/verification/result')
-      }, 1000)
-    }, 2000)
+    try {
+      const { data, error } = await supabase.functions.invoke('identity-verify-session', {
+        body: { documentCountry: country, documentType },
+      })
+      if (error) throw error
+      if (data?.provider && data.provider !== 'mock' && data?.url) {
+        const supported = await Linking.canOpenURL(data.url)
+        if (!supported) throw new Error('The verification provider could not be opened.')
+        await Linking.openURL(data.url)
+      }
+      router.replace('/verification/result')
+    } catch (error: any) {
+      setStep('position')
+      Alert.alert('Verification Unavailable', error?.message || 'Please try again later.')
+    }
   }
 
   return (
@@ -50,8 +66,6 @@ export default function VerificationLivenessScreen() {
           <View style={styles.faceCircleInner}>
             {step === 'processing' ? (
               <ActivityIndicator size="large" color={Colors.primary} />
-            ) : step === 'done' ? (
-              <ShieldCheck color={Colors.sage} size={54} />
             ) : (
               <Smile color={Colors.primary} size={64} />
             )}
@@ -63,16 +77,12 @@ export default function VerificationLivenessScreen() {
           <AppText variant="h2" weight="bold" align="center">
             {step === 'processing'
               ? 'Verifying Liveness...'
-              : step === 'done'
-              ? 'Liveness Confirmed ✓'
-              : 'Position Your Face in the Circle'}
+              : 'Continue With Secure Verification'}
           </AppText>
           <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.subText}>
             {step === 'processing'
               ? 'Please hold still while we verify your biometrics.'
-              : step === 'done'
-              ? 'Analyzing encrypted identity credentials...'
-              : 'Ensure good lighting and look directly into the camera.'}
+              : 'Your verification provider will securely capture your face and perform the liveness check.'}
           </AppText>
         </View>
       </View>

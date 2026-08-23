@@ -17,6 +17,7 @@ import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { Card } from '@/components/primitives/Card'
+import { Skeleton } from '@/components/primitives/Skeleton'
 import { VerifiedBadge } from '@/components/primitives/VerifiedBadge'
 import {
   Search,
@@ -177,7 +178,7 @@ export default function MessagesHomeScreen() {
       // 4. Fetch joined communities
       const { data: commMembers } = await supabase
         .from('community_members')
-        .select('community_id, communities(id, community_name, photo_url)')
+        .select('community_id, communities(id, community_name, profile_image_url)')
         .eq('user_id', user.id)
 
       if (commMembers && commMembers.length > 0) {
@@ -185,7 +186,7 @@ export default function MessagesHomeScreen() {
           commMembers.map((cm: any) => ({
             id: cm.communities?.id || cm.community_id,
             name: cm.communities?.community_name || 'Community Channel',
-            avatarUrl: cm.communities?.photo_url || null,
+            avatarUrl: cm.communities?.profile_image_url || null,
             lastMessage: 'Tap to join active channel discussions',
             time: '',
           }))
@@ -207,10 +208,8 @@ export default function MessagesHomeScreen() {
 
   const handleAcceptRequest = async (item: MessageRequestItem) => {
     try {
-      await (supabase as any)
-        .from('message_requests')
-        .update({ status: 'accepted' })
-        .eq('id', item.id)
+      const { error } = await (supabase as any).rpc('accept_message_request', { p_request_id: item.id })
+      if (error) throw error
 
       setRequests((prev) => prev.filter((r) => r.id !== item.id))
       setChats((prev) => [
@@ -325,7 +324,17 @@ export default function MessagesHomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 24 }} />
+          <View style={styles.loadingRows} accessibilityLabel="Loading conversations">
+            {[0, 1, 2, 3].map((item) => (
+              <View key={item} style={styles.loadingRow}>
+                <Skeleton width={48} height={48} borderRadius={24} />
+                <View style={styles.loadingTextColumn}>
+                  <Skeleton width="45%" height={14} />
+                  <Skeleton width="80%" height={12} />
+                </View>
+              </View>
+            ))}
+          </View>
         ) : activeTab === 'Chats' ? (
           filteredChats.length === 0 ? (
             <View style={styles.emptyState}>
@@ -542,6 +551,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.xxl,
+  },
+  loadingRows: {
+    gap: 16,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingTextColumn: {
+    flex: 1,
+    gap: 8,
   },
   emptyState: {
     alignItems: 'center',

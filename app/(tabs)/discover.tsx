@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -17,6 +17,7 @@ import {
   fetchDiscoverCommunities,
   fetchDiscoverEvents,
   fetchDiscoverVideos,
+  recordPeopleRecommendationFeedback,
   DiscoverVideoItem,
 } from '@/services/discover'
 import { Colors, Spacing, Radii } from '@/constants/theme'
@@ -27,6 +28,7 @@ import { SortMenuModal, SortOption } from '@/components/matches/SortMenuModal'
 import { CommunityCard, CommunityItem } from '@/components/communities/CommunityCard'
 import { EventCard, EventItem } from '@/components/events/EventCard'
 import { Card } from '@/components/primitives/Card'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import {
   Search,
   SlidersHorizontal,
@@ -56,6 +58,12 @@ export default function DiscoverScreen() {
   const [communities, setCommunities] = useState<CommunityItem[]>([])
   const [events, setEvents] = useState<EventItem[]>([])
   const [videos, setVideos] = useState<DiscoverVideoItem[]>([])
+  const impressedVideos = useRef(new Set<string>())
+  const impressedPeople = useRef(new Set<string>())
+  const impressedCommunities = useRef(new Set<string>())
+  const impressedEvents = useRef(new Set<string>())
+  const [savedPeople, setSavedPeople] = useState(() => new Set<string>())
+  const [hiddenPeople, setHiddenPeople] = useState(() => new Set<string>())
 
   const [filters, setFilters] = useState<FilterState>({
     distance: '25 mi',
@@ -64,6 +72,7 @@ export default function DiscoverScreen() {
     selectedValues: [],
     verifiedOnly: false,
     minMatchScore: 60,
+    discoveryArea: 'nearby',
   })
 
   const loadDiscoverData = async () => {
@@ -100,7 +109,12 @@ export default function DiscoverScreen() {
   }
 
   // Filter and sort matches
+  const currentCountry = (user?.user_metadata?.country || user?.user_metadata?.location_country || '').toLowerCase()
+  const distanceLimitKm = Number.parseInt(filters.distance, 10) * 1.60934
+  const [minAge, maxAge] = filters.ageRange.replace('+', '').split('-').map((value) => Number.parseInt(value, 10))
+
   const filteredMatches = matches
+    .filter((m) => !hiddenPeople.has(m.id))
     .filter((m) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase()
@@ -116,7 +130,20 @@ export default function DiscoverScreen() {
     .filter((m) => {
       if (filters.verifiedOnly && !m.isVerified) return false
       if (m.matchScore < filters.minMatchScore) return false
+      if (Number.isFinite(minAge) && m.age < minAge) return false
+      if (Number.isFinite(maxAge) && m.age > maxAge) return false
+      if (filters.discoveryArea === 'nearby' && m.distanceKm !== null && m.distanceKm !== undefined && m.distanceKm > distanceLimitKm) return false
+      if (filters.discoveryArea === 'country' && currentCountry && m.country?.toLowerCase() !== currentCountry) return false
+      if (filters.selectedInterests.length > 0 && !filters.selectedInterests.some((interest) => m.sharedInterests.some((shared) => shared.toLowerCase() === interest.toLowerCase()))) return false
+      if (filters.selectedValues.length > 0 && !filters.selectedValues.some((value) => m.sharedValues.some((shared) => shared.toLowerCase() === value.toLowerCase()))) return false
       return true
+    })
+    .sort((a, b) => {
+      if (currentSort === 'nearest') return (a.distanceKm ?? Number.MAX_SAFE_INTEGER) - (b.distanceKm ?? Number.MAX_SAFE_INTEGER)
+      if (currentSort === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      if (currentSort === 'shared_values') return b.sharedValues.length - a.sharedValues.length
+      if (currentSort === 'most_active') return b.matchScore - a.matchScore
+      return b.matchScore - a.matchScore
     })
 
   const filteredCommunities = communities.filter((c) => {
@@ -142,6 +169,58 @@ export default function DiscoverScreen() {
     }
     return true
   })
+
+  useEffect(() => {
+    if (activeTab !== 'People') return
+    for (const candidate of filteredMatches.slice(0, 6)) {
+      if (impressedPeople.current.has(candidate.id)) continue
+      impressedPeople.current.add(candidate.id)
+      void recordPeopleRecommendationFeedback(candidate.id, 'viewed', candidate).catch(() => undefined)
+    }
+  }, [activeTab, filteredMatches])
+
+  useEffect(() => {
+    if (activeTab !== 'Videos') return
+    for (const video of filteredVideos.slice(0, 6)) {
+      if (impressedVideos.current.has(video.id)) continue
+      impressedVideos.current.add(video.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'videos',
+        event_type: 'recommendation_impression',
+        item_type: 'video',
+        item_id: video.id,
+        algorithm_version: video.algorithmVersion || 'video_v1',
+        rank_position: video.rankPosition,
+        reason_codes: video.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredVideos])
+
+  useEffect(() => {
+    if (activeTab !== 'Communities') return
+    for (const community of filteredCommunities.slice(0, 8)) {
+      if (impressedCommunities.current.has(community.id)) continue
+      impressedCommunities.current.add(community.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'communities', event_type: 'recommendation_impression', item_type: 'community',
+        item_id: community.id, algorithm_version: community.algorithmVersion || 'communities_local_v1',
+        rank_position: community.rankPosition, reason_codes: community.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredCommunities])
+
+  useEffect(() => {
+    if (activeTab !== 'Events') return
+    for (const event of filteredEvents.slice(0, 8)) {
+      if (impressedEvents.current.has(event.id)) continue
+      impressedEvents.current.add(event.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'recommendation_impression', item_type: 'event',
+        item_id: event.id, algorithm_version: event.algorithmVersion || 'events_v1',
+        rank_position: event.rankPosition, reason_codes: event.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredEvents])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -259,8 +338,30 @@ export default function DiscoverScreen() {
                     <MatchCard
                       key={cand.id}
                       profile={cand}
-                      onPressDetails={() => router.push(`/profile/${cand.id}`)}
-                      onConnect={() => router.push(`/profile/${cand.id}`)}
+                      isSaved={savedPeople.has(cand.id)}
+                      onPressDetails={() => {
+                        void recordPeopleRecommendationFeedback(cand.id, 'profile_open', cand).catch(() => undefined)
+                        router.push(`/profile/${cand.id}`)
+                      }}
+                      onPass={() => {
+                        setHiddenPeople((current) => new Set(current).add(cand.id))
+                        void recordPeopleRecommendationFeedback(cand.id, 'passed', cand).catch(() => undefined)
+                      }}
+                      onSave={() => {
+                        setSavedPeople((current) => {
+                          const next = new Set(current)
+                          if (next.has(cand.id)) next.delete(cand.id)
+                          else next.add(cand.id)
+                          return next
+                        })
+                        if (!savedPeople.has(cand.id)) {
+                          void recordPeopleRecommendationFeedback(cand.id, 'saved', cand).catch(() => undefined)
+                        }
+                      }}
+                      onConnect={() => {
+                        void recordPeopleRecommendationFeedback(cand.id, 'profile_open', cand).catch(() => undefined)
+                        router.push(`/profile/${cand.id}`)
+                      }}
                     />
                   ))
                 )}
@@ -284,7 +385,13 @@ export default function DiscoverScreen() {
                     <CommunityCard
                       key={c.id}
                       community={c}
-                      onPress={() => router.push(`/community/${c.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'communities', event_type: 'community_view', item_type: 'community', item_id: c.id,
+                          algorithm_version: c.algorithmVersion || 'communities_local_v1', rank_position: c.rankPosition, reason_codes: c.reasonCodes,
+                        })
+                        router.push(`/community/${c.id}`)
+                      }}
                     />
                   ))
                 )}
@@ -308,7 +415,13 @@ export default function DiscoverScreen() {
                     <EventCard
                       key={e.id}
                       event={e}
-                      onPress={() => router.push(`/event/${e.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'events', event_type: 'event_view', item_type: 'event', item_id: e.id,
+                          algorithm_version: e.algorithmVersion || 'events_v1', rank_position: e.rankPosition, reason_codes: e.reasonCodes,
+                        })
+                        router.push(`/event/${e.id}`)
+                      }}
                     />
                   ))
                 )}
@@ -332,8 +445,21 @@ export default function DiscoverScreen() {
                     <TouchableOpacity
                       key={v.id}
                       activeOpacity={0.88}
-                      onPress={() => router.push(`/video/${v.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'videos',
+                          event_type: 'recommendation_open',
+                          item_type: 'video',
+                          item_id: v.id,
+                          algorithm_version: v.algorithmVersion || 'video_v1',
+                          rank_position: v.rankPosition,
+                          reason_codes: v.reasonCodes,
+                        })
+                        router.push(`/video/${v.id}`)
+                      }}
                       style={styles.videoCard}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Watch ${v.title} by ${v.authorName}`}
                     >
                       <Image source={{ uri: v.thumbnail }} style={styles.videoThumb} />
                       <View style={styles.videoPlayBadge}>

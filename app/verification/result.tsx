@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -15,42 +16,60 @@ import { Card } from '@/components/primitives/Card'
 import {
   BadgeCheck,
   ShieldCheck,
+  AlertCircle,
+  Clock,
 } from 'lucide-react-native'
 
 export default function VerificationResultScreen() {
   const router = useRouter()
   const { user } = useAuth()
 
+  const [status, setStatus] = useState<'loading' | 'verified' | 'pending' | 'retry' | 'failed' | 'expired' | 'revoked'>('loading')
+  const [verifiedAt, setVerifiedAt] = useState<string | null>(null)
   useEffect(() => {
     if (!user) return
-    supabase
-      .from('profiles')
-      .update({
-        is_verified: true,
-        identity_verified: true,
-      })
+    ;(supabase as any)
+      .from('identity_verifications')
+      .select('status, identity_verified, verified_at')
       .eq('user_id', user.id)
-      .then(() => {})
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (data?.status === 'verified' && data?.identity_verified) { setStatus('verified'); setVerifiedAt(data.verified_at || null) }
+        else if (['pending', 'manual_review'].includes(data?.status)) setStatus('pending')
+        else if (['failed', 'expired', 'revoked'].includes(data?.status)) setStatus(data.status)
+        else setStatus('retry')
+      })
   }, [user])
 
   const handleFinish = () => {
     router.replace('/(tabs)/profile')
   }
 
+  const title = status === 'verified' ? 'Identity Verified!' : status === 'pending' ? 'Verification Pending' : status === 'expired' ? 'Verification Expired' : status === 'revoked' ? 'Verification Revoked' : status === 'failed' ? 'Verification Failed' : 'Verification Needs Attention'
+  const isSuccess = status === 'verified'
+  const isPending = status === 'pending'
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.content}>
-        {/* Success Icon */}
-        <View style={styles.successCircle}>
-          <BadgeCheck color={Colors.sage} size={64} strokeWidth={2} />
-        </View>
+        {status === 'loading' ? <ActivityIndicator size="large" color={Colors.primary} /> : <View style={[styles.successCircle, !isSuccess && styles.attentionCircle]}>
+          {isSuccess ? <BadgeCheck color={Colors.sage} size={64} strokeWidth={2} /> : isPending ? <Clock color={Colors.amber} size={58} /> : <AlertCircle color={Colors.danger} size={58} />}
+        </View>}
 
         <AppText variant="h1" weight="bold" align="center">
-          Identity Verified!
+          {status === 'loading' ? 'Checking Verification…' : title}
         </AppText>
 
         <AppText variant="bodySm" color={Colors.textSecondary} align="center" style={styles.subText}>
-          Congratulations! Your official verification badge is now active across your profile, matching feed, and community messages.
+          {status === 'verified'
+            ? 'Your verified badge is active across your profile and community messages.'
+            : status === 'pending'
+            ? 'Your secure verification was submitted. We will notify you after the provider or safety team completes review.'
+            : status === 'revoked'
+            ? 'Your verified badge was revoked after a safety review. Contact support if you believe this is an error.'
+            : status === 'expired'
+            ? 'Your verification session expired before completion. Start a new secure check.'
+            : 'We could not confirm a completed verification. Please retry when you are ready.'}
         </AppText>
 
         <Card style={styles.badgeSummaryCard}>
@@ -58,10 +77,10 @@ export default function VerificationResultScreen() {
             <ShieldCheck color={Colors.primary} size={22} />
             <View style={styles.badgeSummaryText}>
               <AppText variant="bodySm" weight="bold">
-                Authentic Verified Member
+                {status === 'verified' ? 'Authentic Verified Member' : status === 'pending' ? 'Pending Provider Review' : 'Not Yet Verified'}
               </AppText>
               <AppText variant="caption" color={Colors.textSecondary}>
-                Verified on {new Date().toLocaleDateString()}
+                {status === 'verified' ? `Verified on ${verifiedAt ? new Date(verifiedAt).toLocaleDateString() : 'provider approval'}` : 'No badge is shown until approval'}
               </AppText>
             </View>
           </View>
@@ -70,8 +89,8 @@ export default function VerificationResultScreen() {
 
       <View style={styles.bottomBar}>
         <AppButton
-          title="Back to My Profile"
-          onPress={handleFinish}
+          title={['retry', 'failed', 'expired'].includes(status) ? 'Retry Verification' : 'Back to My Profile'}
+          onPress={['retry', 'failed', 'expired'].includes(status) ? () => router.replace('/verification/country') : handleFinish}
           style={styles.finishBtn}
         />
       </View>
@@ -102,6 +121,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#86EFAC',
   },
+  attentionCircle: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
   subText: {
     lineHeight: 21,
     paddingHorizontal: Spacing.md,

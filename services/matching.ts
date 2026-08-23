@@ -15,6 +15,11 @@ export type MatchInput = {
   myGoal?: string | null
   sharedCommunities?: number
   behavioralAffinity?: number
+  semanticSimilarity?: number
+  candidateSocialPreference?: string | null
+  mySocialPreference?: string | null
+  candidateAvailability?: string | null
+  myAvailability?: string | null
 }
 
 const norm = (value: string) => value.trim().toLowerCase()
@@ -53,8 +58,11 @@ export type MatchScoreResult = {
     interests: number
     location: number
     community: number
-    goals: number
+    social: number
+    activity: number
     trust: number
+    feedback: number
+    semanticAssist: number
   }
   geographicTier: 'same_city' | 'same_region' | 'same_country' | 'international'
 }
@@ -77,12 +85,17 @@ export function calculateMatchScore(input: MatchInput): MatchScoreResult {
     sharedValues.length / Math.max(1, Math.min(input.myValues.length, input.candidateValues.length))
   const values = Math.round(valuesRatio * 30)
 
-  // 2. Interests score (up to 20 pts)
-  const interestSimilarity = semanticOverlap(input.myInterests, input.candidateInterests)
+  // 2. Interests score (up to 20 pts). Embedding similarity can assist at
+  // most 20% of this signal; it can never replace explicit/taxonomy overlap.
+  const taxonomySimilarity = semanticOverlap(input.myInterests, input.candidateInterests)
+  const semanticAssist = Math.max(0, Math.min(1, input.semanticSimilarity ?? taxonomySimilarity))
+  const interestSimilarity = input.semanticSimilarity == null
+    ? taxonomySimilarity
+    : taxonomySimilarity * 0.8 + semanticAssist * 0.2
   const interests = Math.round(interestSimilarity * 20)
 
-  // 3. Geographic score (up to 20 pts) - Local-first rule
-  let locationScore = 4
+  // 3. Geographic score (up to 10 pts) - Local-first rule
+  let locationScore = 2
   let geographicTier: MatchScoreResult['geographicTier'] = 'international'
 
   const sameCity =
@@ -91,22 +104,35 @@ export function calculateMatchScore(input: MatchInput): MatchScoreResult {
     Boolean(input.myCountry && input.candidateCountry && norm(input.myCountry) === norm(input.candidateCountry))
 
   if (sameCity) {
-    locationScore = 20
+    locationScore = 10
     geographicTier = 'same_city'
   } else if (sameCountry) {
-    locationScore = 12
+    locationScore = 6
     geographicTier = 'same_country'
   }
 
-  // 4. Shared Goals & Community
-  const goals =
-    input.myGoal && input.candidateGoal && input.myGoal === input.candidateGoal
-      ? 15
-      : 8
+  // 4. Social style and connection goal compatibility (up to 15 pts).
+  const goalsMatch = Boolean(input.myGoal && input.candidateGoal && norm(input.myGoal) === norm(input.candidateGoal))
+  const socialStyleKnown = Boolean(input.mySocialPreference && input.candidateSocialPreference)
+  const socialStyleMatch = socialStyleKnown && norm(input.mySocialPreference!) === norm(input.candidateSocialPreference!)
+  const social = goalsMatch && (!socialStyleKnown || socialStyleMatch)
+    ? 15
+    : goalsMatch || socialStyleMatch
+      ? 12
+      : socialStyleKnown
+        ? 5
+        : 10
   const community = Math.min(10, (input.sharedCommunities || 0) * 5)
+  const availabilityKnown = Boolean(input.myAvailability && input.candidateAvailability)
+  const activity = availabilityKnown
+    ? norm(input.myAvailability!) === norm(input.candidateAvailability!) ? 5 : 1
+    : 3
   const trust = Math.min(5, Math.max(0, input.candidateTrust ?? 3))
+  const feedback = input.behavioralAffinity == null
+    ? 2
+    : Math.round(Math.max(0, Math.min(1, input.behavioralAffinity)) * 5)
 
-  const overall = Math.min(100, values + interests + locationScore + goals + community + trust)
+  const overall = Math.min(100, values + interests + social + community + locationScore + activity + trust + feedback)
 
   const reasons: string[] = []
   if (sharedValues.length > 0) {
@@ -135,8 +161,11 @@ export function calculateMatchScore(input: MatchInput): MatchScoreResult {
       interests,
       location: locationScore,
       community,
-      goals,
+      social,
+      activity,
       trust,
+      feedback,
+      semanticAssist: Math.round(semanticAssist * 100) / 100,
     },
     geographicTier,
   }

@@ -11,6 +11,7 @@ node_modules
 *.tsbuildinfo
 dist
 dist-ssr
+dist-build
 *.local
 .expo/
 apps/mobile/.expo/

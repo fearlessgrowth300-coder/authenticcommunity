@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -12,11 +13,10 @@ import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
 import { Card } from '@/components/primitives/Card'
+import { supabase } from '@/services/supabase'
+import { loadUserPreferences, resetMyRecommendations, saveUserPreferences } from '@/services/preferences'
 import {
   ArrowLeft,
-  SlidersHorizontal,
-  Globe,
-  MapPin,
   RefreshCw,
   X,
   Sparkles,
@@ -26,22 +26,41 @@ export default function ContentDiscoverySettingsScreen() {
   const router = useRouter()
 
   const [discoveryArea, setDiscoveryArea] = useState<'nearby' | 'country' | 'worldwide'>('nearby')
-  const [feedBalance, setFeedBalance] = useState<'local' | 'balanced' | 'global'>('local')
+  const [feedBalance, setFeedBalance] = useState<'local_first' | 'balanced' | 'global_heavy'>('local_first')
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(true)
+  const [explorationEnabled, setExplorationEnabled] = useState(true)
 
-  const [myInterests, setMyInterests] = useState([
-    { id: '1', name: 'Startups & Entrepreneurship', strength: 'High' },
-    { id: '2', name: 'Technology & AI', strength: 'High' },
-    { id: '3', name: 'Hiking & Outdoors', strength: 'Medium' },
-    { id: '4', name: 'Community Building', strength: 'High' },
-  ])
+  const [myInterests, setMyInterests] = useState<Array<{ id: string; name: string; strength: string }>>([])
 
-  const [learnedInterests, setLearnedInterests] = useState([
-    { id: 'l1', name: 'Photography', strength: 'Medium' },
-    { id: 'l2', name: 'Travel & Culture', strength: 'Low' },
-  ])
+  const [learnedInterests, setLearnedInterests] = useState<Array<{ id: string; name: string; strength: 'High' | 'Medium' | 'Low' }>>([])
+
+  useEffect(() => {
+    Promise.all([supabase.auth.getUser(), loadUserPreferences()]).then(async ([auth, preferences]) => {
+      setDiscoveryArea(preferences.discoveryArea)
+      setFeedBalance(preferences.feedBalance)
+      setPersonalizationEnabled(preferences.personalizationEnabled)
+      setExplorationEnabled(preferences.explorationEnabled)
+      setLearnedInterests(preferences.learnedInterests)
+      if (auth.data.user) {
+        const { data } = await supabase
+          .from('user_interests')
+          .select('id, interest_name, proficiency_level')
+          .eq('user_id', auth.data.user.id)
+        setMyInterests((data || []).map((row: any) => ({
+          id: row.id,
+          name: row.interest_name,
+          strength: row.proficiency_level === 'expert' ? 'High' : row.proficiency_level === 'experienced' ? 'Medium' : 'Low',
+        })))
+      }
+    })
+  }, [])
 
   const handleRemoveLearned = (id: string) => {
-    setLearnedInterests((prev) => prev.filter((i) => i.id !== id))
+    setLearnedInterests((prev) => {
+      const next = prev.filter((interest) => interest.id !== id)
+      saveUserPreferences({ learnedInterests: next }).catch(() => {})
+      return next
+    })
   }
 
   const handleResetAlgorithm = () => {
@@ -53,9 +72,19 @@ export default function ContentDiscoverySettingsScreen() {
         {
           text: 'Reset',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            const { data: auth } = await supabase.auth.getUser()
+            if (!auth.user) return
+            const [reset, dismissals] = await Promise.all([
+              resetMyRecommendations().then(() => ({ error: null as Error | null })).catch((error) => ({ error: error as Error })),
+              (supabase as any).from('content_dismissals').delete().eq('user_id', auth.user.id),
+            ])
+            if (reset.error || dismissals.error) {
+              Alert.alert('Reset Failed', reset.error?.message || dismissals.error?.message || 'Please try again.')
+              return
+            }
             setLearnedInterests([])
-            Alert.alert('Reset Complete', 'Your recommendations algorithm has been reset.')
+            Alert.alert('Reset Complete', 'Your recommendation history has been cleared.')
           },
         },
       ]
@@ -101,7 +130,11 @@ export default function ContentDiscoverySettingsScreen() {
             ].map((item) => (
               <TouchableOpacity
                 key={item.id}
-                onPress={() => setDiscoveryArea(item.id as any)}
+                onPress={() => {
+                  const value = item.id as 'nearby' | 'country' | 'worldwide'
+                  setDiscoveryArea(value)
+                  saveUserPreferences({ discoveryArea: value }).catch(() => Alert.alert('Could Not Save', 'Please try again.'))
+                }}
                 style={[
                   styles.pillBtn,
                   discoveryArea === item.id ? styles.pillBtnActive : null,
@@ -130,13 +163,17 @@ export default function ContentDiscoverySettingsScreen() {
 
           <View style={styles.pillGroup}>
             {[
-              { id: 'local', label: 'Local-First' },
+              { id: 'local_first', label: 'Local-First' },
               { id: 'balanced', label: 'Balanced' },
-              { id: 'global', label: 'Global-Heavy' },
+              { id: 'global_heavy', label: 'Global-Heavy' },
             ].map((item) => (
               <TouchableOpacity
                 key={item.id}
-                onPress={() => setFeedBalance(item.id as any)}
+                onPress={() => {
+                  const value = item.id as 'local_first' | 'balanced' | 'global_heavy'
+                  setFeedBalance(value)
+                  saveUserPreferences({ feedBalance: value }).catch(() => Alert.alert('Could Not Save', 'Please try again.'))
+                }}
                 style={[
                   styles.pillBtn,
                   feedBalance === item.id ? styles.pillBtnActive : null,
@@ -151,6 +188,51 @@ export default function ContentDiscoverySettingsScreen() {
                 </AppText>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <AppText variant="label" weight="bold">Personalized Recommendations</AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Use your selected interests and safe activity signals to improve recommendations.
+              </AppText>
+            </View>
+            <Switch
+              accessibilityLabel="Personalized recommendations"
+              value={personalizationEnabled}
+              onValueChange={(value) => {
+                setPersonalizationEnabled(value)
+                saveUserPreferences({ personalizationEnabled: value }).catch(() => {
+                  setPersonalizationEnabled(!value)
+                  Alert.alert('Could Not Save', 'Please try again.')
+                })
+              }}
+              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+              thumbColor={personalizationEnabled ? Colors.primary : Colors.textMuted}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <AppText variant="label" weight="bold">Discovery & Exploration</AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>
+                Include a small amount of adjacent content so your feed stays useful and varied.
+              </AppText>
+            </View>
+            <Switch
+              accessibilityLabel="Discovery and exploration recommendations"
+              value={explorationEnabled}
+              onValueChange={(value) => {
+                setExplorationEnabled(value)
+                saveUserPreferences({ explorationEnabled: value }).catch(() => {
+                  setExplorationEnabled(!value)
+                  Alert.alert('Could Not Save', 'Please try again.')
+                })
+              }}
+              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+              thumbColor={explorationEnabled ? Colors.primary : Colors.textMuted}
+            />
           </View>
         </View>
 
@@ -307,6 +389,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.surface,
+  },
+  toggleCopy: {
+    flex: 1,
+    gap: 3,
   },
   removeBtn: {
     padding: 4,

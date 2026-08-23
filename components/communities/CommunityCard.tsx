@@ -35,6 +35,12 @@ export interface CommunityItem {
     attendeesCount: number
     imageUrl: string
   }
+  mode?: 'local' | 'online' | 'hybrid'
+  mutualConnections?: number
+  score?: number
+  reasonCodes?: string[]
+  rankPosition?: number
+  algorithmVersion?: string
 }
 
 interface CommunityCardProps {
@@ -76,6 +82,8 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       activeOpacity={0.88}
       onPress={onPress}
       style={styles.card}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${community.name}, ${community.membersCount} members`}
     >
       {/* Left Image Thumbnail */}
       <Image
@@ -97,6 +105,8 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
             }}
             style={styles.bookmarkButton}
             accessibilityLabel="Bookmark community"
+            accessibilityRole="button"
+            accessibilityState={{ selected: Boolean(community.isSaved) }}
           >
             <Bookmark
               color={community.isSaved ? Colors.amber : Colors.textMuted}
@@ -110,6 +120,12 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         <AppText variant="caption" color={Colors.textSecondary} style={styles.metaText}>
           {community.distance} · {community.membersCount} members
         </AppText>
+
+        {community.mutualConnections ? (
+          <AppText variant="caption" color={Colors.primary} style={styles.metaText}>
+            {community.mutualConnections} connection{community.mutualConnections === 1 ? '' : 's'} here
+          </AppText>
+        ) : null}
 
         {/* Category Pill */}
         <View style={[styles.categoryPill, { backgroundColor: catStyle.bg }]}>

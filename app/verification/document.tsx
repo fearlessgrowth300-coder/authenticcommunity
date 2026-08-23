@@ -7,7 +7,7 @@ import {
   Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
@@ -28,6 +28,7 @@ const DOC_TYPES = [
 
 export default function VerificationDocumentScreen() {
   const router = useRouter()
+  const { country = 'NG' } = useLocalSearchParams<{ country?: string }>()
   const [selectedType, setSelectedType] = useState('passport')
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
 
@@ -39,14 +40,11 @@ export default function VerificationDocumentScreen() {
     })
     if (!res.canceled && res.assets[0]) {
       setCapturedPhoto(res.assets[0].uri)
-    } else {
-      // Simulate capture for testing
-      setCapturedPhoto('https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&fit=crop&q=80')
     }
   }
 
   const handleNext = () => {
-    router.push('/verification/liveness')
+    router.push(`/verification/liveness?country=${country}&documentType=${selectedType}`)
   }
 
   return (

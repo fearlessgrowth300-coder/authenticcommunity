@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Image,
+  Share,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -44,6 +45,9 @@ export default function ProfileScreen() {
   })
   const [interests, setInterests] = useState<string[]>([])
   const [values, setValues] = useState<string[]>([])
+  const [contentTab, setContentTab] = useState<'Posts' | 'Videos' | 'Communities' | 'Events'>('Posts')
+  const [joinedCommunities, setJoinedCommunities] = useState<Array<{ id: string; name: string; image: string | null }>>([])
+  const [profileEvents, setProfileEvents] = useState<Array<{ id: string; name: string; date: string | null; location: string | null }>>([])
 
   const loadProfileData = async () => {
     if (!user) return
@@ -51,7 +55,7 @@ export default function ProfileScreen() {
       const socialStats = await getProfileSocialStats(user.id)
       setStats(socialStats)
 
-      const [intRes, valRes, postsRes] = await Promise.all([
+      const [intRes, valRes, postsRes, communitiesRes, eventsRes] = await Promise.all([
         supabase.from('user_interests').select('interest_name').eq('user_id', user.id),
         supabase.from('user_values').select('value_name').eq('user_id', user.id),
         (supabase as any)
@@ -61,7 +65,30 @@ export default function ProfileScreen() {
           .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(20),
+        (supabase as any)
+          .from('community_members')
+          .select('community_id, communities(id, community_name, profile_image_url)')
+          .eq('user_id', user.id)
+          .eq('status', 'active'),
+        (supabase as any)
+          .from('events')
+          .select('id, name, event_date, location')
+          .eq('organizer_id', user.id)
+          .order('event_date', { ascending: false })
+          .limit(20),
       ])
+
+      setJoinedCommunities((communitiesRes.data || []).map((row: any) => ({
+        id: row.communities?.id || row.community_id,
+        name: row.communities?.community_name || 'Community',
+        image: row.communities?.profile_image_url || null,
+      })))
+      setProfileEvents((eventsRes.data || []).map((event: any) => ({
+        id: event.id,
+        name: event.name,
+        date: event.event_date,
+        location: event.location,
+      })))
 
       if (intRes.data && intRes.data.length > 0) {
         setInterests(intRes.data.map((i) => i.interest_name))
@@ -150,6 +177,7 @@ export default function ProfileScreen() {
           My Profile
         </AppText>
         <TouchableOpacity
+          onPress={() => router.push('/settings')}
           style={styles.settingsBtn}
           accessibilityLabel="Settings"
         >
@@ -264,6 +292,10 @@ export default function ProfileScreen() {
               style={styles.editBtn}
             />
             <TouchableOpacity
+              onPress={() => Share.share({
+                title: 'Authentic Community profile',
+                message: `Connect with ${fullName} on Authentic Community.`,
+              })}
               style={styles.shareBtn}
               accessibilityLabel="Share profile"
             >
@@ -326,32 +358,56 @@ export default function ProfileScreen() {
           </Card>
         </View>
 
-        {/* My Posts Section */}
+        {/* Profile content tabs */}
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <AppText variant="label" weight="semibold" style={styles.sectionTitle}>
-              My Posts ({userPosts.length})
-            </AppText>
-            <TouchableOpacity onPress={() => router.push('/post/create')}>
-              <AppText variant="caption" weight="bold" color={Colors.primary}>
-                + New Post
-              </AppText>
-            </TouchableOpacity>
+          <View style={styles.contentTabs}>
+            {(['Posts', 'Videos', 'Communities', 'Events'] as const).map((tab) => (
+              <TouchableOpacity key={tab} onPress={() => setContentTab(tab)} style={[styles.contentTab, contentTab === tab ? styles.contentTabActive : null]}>
+                <AppText variant="caption" weight={contentTab === tab ? 'bold' : 'medium'} color={contentTab === tab ? Colors.primary : Colors.textSecondary}>{tab}</AppText>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {userPosts.length === 0 ? (
+          {contentTab === 'Posts' && userPosts.length === 0 ? (
             <Card style={styles.emptyPostsCard}>
               <AppText variant="caption" color={Colors.textSecondary} align="center">
                 You haven't posted anything yet. Share your first update!
               </AppText>
+              <AppButton title="Create Post" size="sm" onPress={() => router.push('/post/create')} />
             </Card>
-          ) : (
-            userPosts.map((p) => (
+          ) : contentTab === 'Posts' ? (
+            userPosts.filter((post) => !post.videoUrl).map((p) => (
               <PostCard
                 key={p.id}
                 post={p}
                 onPostDismissed={(id) => setUserPosts((prev) => prev.filter((item) => item.id !== id))}
               />
+            ))
+          ) : contentTab === 'Videos' ? (
+            userPosts.filter((post) => Boolean(post.videoUrl)).length === 0 ? (
+              <Card style={styles.emptyPostsCard}><AppText variant="caption" color={Colors.textSecondary}>No videos yet.</AppText><AppButton title="Upload Video" size="sm" onPress={() => router.push('/post/create?type=video')} /></Card>
+            ) : userPosts.filter((post) => Boolean(post.videoUrl)).map((post) => (
+              <PostCard key={post.id} post={post} onPostDismissed={(id) => setUserPosts((prev) => prev.filter((item) => item.id !== id))} />
+            ))
+          ) : contentTab === 'Communities' ? (
+            joinedCommunities.length === 0 ? (
+              <Card style={styles.emptyPostsCard}><AppText variant="caption" color={Colors.textSecondary}>You have not joined a community yet.</AppText><AppButton title="Discover Communities" size="sm" onPress={() => router.push('/(tabs)/discover')} /></Card>
+            ) : joinedCommunities.map((community) => (
+              <TouchableOpacity key={community.id} onPress={() => router.push(`/community/${community.id}`)} style={styles.profileListRow}>
+                {community.image ? <Image source={{ uri: community.image }} style={styles.listImage} /> : <View style={styles.listImagePlaceholder}><Users color={Colors.primary} size={18} /></View>}
+                <AppText variant="bodySm" weight="semibold" style={{ flex: 1 }}>{community.name}</AppText>
+                <ChevronRight color={Colors.textMuted} size={18} />
+              </TouchableOpacity>
+            ))
+          ) : profileEvents.length === 0 ? (
+            <Card style={styles.emptyPostsCard}><AppText variant="caption" color={Colors.textSecondary}>You have not created an event yet.</AppText><AppButton title="Create Event" size="sm" onPress={() => router.push('/event/create')} /></Card>
+          ) : (
+            profileEvents.map((event) => (
+              <TouchableOpacity key={event.id} onPress={() => router.push(`/event/${event.id}`)} style={styles.profileListRow}>
+                <View style={styles.eventDateBadge}><AppText variant="caption" weight="bold" color={Colors.primary}>{event.date ? new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Soon'}</AppText></View>
+                <View style={{ flex: 1 }}><AppText variant="bodySm" weight="semibold">{event.name}</AppText><AppText variant="caption" color={Colors.textSecondary}>{event.location || 'Location to be confirmed'}</AppText></View>
+                <ChevronRight color={Colors.textMuted} size={18} />
+              </TouchableOpacity>
             ))
           )}
         </View>
@@ -375,6 +431,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  contentTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  contentTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  contentTabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: Colors.primary,
+  },
+  profileListRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  listImage: { width: 42, height: 42, borderRadius: 10 },
+  listImagePlaceholder: { width: 42, height: 42, borderRadius: 10, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  eventDateBadge: { minWidth: 48, height: 42, borderRadius: 10, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -88,10 +88,7 @@ export const SortMenuModal: React.FC<SortMenuModalProps> = ({
         activeOpacity={1}
         onPress={onClose}
       >
-        <TouchableOpacity
-          activeOpacity={1}
-          style={styles.menuContainer}
-        >
+        <View style={styles.menuContainer}>
           {/* Header */}
           <View style={styles.header}>
             <AppText variant="h3" weight="bold">
@@ -143,7 +140,7 @@ export const SortMenuModal: React.FC<SortMenuModalProps> = ({
               )
             })}
           </View>
-        </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     </Modal>
   )

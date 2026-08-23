@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -11,10 +11,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { fetchDiscoverEvents } from '@/services/discover'
+import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { EventCard, EventItem } from '@/components/events/EventCard'
 import { Card } from '@/components/primitives/Card'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import {
   Search,
   SlidersHorizontal,
@@ -33,12 +35,23 @@ export default function EventsFeedScreen() {
   const [events, setEvents] = useState<EventItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [currentCity, setCurrentCity] = useState('')
+  const impressedEvents = useRef(new Set<string>())
 
   const loadEvents = async () => {
     setLoading(true)
     try {
       const data = await fetchDiscoverEvents()
       setEvents(data)
+      const { data: auth } = await supabase.auth.getUser()
+      if (auth.user) {
+        const [saved, profile] = await Promise.all([
+          (supabase as any).from('event_saves').select('event_id').eq('user_id', auth.user.id),
+          (supabase as any).from('profiles').select('location_city').eq('user_id', auth.user.id).maybeSingle(),
+        ])
+        setSavedIds((saved.data || []).map((item: any) => item.event_id))
+        setCurrentCity(profile.data?.location_city || '')
+      }
     } finally {
       setLoading(false)
     }
@@ -54,17 +67,55 @@ export default function EventsFeedScreen() {
     setRefreshing(false)
   }
 
-  const toggleSave = (id: string) => {
-    setSavedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
+  const toggleSave = async (id: string) => {
+    const { data: auth } = await supabase.auth.getUser()
+    if (!auth.user) return
+    const wasSaved = savedIds.includes(id)
+    setSavedIds((prev) => wasSaved ? prev.filter((i) => i !== id) : [...prev, id])
+    const query = wasSaved
+      ? (supabase as any).from('event_saves').delete().eq('event_id', id).eq('user_id', auth.user.id)
+      : (supabase as any).from('event_saves').upsert({ event_id: id, user_id: auth.user.id })
+    const { error } = await query
+    if (error) setSavedIds((prev) => wasSaved ? [...prev, id] : prev.filter((i) => i !== id))
+    else if (!wasSaved) {
+      const recommendation = events.find((event) => event.id === id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'event_save', item_type: 'event', item_id: id,
+        algorithm_version: recommendation?.algorithmVersion || 'events_v1', rank_position: recommendation?.rankPosition,
+        reason_codes: recommendation?.reasonCodes,
+      })
+    }
   }
 
   const filteredEvents = events.filter((e) => {
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    return e.title.toLowerCase().includes(q) || e.host.toLowerCase().includes(q)
+    const q = searchQuery.trim().toLowerCase()
+    if (q && !e.title.toLowerCase().includes(q) && !e.host.toLowerCase().includes(q)) return false
+    const eventDate = e.eventDate ? new Date(`${e.eventDate}T00:00:00`) : null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (activeTimeTab === 'Today') return Boolean(eventDate && eventDate.getTime() === today.getTime())
+    if (activeTimeTab === 'This Week') {
+      const weekEnd = new Date(today)
+      weekEnd.setDate(today.getDate() + 7)
+      return Boolean(eventDate && eventDate >= today && eventDate <= weekEnd)
+    }
+    if (activeTimeTab === 'Nearby' && currentCity) {
+      return (e.location || '').toLowerCase().includes(currentCity.toLowerCase())
+    }
+    return true
   })
+
+  useEffect(() => {
+    for (const event of filteredEvents.slice(0, 10)) {
+      if (impressedEvents.current.has(event.id)) continue
+      impressedEvents.current.add(event.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'recommendation_impression', item_type: 'event', item_id: event.id,
+        algorithm_version: event.algorithmVersion || 'events_v1', rank_position: event.rankPosition,
+        reason_codes: event.reasonCodes,
+      })
+    }
+  }, [filteredEvents])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -174,8 +225,16 @@ export default function EventsFeedScreen() {
             {filteredEvents.map((event) => (
               <EventCard
                 key={event.id}
-                event={event}
-                onPress={() => router.push(`/event/${event.id}`)}
+                event={{ ...event, isSaved: savedIds.includes(event.id) }}
+                onPress={() => {
+                  recommendationEventBuffer.enqueue({
+                    surface: 'events', event_type: 'event_view', item_type: 'event', item_id: event.id,
+                    algorithm_version: event.algorithmVersion || 'events_v1', rank_position: event.rankPosition,
+                    reason_codes: event.reasonCodes,
+                  })
+                  router.push(`/event/${event.id}`)
+                }}
+                onToggleSave={() => toggleSave(event.id)}
               />
             ))}
           </View>

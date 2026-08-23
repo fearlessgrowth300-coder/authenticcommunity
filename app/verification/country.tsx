@@ -42,7 +42,7 @@ export default function VerificationCountryScreen() {
   const handleSelect = (code: string) => {
     setSelectedCountry(code)
     setTimeout(() => {
-      router.push('/verification/document')
+      router.push(`/verification/document?country=${code}`)
     }, 200)
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { Card } from '@/components/primitives/Card'
+import { loadNotificationPreferences, saveNotificationPreference } from '@/services/preferences'
 import {
   ArrowLeft,
   Bell,
@@ -19,6 +20,9 @@ import {
   Sparkles,
   Calendar,
   Compass,
+  UserPlus,
+  CircleDashed,
+  Mail,
 } from 'lucide-react-native'
 
 export default function NotificationSettingsScreen() {
@@ -29,6 +33,33 @@ export default function NotificationSettingsScreen() {
   const [eventReminders, setEventReminders] = useState(true)
   const [communityAnnouncements, setCommunityAnnouncements] = useState(true)
   const [emailDigest, setEmailDigest] = useState(false)
+  const [followers, setFollowers] = useState(true)
+  const [stories, setStories] = useState(true)
+  const [pushEnabled, setPushEnabled] = useState(true)
+  const [emailEnabled, setEmailEnabled] = useState(true)
+
+  useEffect(() => {
+    loadNotificationPreferences().then((settings) => {
+      if (!settings) return
+      setDirectMessages(settings.notify_messages ?? true)
+      setMatchAlerts(settings.notify_matches ?? true)
+      setEventReminders(settings.notify_events ?? true)
+      setCommunityAnnouncements(settings.notify_communities ?? true)
+      setEmailDigest(settings.notify_digest ?? false)
+      setFollowers(settings.notify_followers ?? true)
+      setStories(settings.notify_stories ?? true)
+      setPushEnabled(settings.push_notifications ?? true)
+      setEmailEnabled(settings.email_notifications ?? true)
+    })
+  }, [])
+
+  const persist = (field: string, value: boolean, setter: (value: boolean) => void) => {
+    setter(value)
+    saveNotificationPreference(field, value).catch(() => {
+      setter(!value)
+      Alert.alert('Could Not Save', 'Please try again.')
+    })
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,9 +94,35 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={directMessages}
-              onValueChange={setDirectMessages}
+              onValueChange={(value) => persist('notify_messages', value, setDirectMessages)}
               trackColor={{ false: '#CBD5E1', true: Colors.primary }}
             />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextCol}>
+              <View style={styles.iconTitleRow}>
+                <UserPlus color={Colors.sage} size={18} />
+                <AppText variant="bodySm" weight="medium">New Followers</AppText>
+              </View>
+              <AppText variant="caption" color={Colors.textSecondary} style={{ marginTop: 2 }}>Know when someone follows you</AppText>
+            </View>
+            <Switch value={followers} onValueChange={(value) => persist('notify_followers', value, setFollowers)} trackColor={{ false: '#CBD5E1', true: Colors.primary }} />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextCol}>
+              <View style={styles.iconTitleRow}>
+                <CircleDashed color={Colors.coral} size={18} />
+                <AppText variant="bodySm" weight="medium">Stories</AppText>
+              </View>
+              <AppText variant="caption" color={Colors.textSecondary} style={{ marginTop: 2 }}>Replies and activity on your stories</AppText>
+            </View>
+            <Switch value={stories} onValueChange={(value) => persist('notify_stories', value, setStories)} trackColor={{ false: '#CBD5E1', true: Colors.primary }} />
           </View>
 
           <View style={styles.divider} />
@@ -84,7 +141,7 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={matchAlerts}
-              onValueChange={setMatchAlerts}
+              onValueChange={(value) => persist('notify_matches', value, setMatchAlerts)}
               trackColor={{ false: '#CBD5E1', true: Colors.primary }}
             />
           </View>
@@ -105,7 +162,7 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={eventReminders}
-              onValueChange={setEventReminders}
+              onValueChange={(value) => persist('notify_events', value, setEventReminders)}
               trackColor={{ false: '#CBD5E1', true: Colors.primary }}
             />
           </View>
@@ -126,9 +183,28 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={communityAnnouncements}
-              onValueChange={setCommunityAnnouncements}
+              onValueChange={(value) => persist('notify_communities', value, setCommunityAnnouncements)}
               trackColor={{ false: '#CBD5E1', true: Colors.primary }}
             />
+          </View>
+        </Card>
+
+        <Card style={styles.sectionCard}>
+          <AppText variant="bodySm" weight="bold" style={{ marginBottom: 12 }}>Delivery</AppText>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextCol}>
+              <View style={styles.iconTitleRow}><Bell color={Colors.primary} size={18} /><AppText variant="bodySm" weight="medium">Push Notifications</AppText></View>
+              <AppText variant="caption" color={Colors.textSecondary}>Instant alerts on this device</AppText>
+            </View>
+            <Switch value={pushEnabled} onValueChange={(value) => persist('push_notifications', value, setPushEnabled)} trackColor={{ false: '#CBD5E1', true: Colors.primary }} />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextCol}>
+              <View style={styles.iconTitleRow}><Mail color={Colors.sage} size={18} /><AppText variant="bodySm" weight="medium">Email Notifications</AppText></View>
+              <AppText variant="caption" color={Colors.textSecondary}>Receive enabled updates by email</AppText>
+            </View>
+            <Switch value={emailEnabled} onValueChange={(value) => persist('email_notifications', value, setEmailEnabled)} trackColor={{ false: '#CBD5E1', true: Colors.primary }} />
           </View>
         </Card>
 
@@ -148,7 +224,7 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={emailDigest}
-              onValueChange={setEmailDigest}
+              onValueChange={(value) => persist('notify_digest', value, setEmailDigest)}
               trackColor={{ false: '#CBD5E1', true: Colors.primary }}
             />
           </View>

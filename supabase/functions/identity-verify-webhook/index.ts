@@ -7,6 +7,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, stripe-signature, x-signature",
 };
 
+const encoder = new TextEncoder();
+const toHex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const safeEqual = (left: string, right: string) => {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return diff === 0;
+};
+
+async function signPayload(secret: string, payload: string) {
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return toHex(await crypto.subtle.sign("HMAC", key, encoder.encode(payload)));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -17,24 +31,39 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const webhookSecret = Deno.env.get("VERIFICATION_WEBHOOK_SECRET");
 
-    const signature = req.headers.get("stripe-signature") || req.headers.get("x-signature");
+    if (!webhookSecret) {
+      return new Response(JSON.stringify({ error: "Webhook secret is not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // In production with live providers, validate signature
-    const isProd = Deno.env.get("ENVIRONMENT") === "production";
-    if (isProd && webhookSecret && !signature) {
-      return new Response(JSON.stringify({ error: "Missing webhook signature" }), {
+    const rawBody = await req.text();
+    const genericSignature = req.headers.get("x-signature")?.replace(/^sha256=/, "").toLowerCase();
+    const stripeHeader = req.headers.get("stripe-signature");
+    let validSignature = false;
+    if (genericSignature) {
+      validSignature = safeEqual(await signPayload(webhookSecret, rawBody), genericSignature);
+    } else if (stripeHeader) {
+      const parts = Object.fromEntries(stripeHeader.split(",").map((part) => part.split("=", 2)));
+      const timestamp = Number(parts.t);
+      if (timestamp && Math.abs(Date.now() / 1000 - timestamp) <= 300 && parts.v1) {
+        validSignature = safeEqual(await signPayload(webhookSecret, `${parts.t}.${rawBody}`), parts.v1.toLowerCase());
+      }
+    }
+    if (!validSignature) {
+      return new Response(JSON.stringify({ error: "Invalid webhook signature" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const payload = await req.json().catch(() => ({}));
+    const payload = JSON.parse(rawBody || "{}");
     const providerReference = payload.providerReference || payload?.data?.object?.id;
     const outcome = payload.outcome || payload?.data?.object?.status;
-    const userId = payload.userId || payload?.data?.object?.metadata?.userId;
 
-    if (!providerReference && !userId) {
-      return new Response(JSON.stringify({ error: "Invalid payload: missing reference or userId" }), {
+    if (!providerReference) {
+      return new Response(JSON.stringify({ error: "Invalid payload: missing provider reference" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -43,12 +72,7 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // 1. Fetch current verification record
-    let query = supabaseAdmin.from("identity_verifications").select("*");
-    if (userId) {
-      query = query.eq("user_id", userId);
-    } else {
-      query = query.eq("provider_reference", providerReference);
-    }
+    const query = supabaseAdmin.from("identity_verifications").select("*").eq("provider_reference", providerReference);
 
     const { data: record, error: findError } = await query.maybeSingle();
     if (findError || !record) {
@@ -72,7 +96,7 @@ serve(async (req) => {
     // 3. Process outcome
     if (outcome === "verified" || outcome === "approved") {
       // In production mode, reject mock provider attempts to grant verified status
-      if (isProd && record.provider === "mock") {
+      if (record.provider === "mock") {
         await supabaseAdmin
           .from("identity_verifications")
           .update({

@@ -1,15 +1,18 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Switch,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
+import { supabase } from '@/services/supabase'
+import { loadUserPreferences, saveUserPreferences } from '@/services/preferences'
 import {
   ArrowLeft,
   Shield,
@@ -26,10 +29,52 @@ export default function PrivacySettingsScreen() {
 
   const [isPrivateProfile, setIsPrivateProfile] = useState(false)
   const [followApproval, setFollowApproval] = useState(false)
-  const [messagesFrom, setMessagesFrom] = useState<'everyone' | 'connections'>('everyone')
+  const [messagesFrom, setMessagesFrom] = useState<'everyone' | 'followers' | 'connections' | 'nobody'>('connections')
   const [locationPrivacy, setLocationPrivacy] = useState<'city' | 'distance' | 'hidden'>('city')
   const [showOnlineStatus, setShowOnlineStatus] = useState(true)
   const [readReceipts, setReadReceipts] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      supabase.auth.getUser(),
+      loadUserPreferences(),
+    ]).then(async ([auth, preferences]) => {
+      if (auth.data.user) {
+        const { data: profile } = await (supabase as any)
+          .from('profiles')
+          .select('profile_visibility')
+          .eq('user_id', auth.data.user.id)
+          .maybeSingle()
+        const isPrivate = profile?.profile_visibility === 'private'
+        setIsPrivateProfile(isPrivate)
+        setFollowApproval(isPrivate)
+      }
+      setMessagesFrom(preferences.messagesFrom)
+      setLocationPrivacy(preferences.locationVisibility)
+      setShowOnlineStatus(preferences.showOnlineStatus)
+      setReadReceipts(preferences.readReceipts)
+    })
+  }, [])
+
+  const updateProfilePrivacy = async (isPrivate: boolean) => {
+    setIsPrivateProfile(isPrivate)
+    setFollowApproval(isPrivate)
+    const { data: auth } = await supabase.auth.getUser()
+    if (!auth.user) return
+    const { error } = await (supabase as any)
+      .from('profiles')
+      .update({ profile_visibility: isPrivate ? 'private' : 'public' })
+      .eq('user_id', auth.user.id)
+    if (error) Alert.alert('Could Not Save', error.message)
+  }
+
+  const persistPreference = async (change: Parameters<typeof saveUserPreferences>[0]) => {
+    try {
+      await saveUserPreferences(change)
+    } catch (error: any) {
+      Alert.alert('Could Not Save', error?.message || 'Please try again.')
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -62,7 +107,7 @@ export default function PrivacySettingsScreen() {
               </View>
               <Switch
                 value={isPrivateProfile}
-                onValueChange={setIsPrivateProfile}
+                onValueChange={updateProfilePrivacy}
                 trackColor={{ false: Colors.border, true: Colors.primary }}
               />
             </View>
@@ -78,7 +123,7 @@ export default function PrivacySettingsScreen() {
               </View>
               <Switch
                 value={followApproval}
-                onValueChange={setFollowApproval}
+                onValueChange={updateProfilePrivacy}
                 trackColor={{ false: Colors.border, true: Colors.primary }}
               />
             </View>
@@ -93,11 +138,17 @@ export default function PrivacySettingsScreen() {
           <View style={styles.cardContainer}>
             {[
               { id: 'everyone', label: 'Everyone (Message Requests enabled)' },
+              { id: 'followers', label: 'People I Follow or Who Follow Me' },
               { id: 'connections', label: 'Only Connections' },
+              { id: 'nobody', label: 'Nobody' },
             ].map((opt) => (
               <TouchableOpacity
                 key={opt.id}
-                onPress={() => setMessagesFrom(opt.id as any)}
+                onPress={() => {
+                  const value = opt.id as 'everyone' | 'followers' | 'connections' | 'nobody'
+                  setMessagesFrom(value)
+                  persistPreference({ messagesFrom: value })
+                }}
                 style={styles.optionRow}
               >
                 <AppText variant="bodySm" weight={messagesFrom === opt.id ? 'bold' : 'normal'}>
@@ -122,7 +173,11 @@ export default function PrivacySettingsScreen() {
             ].map((opt) => (
               <TouchableOpacity
                 key={opt.id}
-                onPress={() => setLocationPrivacy(opt.id as any)}
+                onPress={() => {
+                  const value = opt.id as 'city' | 'distance' | 'hidden'
+                  setLocationPrivacy(value)
+                  persistPreference({ locationVisibility: value })
+                }}
                 style={styles.optionRow}
               >
                 <AppText variant="bodySm" weight={locationPrivacy === opt.id ? 'bold' : 'normal'}>
@@ -151,7 +206,10 @@ export default function PrivacySettingsScreen() {
               </View>
               <Switch
                 value={showOnlineStatus}
-                onValueChange={setShowOnlineStatus}
+                onValueChange={(value) => {
+                  setShowOnlineStatus(value)
+                  persistPreference({ showOnlineStatus: value })
+                }}
                 trackColor={{ false: Colors.border, true: Colors.primary }}
               />
             </View>
@@ -167,7 +225,10 @@ export default function PrivacySettingsScreen() {
               </View>
               <Switch
                 value={readReceipts}
-                onValueChange={setReadReceipts}
+                onValueChange={(value) => {
+                  setReadReceipts(value)
+                  persistPreference({ readReceipts: value })
+                }}
                 trackColor={{ false: Colors.border, true: Colors.primary }}
               />
             </View>
@@ -180,14 +241,14 @@ export default function PrivacySettingsScreen() {
             Safety Controls
           </AppText>
           <View style={styles.cardContainer}>
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity onPress={() => router.push('/settings/blocked-users')} style={styles.optionRow}>
               <AppText variant="bodySm" weight="medium">
                 Blocked Users
               </AppText>
               <ChevronRight color={Colors.textMuted} size={16} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity onPress={() => router.push('/settings/muted-users')} style={styles.optionRow}>
               <AppText variant="bodySm" weight="medium">
                 Muted Users
               </AppText>

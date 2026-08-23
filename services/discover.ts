@@ -3,6 +3,7 @@ import { calculateMatchScore } from './matching'
 import { MatchProfile } from '@/components/matches/MatchCard'
 import { CommunityItem } from '@/components/communities/CommunityCard'
 import { EventItem } from '@/components/events/EventCard'
+import { recommendationEventBuffer } from './recommendationEventBuffer'
 
 export interface DiscoverVideoItem {
   id: string
@@ -11,6 +12,26 @@ export interface DiscoverVideoItem {
   views: string
   thumbnail: string
   videoUrl?: string
+  authorId?: string
+  communityId?: string
+  isVerified?: boolean
+  isFollowing?: boolean
+  likesCount?: number
+  commentsCount?: number
+  rankPosition?: number
+  score?: number
+  reasonCodes?: string[]
+  algorithmVersion?: string
+}
+
+function haversineKm(lat1?: number | null, lon1?: number | null, lat2?: number | null, lon2?: number | null) {
+  if ([lat1, lon1, lat2, lon2].some((value) => typeof value !== 'number')) return null
+  const toRadians = (value: number) => (value * Math.PI) / 180
+  const radius = 6371
+  const dLat = toRadians((lat2 as number) - (lat1 as number))
+  const dLon = toRadians((lon2 as number) - (lon1 as number))
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(lat1 as number)) * Math.cos(toRadians(lat2 as number)) * Math.sin(dLon / 2) ** 2
+  return Math.round(radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10
 }
 
 /**
@@ -18,6 +39,9 @@ export interface DiscoverVideoItem {
  */
 export async function fetchDiscoverMatches(currentUserId: string): Promise<MatchProfile[]> {
   try {
+    const serverMatches = await fetchPeopleRecommendations()
+    if (serverMatches) return serverMatches
+
     const [
       myProfileRes,
       myInterestsRes,
@@ -35,7 +59,7 @@ export async function fetchDiscoverMatches(currentUserId: string): Promise<Match
       supabase.from('community_members').select('community_id').eq('user_id', currentUserId),
       (supabase as any)
         .from('profiles')
-        .select('user_id, first_name, last_name, profile_image_url, location_city, bio, looking_for, is_verified, is_active, age')
+        .select('user_id, first_name, last_name, profile_image_url, location_city, location_country, latitude, longitude, bio, looking_for, is_verified, is_active, age, created_at')
         .neq('user_id', currentUserId)
         .eq('is_active', true)
         .limit(30),
@@ -96,6 +120,12 @@ export async function fetchDiscoverMatches(currentUserId: string): Promise<Match
         const sharedValues = theirValues.filter((v) =>
           myValues.some((m) => m.toLowerCase() === v.toLowerCase())
         )
+        const distanceKm = haversineKm(
+          myProfileRes.data?.latitude,
+          myProfileRes.data?.longitude,
+          p.latitude,
+          p.longitude
+        )
 
         return {
           id: p.user_id,
@@ -103,7 +133,14 @@ export async function fetchDiscoverMatches(currentUserId: string): Promise<Match
           age: p.age || 26,
           isVerified: Boolean(p.is_verified),
           location: p.location_city || 'Local area',
-          distance: p.location_city && myCity && p.location_city.toLowerCase() === myCity.toLowerCase() ? '1.2 mi' : 'In your region',
+          distance: distanceKm !== null
+            ? `${distanceKm} km away`
+            : p.location_city && myCity && p.location_city.toLowerCase() === myCity.toLowerCase()
+              ? 'In your city'
+              : 'In your region',
+          distanceKm,
+          country: p.location_country || null,
+          createdAt: p.created_at,
           matchScore: scored.overall,
           photoUrl: p.profile_image_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
           sharedInterests: sharedInterests.length > 0 ? sharedInterests : theirInterests.slice(0, 3),
@@ -118,11 +155,99 @@ export async function fetchDiscoverMatches(currentUserId: string): Promise<Match
   }
 }
 
+export async function fetchPeopleRecommendations(candidateId?: string): Promise<MatchProfile[] | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('recommend-people', {
+      body: { limit: candidateId ? 1 : 30, candidate_id: candidateId || undefined },
+    })
+    if (error || !data || !Array.isArray(data.items)) return null
+    return data.items.map((item: any) => ({
+      id: item.id,
+      name: item.name || 'Community Member',
+      age: Number(item.age || 0),
+      isVerified: Boolean(item.isVerified),
+      location: item.location || 'General area',
+      distance: item.distance || 'Within your discovery settings',
+      matchScore: Number(item.matchScore || 0),
+      photoUrl: item.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
+      bio: item.bio || '',
+      sharedInterests: Array.isArray(item.sharedInterests) ? item.sharedInterests : [],
+      sharedValues: Array.isArray(item.sharedValues) ? item.sharedValues : [],
+      reasons: Array.isArray(item.reasons) ? item.reasons : [],
+      aiExplanation: typeof item.aiExplanation === 'string' ? item.aiExplanation : null,
+      conversationStarters: Array.isArray(item.conversationStarters) ? item.conversationStarters : [],
+      breakdown: item.breakdown || {},
+      sharedCommunityCount: Number(item.sharedCommunityCount || 0),
+      rankPosition: Number(item.rankPosition || 0),
+      reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+      algorithmVersion: item.algorithmVersion || data.algorithm_version || 'people_v1',
+    }))
+  } catch {
+    return null
+  }
+}
+
+export async function recordPeopleRecommendationFeedback(
+  candidateId: string,
+  signal: 'viewed' | 'profile_open' | 'saved' | 'passed' | 'followed' | 'connection_requested' | 'connection_accepted' | 'conversation_started' | 'not_interested',
+  recommendation?: Pick<MatchProfile, 'rankPosition' | 'reasonCodes' | 'algorithmVersion'>,
+) {
+  await (supabase as any).rpc('log_people_recommendation_feedback', {
+    p_candidate_id: candidateId,
+    p_signal: signal,
+  })
+  const eventMap = {
+    viewed: 'recommendation_impression',
+    profile_open: 'profile_view',
+    saved: 'recommendation_open',
+    passed: 'not_interested',
+    followed: 'follow',
+    connection_requested: 'connection_request',
+    connection_accepted: 'connection_accept',
+    conversation_started: 'recommendation_open',
+    not_interested: 'not_interested',
+  } as const
+  recommendationEventBuffer.enqueue({
+    surface: 'people',
+    event_type: eventMap[signal],
+    item_type: 'profile',
+    item_id: candidateId,
+    algorithm_version: recommendation?.algorithmVersion || 'people_v1',
+    rank_position: recommendation?.rankPosition,
+    reason_codes: recommendation?.reasonCodes,
+    safe_metadata: signal === 'saved' || signal === 'conversation_started'
+      ? { source: signal }
+      : undefined,
+  })
+}
+
 /**
  * Fetch real communities from Supabase
  */
 export async function fetchDiscoverCommunities(): Promise<CommunityItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-communities', {
+      body: { limit: 30 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => ({
+        id: item.id,
+        name: item.name || 'Community',
+        category: item.category || 'Community',
+        description: item.description || '',
+        imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+        membersCount: Number(item.membersCount || 0),
+        distance: item.distance || item.location || 'Local',
+        location: item.location,
+        mode: item.mode || 'local',
+        isJoined: Boolean(item.isJoined),
+        mutualConnections: Number(item.mutualConnections || 0),
+        score: Number(item.score || 0),
+        reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+        rankPosition: Number(item.rankPosition || 0),
+        algorithmVersion: item.algorithmVersion || 'communities_local_v1',
+      }))
+    }
     const { data } = await supabase
       .from('communities')
       .select('id, community_name, description, profile_image_url, member_count, category, location_city')
@@ -150,9 +275,40 @@ export async function fetchDiscoverCommunities(): Promise<CommunityItem[]> {
  */
 export async function fetchDiscoverEvents(): Promise<EventItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-events', {
+      body: { limit: 30 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => {
+        const d = item.eventDate ? new Date(`${item.eventDate}T12:00:00`) : new Date()
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+        const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+        return {
+          id: item.id,
+          title: item.title || 'Community event',
+          host: item.host || 'Authentic Community',
+          dateMonth: months[d.getMonth()],
+          dateDay: String(d.getDate()),
+          dateDayOfWeek: days[d.getDay()],
+          dateTimeFormatted: `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}${item.startTime ? ` · ${String(item.startTime).slice(0, 5)}` : ''}`,
+          eventDate: item.eventDate,
+          distance: item.distance || item.location || 'Local',
+          location: item.location || 'Local event',
+          imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
+          attendeesCount: Number(item.attendeesCount || 0),
+          isRsvped: Boolean(item.isRsvped),
+          isSaved: Boolean(item.isSaved),
+          description: item.description || '',
+          score: Number(item.score || 0),
+          reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+          rankPosition: Number(item.rankPosition || 0),
+          algorithmVersion: item.algorithmVersion || 'events_v1',
+        }
+      })
+    }
     const { data } = await supabase
       .from('events')
-      .select('id, event_title, description, event_date, location_name, cover_image_url, communities(community_name)')
+      .select('id, name, description, event_date, start_time, location, event_image_url, attendee_count, communities(community_name)')
       .order('event_date', { ascending: true })
       .limit(20)
 
@@ -165,15 +321,17 @@ export async function fetchDiscoverEvents(): Promise<EventItem[]> {
 
       return {
         id: e.id,
-        title: e.event_title,
+        title: e.name,
         host: e.communities?.community_name || 'Authentic Community',
         dateMonth: months[d.getMonth()],
         dateDay: String(d.getDate()),
         dateDayOfWeek: days[d.getDay()],
         dateTimeFormatted: `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`,
-        distance: e.location_name || 'Local Event',
-        imageUrl: e.cover_image_url || 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
-        attendeesCount: 8,
+        eventDate: e.event_date,
+        distance: e.location || 'Local Event',
+        location: e.location || 'Local Event',
+        imageUrl: e.event_image_url || 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
+        attendeesCount: e.attendee_count || 0,
       }
     })
   } catch {
@@ -186,22 +344,54 @@ export async function fetchDiscoverEvents(): Promise<EventItem[]> {
  */
 export async function fetchDiscoverVideos(): Promise<DiscoverVideoItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-videos', {
+      body: { page: 1, page_size: 20 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => ({
+        id: item.id,
+        title: item.title || 'Community video',
+        authorName: item.authorName || 'Member',
+        authorId: item.authorId,
+        communityId: item.communityId || undefined,
+        isVerified: Boolean(item.isVerified),
+        isFollowing: Boolean(item.isFollowing),
+        views: item.reasonCodes?.includes('quality_content') ? 'Recommended' : 'For you',
+        thumbnail: item.thumbnail || item.authorAvatar || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+        videoUrl: item.videoUrl,
+        likesCount: Number(item.likesCount || 0),
+        commentsCount: Number(item.commentsCount || 0),
+        rankPosition: Number(item.rankPosition || 0),
+        score: Number(item.score || 0),
+        reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+        algorithmVersion: item.algorithmVersion || rankedData.algorithm_version || 'video_v1',
+      }))
+    }
+
     const { data: postsData } = await (supabase as any)
       .from('posts')
-      .select('id, user_id, content, created_at, profiles(first_name, last_name, profile_image_url)')
+      .select('id, user_id, content, created_at')
       .eq('content_type', 'video')
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(20)
 
     if (!postsData) return []
+    const userIds = Array.from(new Set(postsData.map((post: any) => post.user_id))) as string[]
+    const postIds = postsData.map((post: any) => post.id)
+    const [profilesRes, mediaRes] = await Promise.all([
+      supabase.from('profiles').select('user_id, first_name, last_name, profile_image_url').in('user_id', userIds),
+      (supabase as any).from('post_media').select('post_id, media_url').in('post_id', postIds),
+    ])
+    const profileMap = new Map((profilesRes.data || []).map((profile: any) => [profile.user_id, profile]))
+    const mediaMap = new Map((mediaRes.data || []).map((media: any) => [media.post_id, media.media_url]))
 
     return postsData.map((p: any) => ({
       id: p.id,
       title: p.content || 'Community video highlight',
-      authorName: `${p.profiles?.first_name || ''} ${p.profiles?.last_name || ''}`.trim() || 'Member',
-      views: '1.2K',
-      thumbnail: p.profiles?.profile_image_url || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+      authorName: `${(profileMap.get(p.user_id) as any)?.first_name || ''} ${(profileMap.get(p.user_id) as any)?.last_name || ''}`.trim() || 'Member',
+      views: 'New',
+      thumbnail: mediaMap.get(p.id) || (profileMap.get(p.user_id) as any)?.profile_image_url || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
     }))
   } catch {
     return []

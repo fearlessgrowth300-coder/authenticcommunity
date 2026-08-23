@@ -66,10 +66,43 @@ serve(async (req) => {
       );
     }
 
-    // 4. Create session with active provider
+    // 4. Create a real hosted session when a provider is configured. A mock
+    // provider may create a pending record for UI testing but can never verify.
     const providerName = Deno.env.get("VERIFICATION_PROVIDER") || "mock";
-    const providerReference = `vs_${providerName}_${Date.now()}`;
-    const clientSecret = `sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const providerEndpoint = Deno.env.get("VERIFICATION_SESSION_ENDPOINT");
+    const providerApiKey = Deno.env.get("VERIFICATION_API_KEY");
+    let providerReference = `manual_${Date.now()}`;
+    let verificationUrl: string | null = null;
+
+    if (providerName !== "mock") {
+      if (!providerEndpoint || !providerApiKey) {
+        return new Response(JSON.stringify({ error: "Identity provider is not configured" }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const providerResponse = await fetch(providerEndpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${providerApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reference: user.id,
+          documentCountry,
+          documentType,
+          returnUrl: `${Deno.env.get("PUBLIC_APP_URL") || "https://authenticcommunity.fun"}/verification/result`,
+          metadata: { userId: user.id },
+        }),
+      });
+      const providerData = await providerResponse.json().catch(() => ({}));
+      if (!providerResponse.ok) throw new Error(providerData?.error || "Verification provider rejected the session request");
+      providerReference = providerData.id || providerData.reference;
+      verificationUrl = providerData.url || providerData.verificationUrl;
+      if (!providerReference || !verificationUrl || !verificationUrl.startsWith("https://")) {
+        throw new Error("Verification provider returned an invalid session");
+      }
+    }
 
     // 5. Upsert session record in identity_verifications
     const { error: upsertError } = await supabaseAdmin
@@ -81,11 +114,11 @@ serve(async (req) => {
           provider_reference: providerReference,
           document_country: documentCountry,
           document_type: documentType,
-          status: "pending",
+          status: providerName === "mock" ? "manual_review" : "pending",
           identity_verified: false,
           liveness_verified: false,
           face_match_verified: false,
-          client_secret: clientSecret,
+          client_secret: null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" }
@@ -97,9 +130,8 @@ serve(async (req) => {
       JSON.stringify({
         provider: providerName,
         providerReference,
-        clientSecret,
-        status: "pending",
-        url: `https://verify.authenticcommunity.dev/session/${providerReference}`,
+        status: providerName === "mock" ? "manual_review" : "pending",
+        url: verificationUrl,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

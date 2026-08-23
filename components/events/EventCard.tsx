@@ -25,11 +25,16 @@ export interface EventItem {
   description?: string
   location?: string
   timeRange?: string
+  eventDate?: string
   organizer?: {
     name: string
     followers: string
     avatarUrl: string
   }
+  score?: number
+  reasonCodes?: string[]
+  rankPosition?: number
+  algorithmVersion?: string
 }
 
 interface EventCardProps {
@@ -48,6 +53,8 @@ export const EventCard: React.FC<EventCardProps> = ({
       activeOpacity={0.88}
       onPress={onPress}
       style={styles.card}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${event.title}, ${event.dateTimeFormatted}, ${event.distance}`}
     >
       {/* Left Image Thumbnail */}
       <Image
@@ -82,9 +89,14 @@ export const EventCard: React.FC<EventCardProps> = ({
           </View>
 
           <TouchableOpacity
-            onPress={() => onToggleSave?.()}
+            onPress={(event) => {
+              event.stopPropagation()
+              onToggleSave?.()
+            }}
             style={styles.bookmarkBtn}
             accessibilityLabel="Save event"
+            accessibilityRole="button"
+            accessibilityState={{ selected: Boolean(event.isSaved) }}
           >
             <Bookmark
               color={event.isSaved ? Colors.amber : Colors.textMuted}
