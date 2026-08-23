@@ -9,3 +9,7 @@ project_id = "sqzeghkabqhhhiuidnvd"
     verify_jwt = true
   [functions.recommend-feed]
     verify_jwt = true
+  [functions.recommend-stories]
+    verify_jwt = true
+  [functions.recommend-videos]
+    verify_jwt = true

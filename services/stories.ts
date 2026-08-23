@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { recommendationEventBuffer } from './recommendationEventBuffer'
 
 export interface MobileStoryItem {
   id: string
@@ -10,6 +11,11 @@ export interface MobileStoryItem {
   caption?: string
   hasUnseen: boolean
   isCommunity?: boolean
+  contentType?: 'image' | 'video' | 'text'
+  rankPosition?: number
+  score?: number
+  reasonCodes?: string[]
+  algorithmVersion?: string
 }
 
 /**
@@ -19,6 +25,31 @@ export async function getActiveStories(): Promise<MobileStoryItem[]> {
   try {
     const { data: auth } = await supabase.auth.getUser()
     const currentUserId = auth?.user?.id || null
+
+    if (currentUserId) {
+      const { data, error } = await supabase.functions.invoke('recommend-stories', { body: { limit: 30 } })
+      if (!error && data && Array.isArray(data.items)) {
+        return data.items.map((item: any) => {
+          const createdDate = new Date(item.createdAt)
+          const diffHours = Math.max(0, Math.floor((Date.now() - createdDate.getTime()) / 3_600_000))
+          return {
+            id: item.id,
+            userId: item.userId,
+            userName: item.userName,
+            userAvatar: item.userAvatar || null,
+            timeAgo: diffHours < 1 ? 'Just now' : `${diffHours}h ago`,
+            imageUrl: item.contentUrl || '',
+            caption: item.caption || undefined,
+            hasUnseen: Boolean(item.hasUnseen),
+            contentType: item.contentType || 'image',
+            rankPosition: Number(item.rankPosition || 0),
+            score: Number(item.score || 0),
+            reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+            algorithmVersion: item.algorithmVersion || data.algorithm_version || 'stories_v1',
+          }
+        })
+      }
+    }
 
     const { data: rawStories, error } = await supabase
       .from('stories')
@@ -125,10 +156,28 @@ export async function recordStoryView(storyId: string) {
 
     await supabase
       .from('story_views')
-      .insert({ story_id: storyId, viewer_id: auth.user.id } as any)
+      .upsert({ story_id: storyId, viewer_id: auth.user.id } as any, { onConflict: 'story_id,viewer_id' })
+    recommendationEventBuffer.enqueue({
+      surface: 'stories',
+      event_type: 'story_view',
+      item_type: 'story',
+      item_id: storyId,
+      algorithm_version: 'stories_v1',
+    })
   } catch {
     // Non-blocking view telemetry
   }
+}
+
+export function recordStoryCompletion(storyId: string, watchTimeMs: number) {
+  recommendationEventBuffer.enqueue({
+    surface: 'stories',
+    event_type: 'story_complete',
+    item_type: 'story',
+    item_id: storyId,
+    algorithm_version: 'stories_v1',
+    safe_metadata: { watch_time_ms: Math.max(0, Math.round(watchTimeMs)), is_complete: true },
+  })
 }
 
 /**
@@ -157,8 +206,15 @@ export async function replyToStory(storyId: string, text: string) {
     .insert({
       story_id: storyId,
       user_id: auth.user.id,
-      reply_text: text.trim(),
+      message: text.trim(),
     } as any)
 
   if (error) throw error
+  recommendationEventBuffer.enqueue({
+    surface: 'stories',
+    event_type: 'story_reply',
+    item_type: 'story',
+    item_id: storyId,
+    algorithm_version: 'stories_v1',
+  })
 }

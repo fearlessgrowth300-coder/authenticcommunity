@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -11,6 +11,7 @@ import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { MobileStoryItem } from '@/services/stories'
 import { Plus } from 'lucide-react-native'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 
 interface StoriesRowProps {
   myAvatarUrl?: string
@@ -19,6 +20,23 @@ interface StoriesRowProps {
 
 export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl, stories }) => {
   const router = useRouter()
+  const impressedStories = useRef(new Set<string>())
+
+  useEffect(() => {
+    for (const story of stories.slice(0, 6)) {
+      if (impressedStories.current.has(story.id)) continue
+      impressedStories.current.add(story.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'stories',
+        event_type: 'recommendation_impression',
+        item_type: 'story',
+        item_id: story.id,
+        algorithm_version: story.algorithmVersion || 'stories_v1',
+        rank_position: story.rankPosition,
+        reason_codes: story.reasonCodes,
+      })
+    }
+  }, [stories])
 
   return (
     <View style={styles.container}>
@@ -32,6 +50,8 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl, stories }) 
           onPress={() => router.push('/story/create')}
           style={styles.storyItem}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Create your story"
         >
           <View style={styles.myAvatarContainer}>
             <Image
@@ -55,9 +75,22 @@ export const StoriesRow: React.FC<StoriesRowProps> = ({ myAvatarUrl, stories }) 
         {stories.map((story) => (
           <TouchableOpacity
             key={story.id}
-            onPress={() => router.push(`/story/${story.id}`)}
+            onPress={() => {
+              recommendationEventBuffer.enqueue({
+                surface: 'stories',
+                event_type: 'recommendation_open',
+                item_type: 'story',
+                item_id: story.id,
+                algorithm_version: story.algorithmVersion || 'stories_v1',
+                rank_position: story.rankPosition,
+                reason_codes: story.reasonCodes,
+              })
+              router.push(`/story/${story.id}`)
+            }}
             style={styles.storyItem}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${story.userName}'s story${story.hasUnseen ? ', unseen' : ', viewed'}`}
           >
             <View
               style={[

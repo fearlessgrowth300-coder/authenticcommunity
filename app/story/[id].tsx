@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -16,6 +16,7 @@ import { supabase } from '@/services/supabase'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { sendDirectMessage } from '@/services/realtimeChat'
+import { recordStoryCompletion, recordStoryView, replyToStory } from '@/services/stories'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import {
   X,
@@ -31,16 +32,18 @@ export default function StoryViewerScreen() {
   const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
 
-  const [progress, setProgress] = useState(0.5)
+  const [progress, setProgress] = useState(0)
   const [replyText, setReplyText] = useState('')
   const [liked, setLiked] = useState(false)
   const [storyData, setStoryData] = useState<any>(null)
   const [storyProfile, setStoryProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const completedRef = useRef(false)
+  const openedAtRef = useRef(Date.now())
   const videoPlayer = useVideoPlayer(
     storyData?.content_type === 'video' ? storyData.content_url : null,
     (player) => {
-      player.loop = true
+      player.loop = false
       player.play()
     }
   )
@@ -66,11 +69,8 @@ export default function StoryViewerScreen() {
             .eq('user_id', data.user_id)
             .maybeSingle()
           setStoryProfile(profile)
-          // Record story view
           if (user && data.user_id !== user.id) {
-            await (supabase as any)
-              .from('story_views')
-              .upsert({ story_id: id, viewer_id: user.id }, { onConflict: 'story_id,viewer_id' })
+            await recordStoryView(id)
           }
         }
       } catch {
@@ -82,6 +82,25 @@ export default function StoryViewerScreen() {
 
     loadStory()
   }, [id, user])
+
+  useEffect(() => {
+    if (!id || !storyData) return
+    openedAtRef.current = Date.now()
+    completedRef.current = false
+    setProgress(0)
+    const durationMs = storyData.content_type === 'video'
+      ? Math.max(5_000, Number(videoPlayer.duration || 10) * 1_000)
+      : 5_000
+    const timer = setInterval(() => {
+      const next = Math.min(1, (Date.now() - openedAtRef.current) / durationMs)
+      setProgress(next)
+      if (next >= 0.95 && !completedRef.current) {
+        completedRef.current = true
+        recordStoryCompletion(id, Date.now() - openedAtRef.current)
+      }
+    }, 200)
+    return () => clearInterval(timer)
+  }, [id, storyData, videoPlayer])
 
   const handleToggleLike = async () => {
     if (!user || !id) return
@@ -109,6 +128,7 @@ export default function StoryViewerScreen() {
 
     try {
       await sendDirectMessage(storyData.user_id, `Replied to your story: "${text}"`)
+      await replyToStory(id, text)
     } catch (error: any) {
       Alert.alert(
         error?.message?.includes('request sent') ? 'Message Request Sent' : 'Reply Not Sent',
@@ -222,7 +242,7 @@ export default function StoryViewerScreen() {
             <TouchableOpacity onPress={handleStoryMenu} style={styles.headerBtn} accessibilityLabel="Story options">
               <MoreHorizontal color="#FFFFFF" size={20} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Close story">
               <X color="#FFFFFF" size={22} />
             </TouchableOpacity>
           </View>
@@ -233,6 +253,8 @@ export default function StoryViewerScreen() {
           activeOpacity={1}
           onPress={handleNext}
           style={styles.touchArea}
+          accessibilityRole="button"
+          accessibilityLabel="Close completed story"
         />
 
         {loading ? <ActivityIndicator color="#FFFFFF" size="large" style={styles.loading} /> : !storyData ? (
@@ -259,7 +281,7 @@ export default function StoryViewerScreen() {
               style={styles.replyInput}
             />
             {replyText.trim() ? (
-              <TouchableOpacity onPress={handleSendReply} style={styles.sendIconBtn}>
+              <TouchableOpacity onPress={handleSendReply} style={styles.sendIconBtn} accessibilityRole="button" accessibilityLabel="Send story reply">
                 <Send color="#FFFFFF" size={16} />
               </TouchableOpacity>
             ) : null}
@@ -268,6 +290,9 @@ export default function StoryViewerScreen() {
           <TouchableOpacity
             onPress={handleToggleLike}
             style={[styles.heartBtn, liked ? styles.heartBtnActive : null]}
+            accessibilityRole="button"
+            accessibilityLabel={liked ? 'Unlike story' : 'Like story'}
+            accessibilityState={{ selected: liked }}
           >
             <Heart
               color={liked ? '#EF4444' : '#FFFFFF'}
@@ -340,7 +365,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: {
-    padding: 6,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   touchArea: {
     flex: 1,
@@ -380,7 +408,10 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   sendIconBtn: {
-    padding: 4,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginLeft: 6,
   },
   heartBtn: {

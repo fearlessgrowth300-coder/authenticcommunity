@@ -11,6 +11,16 @@ export interface DiscoverVideoItem {
   views: string
   thumbnail: string
   videoUrl?: string
+  authorId?: string
+  communityId?: string
+  isVerified?: boolean
+  isFollowing?: boolean
+  likesCount?: number
+  commentsCount?: number
+  rankPosition?: number
+  score?: number
+  reasonCodes?: string[]
+  algorithmVersion?: string
 }
 
 function haversineKm(lat1?: number | null, lon1?: number | null, lat2?: number | null, lon2?: number | null) {
@@ -211,6 +221,30 @@ export async function fetchDiscoverEvents(): Promise<EventItem[]> {
  */
 export async function fetchDiscoverVideos(): Promise<DiscoverVideoItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-videos', {
+      body: { page: 1, page_size: 20 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => ({
+        id: item.id,
+        title: item.title || 'Community video',
+        authorName: item.authorName || 'Member',
+        authorId: item.authorId,
+        communityId: item.communityId || undefined,
+        isVerified: Boolean(item.isVerified),
+        isFollowing: Boolean(item.isFollowing),
+        views: item.reasonCodes?.includes('quality_content') ? 'Recommended' : 'For you',
+        thumbnail: item.thumbnail || item.authorAvatar || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+        videoUrl: item.videoUrl,
+        likesCount: Number(item.likesCount || 0),
+        commentsCount: Number(item.commentsCount || 0),
+        rankPosition: Number(item.rankPosition || 0),
+        score: Number(item.score || 0),
+        reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+        algorithmVersion: item.algorithmVersion || rankedData.algorithm_version || 'video_v1',
+      }))
+    }
+
     const { data: postsData } = await (supabase as any)
       .from('posts')
       .select('id, user_id, content, created_at')

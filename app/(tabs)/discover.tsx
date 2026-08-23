@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -27,6 +27,7 @@ import { SortMenuModal, SortOption } from '@/components/matches/SortMenuModal'
 import { CommunityCard, CommunityItem } from '@/components/communities/CommunityCard'
 import { EventCard, EventItem } from '@/components/events/EventCard'
 import { Card } from '@/components/primitives/Card'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import {
   Search,
   SlidersHorizontal,
@@ -56,6 +57,7 @@ export default function DiscoverScreen() {
   const [communities, setCommunities] = useState<CommunityItem[]>([])
   const [events, setEvents] = useState<EventItem[]>([])
   const [videos, setVideos] = useState<DiscoverVideoItem[]>([])
+  const impressedVideos = useRef(new Set<string>())
 
   const [filters, setFilters] = useState<FilterState>({
     distance: '25 mi',
@@ -160,6 +162,23 @@ export default function DiscoverScreen() {
     }
     return true
   })
+
+  useEffect(() => {
+    if (activeTab !== 'Videos') return
+    for (const video of filteredVideos.slice(0, 6)) {
+      if (impressedVideos.current.has(video.id)) continue
+      impressedVideos.current.add(video.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'videos',
+        event_type: 'recommendation_impression',
+        item_type: 'video',
+        item_id: video.id,
+        algorithm_version: video.algorithmVersion || 'video_v1',
+        rank_position: video.rankPosition,
+        reason_codes: video.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredVideos])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -350,8 +369,21 @@ export default function DiscoverScreen() {
                     <TouchableOpacity
                       key={v.id}
                       activeOpacity={0.88}
-                      onPress={() => router.push(`/video/${v.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'videos',
+                          event_type: 'recommendation_open',
+                          item_type: 'video',
+                          item_id: v.id,
+                          algorithm_version: v.algorithmVersion || 'video_v1',
+                          rank_position: v.rankPosition,
+                          reason_codes: v.reasonCodes,
+                        })
+                        router.push(`/video/${v.id}`)
+                      }}
                       style={styles.videoCard}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Watch ${v.title} by ${v.authorName}`}
                     >
                       <Image source={{ uri: v.thumbnail }} style={styles.videoThumb} />
                       <View style={styles.videoPlayBadge}>
