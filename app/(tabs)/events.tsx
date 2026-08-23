@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -16,6 +16,7 @@ import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { EventCard, EventItem } from '@/components/events/EventCard'
 import { Card } from '@/components/primitives/Card'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import {
   Search,
   SlidersHorizontal,
@@ -35,6 +36,7 @@ export default function EventsFeedScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [currentCity, setCurrentCity] = useState('')
+  const impressedEvents = useRef(new Set<string>())
 
   const loadEvents = async () => {
     setLoading(true)
@@ -75,6 +77,14 @@ export default function EventsFeedScreen() {
       : (supabase as any).from('event_saves').upsert({ event_id: id, user_id: auth.user.id })
     const { error } = await query
     if (error) setSavedIds((prev) => wasSaved ? [...prev, id] : prev.filter((i) => i !== id))
+    else if (!wasSaved) {
+      const recommendation = events.find((event) => event.id === id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'event_save', item_type: 'event', item_id: id,
+        algorithm_version: recommendation?.algorithmVersion || 'events_v1', rank_position: recommendation?.rankPosition,
+        reason_codes: recommendation?.reasonCodes,
+      })
+    }
   }
 
   const filteredEvents = events.filter((e) => {
@@ -94,6 +104,18 @@ export default function EventsFeedScreen() {
     }
     return true
   })
+
+  useEffect(() => {
+    for (const event of filteredEvents.slice(0, 10)) {
+      if (impressedEvents.current.has(event.id)) continue
+      impressedEvents.current.add(event.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'recommendation_impression', item_type: 'event', item_id: event.id,
+        algorithm_version: event.algorithmVersion || 'events_v1', rank_position: event.rankPosition,
+        reason_codes: event.reasonCodes,
+      })
+    }
+  }, [filteredEvents])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -204,7 +226,14 @@ export default function EventsFeedScreen() {
               <EventCard
                 key={event.id}
                 event={{ ...event, isSaved: savedIds.includes(event.id) }}
-                onPress={() => router.push(`/event/${event.id}`)}
+                onPress={() => {
+                  recommendationEventBuffer.enqueue({
+                    surface: 'events', event_type: 'event_view', item_type: 'event', item_id: event.id,
+                    algorithm_version: event.algorithmVersion || 'events_v1', rank_position: event.rankPosition,
+                    reason_codes: event.reasonCodes,
+                  })
+                  router.push(`/event/${event.id}`)
+                }}
                 onToggleSave={() => toggleSave(event.id)}
               />
             ))}

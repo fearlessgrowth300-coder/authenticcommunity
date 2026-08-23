@@ -60,6 +60,8 @@ export default function DiscoverScreen() {
   const [videos, setVideos] = useState<DiscoverVideoItem[]>([])
   const impressedVideos = useRef(new Set<string>())
   const impressedPeople = useRef(new Set<string>())
+  const impressedCommunities = useRef(new Set<string>())
+  const impressedEvents = useRef(new Set<string>())
   const [savedPeople, setSavedPeople] = useState(() => new Set<string>())
   const [hiddenPeople, setHiddenPeople] = useState(() => new Set<string>())
 
@@ -193,6 +195,32 @@ export default function DiscoverScreen() {
       })
     }
   }, [activeTab, filteredVideos])
+
+  useEffect(() => {
+    if (activeTab !== 'Communities') return
+    for (const community of filteredCommunities.slice(0, 8)) {
+      if (impressedCommunities.current.has(community.id)) continue
+      impressedCommunities.current.add(community.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'communities', event_type: 'recommendation_impression', item_type: 'community',
+        item_id: community.id, algorithm_version: community.algorithmVersion || 'communities_local_v1',
+        rank_position: community.rankPosition, reason_codes: community.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredCommunities])
+
+  useEffect(() => {
+    if (activeTab !== 'Events') return
+    for (const event of filteredEvents.slice(0, 8)) {
+      if (impressedEvents.current.has(event.id)) continue
+      impressedEvents.current.add(event.id)
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'recommendation_impression', item_type: 'event',
+        item_id: event.id, algorithm_version: event.algorithmVersion || 'events_v1',
+        rank_position: event.rankPosition, reason_codes: event.reasonCodes,
+      })
+    }
+  }, [activeTab, filteredEvents])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -357,7 +385,13 @@ export default function DiscoverScreen() {
                     <CommunityCard
                       key={c.id}
                       community={c}
-                      onPress={() => router.push(`/community/${c.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'communities', event_type: 'community_view', item_type: 'community', item_id: c.id,
+                          algorithm_version: c.algorithmVersion || 'communities_local_v1', rank_position: c.rankPosition, reason_codes: c.reasonCodes,
+                        })
+                        router.push(`/community/${c.id}`)
+                      }}
                     />
                   ))
                 )}
@@ -381,7 +415,13 @@ export default function DiscoverScreen() {
                     <EventCard
                       key={e.id}
                       event={e}
-                      onPress={() => router.push(`/event/${e.id}`)}
+                      onPress={() => {
+                        recommendationEventBuffer.enqueue({
+                          surface: 'events', event_type: 'event_view', item_type: 'event', item_id: e.id,
+                          algorithm_version: e.algorithmVersion || 'events_v1', rank_position: e.rankPosition, reason_codes: e.reasonCodes,
+                        })
+                        router.push(`/event/${e.id}`)
+                      }}
                     />
                   ))
                 )}

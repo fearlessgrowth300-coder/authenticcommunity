@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -155,6 +156,10 @@ export default function CommunityDetailScreen() {
         community_id: id,
         user_id: user.id,
         role: 'member',
+      })
+      recommendationEventBuffer.enqueue({
+        surface: 'communities', event_type: 'community_join', item_type: 'community', item_id: id,
+        algorithm_version: communityData?.delivery_mode === 'online' ? 'communities_global_v1' : 'communities_local_v1',
       })
     }
   }

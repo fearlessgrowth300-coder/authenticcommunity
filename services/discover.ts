@@ -226,6 +226,28 @@ export async function recordPeopleRecommendationFeedback(
  */
 export async function fetchDiscoverCommunities(): Promise<CommunityItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-communities', {
+      body: { limit: 30 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => ({
+        id: item.id,
+        name: item.name || 'Community',
+        category: item.category || 'Community',
+        description: item.description || '',
+        imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&fit=crop&q=80',
+        membersCount: Number(item.membersCount || 0),
+        distance: item.distance || item.location || 'Local',
+        location: item.location,
+        mode: item.mode || 'local',
+        isJoined: Boolean(item.isJoined),
+        mutualConnections: Number(item.mutualConnections || 0),
+        score: Number(item.score || 0),
+        reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+        rankPosition: Number(item.rankPosition || 0),
+        algorithmVersion: item.algorithmVersion || 'communities_local_v1',
+      }))
+    }
     const { data } = await supabase
       .from('communities')
       .select('id, community_name, description, profile_image_url, member_count, category, location_city')
@@ -253,6 +275,37 @@ export async function fetchDiscoverCommunities(): Promise<CommunityItem[]> {
  */
 export async function fetchDiscoverEvents(): Promise<EventItem[]> {
   try {
+    const { data: rankedData, error: rankedError } = await supabase.functions.invoke('recommend-events', {
+      body: { limit: 30 },
+    })
+    if (!rankedError && rankedData && Array.isArray(rankedData.items)) {
+      return rankedData.items.map((item: any) => {
+        const d = item.eventDate ? new Date(`${item.eventDate}T12:00:00`) : new Date()
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+        const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+        return {
+          id: item.id,
+          title: item.title || 'Community event',
+          host: item.host || 'Authentic Community',
+          dateMonth: months[d.getMonth()],
+          dateDay: String(d.getDate()),
+          dateDayOfWeek: days[d.getDay()],
+          dateTimeFormatted: `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}${item.startTime ? ` · ${String(item.startTime).slice(0, 5)}` : ''}`,
+          eventDate: item.eventDate,
+          distance: item.distance || item.location || 'Local',
+          location: item.location || 'Local event',
+          imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&fit=crop&q=80',
+          attendeesCount: Number(item.attendeesCount || 0),
+          isRsvped: Boolean(item.isRsvped),
+          isSaved: Boolean(item.isSaved),
+          description: item.description || '',
+          score: Number(item.score || 0),
+          reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+          rankPosition: Number(item.rankPosition || 0),
+          algorithmVersion: item.algorithmVersion || 'events_v1',
+        }
+      })
+    }
     const { data } = await supabase
       .from('events')
       .select('id, name, description, event_date, start_time, location, event_image_url, attendee_count, communities(community_name)')

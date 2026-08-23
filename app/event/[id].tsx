@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
+import { recommendationEventBuffer } from '@/services/recommendationEventBuffer'
 import { Colors, Spacing, Radii } from '@/constants/theme'
 import { AppText } from '@/components/primitives/AppText'
 import { AppButton } from '@/components/primitives/AppButton'
@@ -102,6 +103,10 @@ export default function EventDetailScreen() {
         rsvp_status: 'going',
       })
       if (error) throw error
+      recommendationEventBuffer.enqueue({
+        surface: 'events', event_type: 'event_rsvp', item_type: 'event', item_id: id,
+        algorithm_version: 'events_v1',
+      })
     }
   }
 
