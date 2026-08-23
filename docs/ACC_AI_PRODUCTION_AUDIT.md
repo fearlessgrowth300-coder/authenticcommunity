@@ -1,6 +1,6 @@
 # ACC AI V1 Production Audit
 
-Audit date: 2026-08-23  
+Audit date: 2026-08-23
 Branch: `codex/mobile-v2-production-repair-1-67`
 
 ## Verified implementation
