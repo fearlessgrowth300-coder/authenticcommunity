@@ -42,6 +42,13 @@ export interface MatchProfile {
   distanceKm?: number | null
   country?: string | null
   createdAt?: string
+  reasons?: string[]
+  aiExplanation?: string | null
+  breakdown?: Record<string, number>
+  sharedCommunityCount?: number
+  rankPosition?: number
+  reasonCodes?: string[]
+  algorithmVersion?: string
 }
 
 interface MatchCardProps {
@@ -70,6 +77,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({
         activeOpacity={0.92}
         onPress={onPressDetails}
         style={styles.cardContent}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${profile.name}'s profile, ${profile.matchScore}% connection fit`}
       >
         {/* Photo Container */}
         <View style={styles.photoContainer}>
@@ -131,6 +140,13 @@ export const MatchCard: React.FC<MatchCardProps> = ({
             </View>
           </View>
 
+          {profile.reasons?.[0] ? (
+            <View style={styles.reasonCard}>
+              <AppText variant="caption" weight="semibold" color={Colors.primary}>Why you may connect</AppText>
+              <AppText variant="caption" color={Colors.textSecondary}>{profile.aiExplanation || profile.reasons[0]}</AppText>
+            </View>
+          ) : null}
+
           {/* Shared Values */}
           <View style={styles.section}>
             <AppText variant="caption" weight="semibold" color={Colors.textSecondary} style={styles.sectionLabel}>
@@ -157,6 +173,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
             onPress={onPass}
             style={styles.circleActionButton}
             accessibilityLabel="Pass"
+            accessibilityRole="button"
           >
             <X color={Colors.textMuted} size={22} />
           </TouchableOpacity>
@@ -171,6 +188,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({
             onPress={onSave}
             style={[styles.circleActionButton, isSaved ? styles.circleActionSaved : null]}
             accessibilityLabel="Save Match"
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSaved }}
           >
             <Bookmark
               color={isSaved ? Colors.amber : Colors.textMuted}
@@ -189,6 +208,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({
             onPress={onConnect}
             style={[styles.circleActionButton, styles.connectActionButton, isConnected ? styles.connectActionConnected : null]}
             accessibilityLabel="Connect"
+            accessibilityRole="button"
+            accessibilityState={{ selected: isConnected }}
           >
             <Users color="#FFFFFF" size={20} />
           </TouchableOpacity>
@@ -279,6 +300,12 @@ const styles = StyleSheet.create({
   body: {
     padding: Spacing.md,
     gap: 12,
+  },
+  reasonCard: {
+    padding: 10,
+    gap: 3,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.primaryLight,
   },
   section: {
     gap: 6,

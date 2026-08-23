@@ -17,6 +17,7 @@ import {
   fetchDiscoverCommunities,
   fetchDiscoverEvents,
   fetchDiscoverVideos,
+  recordPeopleRecommendationFeedback,
   DiscoverVideoItem,
 } from '@/services/discover'
 import { Colors, Spacing, Radii } from '@/constants/theme'
@@ -58,6 +59,9 @@ export default function DiscoverScreen() {
   const [events, setEvents] = useState<EventItem[]>([])
   const [videos, setVideos] = useState<DiscoverVideoItem[]>([])
   const impressedVideos = useRef(new Set<string>())
+  const impressedPeople = useRef(new Set<string>())
+  const [savedPeople, setSavedPeople] = useState(() => new Set<string>())
+  const [hiddenPeople, setHiddenPeople] = useState(() => new Set<string>())
 
   const [filters, setFilters] = useState<FilterState>({
     distance: '25 mi',
@@ -108,6 +112,7 @@ export default function DiscoverScreen() {
   const [minAge, maxAge] = filters.ageRange.replace('+', '').split('-').map((value) => Number.parseInt(value, 10))
 
   const filteredMatches = matches
+    .filter((m) => !hiddenPeople.has(m.id))
     .filter((m) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase()
@@ -162,6 +167,15 @@ export default function DiscoverScreen() {
     }
     return true
   })
+
+  useEffect(() => {
+    if (activeTab !== 'People') return
+    for (const candidate of filteredMatches.slice(0, 6)) {
+      if (impressedPeople.current.has(candidate.id)) continue
+      impressedPeople.current.add(candidate.id)
+      void recordPeopleRecommendationFeedback(candidate.id, 'viewed', candidate).catch(() => undefined)
+    }
+  }, [activeTab, filteredMatches])
 
   useEffect(() => {
     if (activeTab !== 'Videos') return
@@ -296,8 +310,30 @@ export default function DiscoverScreen() {
                     <MatchCard
                       key={cand.id}
                       profile={cand}
-                      onPressDetails={() => router.push(`/profile/${cand.id}`)}
-                      onConnect={() => router.push(`/profile/${cand.id}`)}
+                      isSaved={savedPeople.has(cand.id)}
+                      onPressDetails={() => {
+                        void recordPeopleRecommendationFeedback(cand.id, 'profile_open', cand).catch(() => undefined)
+                        router.push(`/profile/${cand.id}`)
+                      }}
+                      onPass={() => {
+                        setHiddenPeople((current) => new Set(current).add(cand.id))
+                        void recordPeopleRecommendationFeedback(cand.id, 'passed', cand).catch(() => undefined)
+                      }}
+                      onSave={() => {
+                        setSavedPeople((current) => {
+                          const next = new Set(current)
+                          if (next.has(cand.id)) next.delete(cand.id)
+                          else next.add(cand.id)
+                          return next
+                        })
+                        if (!savedPeople.has(cand.id)) {
+                          void recordPeopleRecommendationFeedback(cand.id, 'saved', cand).catch(() => undefined)
+                        }
+                      }}
+                      onConnect={() => {
+                        void recordPeopleRecommendationFeedback(cand.id, 'profile_open', cand).catch(() => undefined)
+                        router.push(`/profile/${cand.id}`)
+                      }}
                     />
                   ))
                 )}

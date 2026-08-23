@@ -13,3 +13,5 @@ project_id = "sqzeghkabqhhhiuidnvd"
     verify_jwt = true
   [functions.recommend-videos]
     verify_jwt = true
+  [functions.recommend-people]
+    verify_jwt = true

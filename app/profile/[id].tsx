@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -14,12 +14,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/services/supabase'
 import { calculateMatchScore } from '@/services/matching'
+import { fetchPeopleRecommendations, recordPeopleRecommendationFeedback } from '@/services/discover'
+import type { MatchProfile } from '@/components/matches/MatchCard'
 import {
   getRelationshipState,
   followUser,
   unfollowUser,
   requestConnection,
-  acceptConnection,
   removeConnection,
 } from '@/services/socialGraph'
 import { Colors, Spacing, Radii } from '@/constants/theme'
@@ -55,6 +56,8 @@ export default function MatchProfileDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
   const [matchScore, setMatchScore] = useState<any>(null)
+  const [recommendedMatch, setRecommendedMatch] = useState<MatchProfile | null>(null)
+  const profileViewRecorded = useRef(false)
   const [relationship, setRelationship] = useState<any>({
     isFollowing: false,
     isFollower: false,
@@ -71,7 +74,7 @@ export default function MatchProfileDetailScreen() {
     if (!id) return
     setLoading(true)
     try {
-      const [profileRes, myProfileRes, targetInterestsRes, targetValuesRes, myInterestsRes, myValuesRes, relState] = await Promise.all([
+      const [profileRes, myProfileRes, targetInterestsRes, targetValuesRes, myInterestsRes, myValuesRes, relState, serverMatchRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', id).maybeSingle(),
         currentUser
           ? supabase.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle()
@@ -81,6 +84,7 @@ export default function MatchProfileDetailScreen() {
         currentUser ? supabase.from('user_interests').select('interest_name').eq('user_id', currentUser.id) : Promise.resolve({ data: [] }),
         currentUser ? supabase.from('user_values').select('value_name').eq('user_id', currentUser.id) : Promise.resolve({ data: [] }),
         currentUser ? getRelationshipState(currentUser.id, id) : Promise.resolve({ followStatus: 'not_following', isFollower: false, connectionStatus: 'none' }),
+        currentUser ? fetchPeopleRecommendations(id) : Promise.resolve(null),
       ])
 
       if (profileRes.data) {
@@ -94,6 +98,13 @@ export default function MatchProfileDetailScreen() {
           isPendingConnection: relState.connectionStatus === 'pending_outgoing' || relState.connectionStatus === 'pending_incoming',
         })
 
+        const serverMatch = serverMatchRes?.[0] || null
+        setRecommendedMatch(serverMatch)
+        if (serverMatch && !profileViewRecorded.current) {
+          profileViewRecorded.current = true
+          void recordPeopleRecommendationFeedback(id, 'profile_open', serverMatch).catch(() => undefined)
+        }
+
         if (myProfileRes.data) {
           const myP = myProfileRes.data
           const targetP = profileRes.data
@@ -103,13 +114,13 @@ export default function MatchProfileDetailScreen() {
             candidateValues: targetValues,
             candidateCity: targetP.location_city || '',
             candidateCountry: targetP.location_country || '',
-            candidateGoal: targetP.intent || 'friends',
+            candidateGoal: targetP.looking_for || 'friends',
             candidateTrust: targetP.is_verified ? 5 : 2,
             myInterests: (myInterestsRes.data || []).map((row: any) => row.interest_name),
             myValues: (myValuesRes.data || []).map((row: any) => row.value_name),
             myCity: myP.location_city || '',
             myCountry: myP.location_country || '',
-            myGoal: myP.intent || 'friends',
+            myGoal: myP.looking_for || 'friends',
           })
           setMatchScore(score)
         }
@@ -181,6 +192,7 @@ export default function MatchProfileDetailScreen() {
       } else {
         await followUser(id)
         setRelationship((prev: any) => ({ ...prev, isFollowing: true }))
+        void recordPeopleRecommendationFeedback(id, 'followed', recommendedMatch || undefined).catch(() => undefined)
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Could not update follow state')
@@ -205,6 +217,7 @@ export default function MatchProfileDetailScreen() {
       } else {
         await requestConnection(id)
         setRelationship((prev: any) => ({ ...prev, isPendingConnection: true }))
+        void recordPeopleRecommendationFeedback(id, 'connection_requested', recommendedMatch || undefined).catch(() => undefined)
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Could not send connection request')
@@ -229,6 +242,7 @@ export default function MatchProfileDetailScreen() {
       Alert.alert('Sign In', 'Please sign in to send messages.')
       return
     }
+    void recordPeopleRecommendationFeedback(id, 'conversation_started', recommendedMatch || undefined).catch(() => undefined)
     router.push(`/chat/${id}`)
   }
 
@@ -265,7 +279,7 @@ export default function MatchProfileDetailScreen() {
 
   const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Community Member'
   const locationDisplay = [profile.location_city, profile.location_state, profile.location_country].filter(Boolean).join(', ') || 'Local Community'
-  const finalScore = matchScore?.overall ?? 0
+  const finalScore = recommendedMatch?.matchScore ?? matchScore?.overall ?? 0
   const interestsList: string[] = profile.interests || []
   const valuesList: string[] = profile.values || []
 
@@ -393,6 +407,34 @@ export default function MatchProfileDetailScreen() {
             <MessageCircle color={Colors.primary} size={22} />
           </TouchableOpacity>
         </View>
+
+        {(recommendedMatch?.reasons?.length || recommendedMatch?.aiExplanation) ? (
+          <Card style={styles.sectionCard}>
+            <AppText variant="bodySm" weight="bold" style={styles.sectionTitle}>
+              Why you may connect
+            </AppText>
+            {(recommendedMatch.reasons || []).map((reason) => (
+              <AppText key={reason} variant="caption" color={Colors.textSecondary} style={styles.reasonLine}>
+                • {reason}
+              </AppText>
+            ))}
+            {recommendedMatch.aiExplanation ? (
+              <View style={styles.aiExplanation}>
+                <AppText variant="caption" weight="bold" color={Colors.primary}>✨ Optional AI explanation</AppText>
+                <AppText variant="caption" color={Colors.textSecondary}>{recommendedMatch.aiExplanation}</AppText>
+              </View>
+            ) : null}
+            {recommendedMatch.conversationStarters?.length ? (
+              <View style={styles.aiExplanation}>
+                <AppText variant="caption" weight="bold" color={Colors.primary}>Conversation starters</AppText>
+                {recommendedMatch.conversationStarters.map((starter) => (
+                  <AppText key={starter} variant="caption" color={Colors.textSecondary}>• {starter}</AppText>
+                ))}
+                <AppText variant="caption" color={Colors.textMuted}>Suggestions are never sent automatically.</AppText>
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
 
         {/* Values Section */}
         <Card style={styles.sectionCard}>
@@ -660,6 +702,17 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: Spacing.sm,
+  },
+  reasonLine: {
+    marginBottom: 5,
+    lineHeight: 18,
+  },
+  aiExplanation: {
+    marginTop: 10,
+    padding: 12,
+    gap: 5,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.primaryLight,
   },
   chipsWrap: {
     flexDirection: 'row',

@@ -3,6 +3,7 @@ import { calculateMatchScore } from './matching'
 import { MatchProfile } from '@/components/matches/MatchCard'
 import { CommunityItem } from '@/components/communities/CommunityCard'
 import { EventItem } from '@/components/events/EventCard'
+import { recommendationEventBuffer } from './recommendationEventBuffer'
 
 export interface DiscoverVideoItem {
   id: string
@@ -38,6 +39,9 @@ function haversineKm(lat1?: number | null, lon1?: number | null, lat2?: number |
  */
 export async function fetchDiscoverMatches(currentUserId: string): Promise<MatchProfile[]> {
   try {
+    const serverMatches = await fetchPeopleRecommendations()
+    if (serverMatches) return serverMatches
+
     const [
       myProfileRes,
       myInterestsRes,
@@ -149,6 +153,72 @@ export async function fetchDiscoverMatches(currentUserId: string): Promise<Match
   } catch (err) {
     return []
   }
+}
+
+export async function fetchPeopleRecommendations(candidateId?: string): Promise<MatchProfile[] | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('recommend-people', {
+      body: { limit: candidateId ? 1 : 30, candidate_id: candidateId || undefined },
+    })
+    if (error || !data || !Array.isArray(data.items)) return null
+    return data.items.map((item: any) => ({
+      id: item.id,
+      name: item.name || 'Community Member',
+      age: Number(item.age || 0),
+      isVerified: Boolean(item.isVerified),
+      location: item.location || 'General area',
+      distance: item.distance || 'Within your discovery settings',
+      matchScore: Number(item.matchScore || 0),
+      photoUrl: item.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&fit=crop&q=80',
+      bio: item.bio || '',
+      sharedInterests: Array.isArray(item.sharedInterests) ? item.sharedInterests : [],
+      sharedValues: Array.isArray(item.sharedValues) ? item.sharedValues : [],
+      reasons: Array.isArray(item.reasons) ? item.reasons : [],
+      aiExplanation: typeof item.aiExplanation === 'string' ? item.aiExplanation : null,
+      conversationStarters: Array.isArray(item.conversationStarters) ? item.conversationStarters : [],
+      breakdown: item.breakdown || {},
+      sharedCommunityCount: Number(item.sharedCommunityCount || 0),
+      rankPosition: Number(item.rankPosition || 0),
+      reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes : [],
+      algorithmVersion: item.algorithmVersion || data.algorithm_version || 'people_v1',
+    }))
+  } catch {
+    return null
+  }
+}
+
+export async function recordPeopleRecommendationFeedback(
+  candidateId: string,
+  signal: 'viewed' | 'profile_open' | 'saved' | 'passed' | 'followed' | 'connection_requested' | 'connection_accepted' | 'conversation_started' | 'not_interested',
+  recommendation?: Pick<MatchProfile, 'rankPosition' | 'reasonCodes' | 'algorithmVersion'>,
+) {
+  await (supabase as any).rpc('log_people_recommendation_feedback', {
+    p_candidate_id: candidateId,
+    p_signal: signal,
+  })
+  const eventMap = {
+    viewed: 'recommendation_impression',
+    profile_open: 'profile_view',
+    saved: 'recommendation_open',
+    passed: 'not_interested',
+    followed: 'follow',
+    connection_requested: 'connection_request',
+    connection_accepted: 'connection_accept',
+    conversation_started: 'recommendation_open',
+    not_interested: 'not_interested',
+  } as const
+  recommendationEventBuffer.enqueue({
+    surface: 'people',
+    event_type: eventMap[signal],
+    item_type: 'profile',
+    item_id: candidateId,
+    algorithm_version: recommendation?.algorithmVersion || 'people_v1',
+    rank_position: recommendation?.rankPosition,
+    reason_codes: recommendation?.reasonCodes,
+    safe_metadata: signal === 'saved' || signal === 'conversation_started'
+      ? { source: signal }
+      : undefined,
+  })
 }
 
 /**
