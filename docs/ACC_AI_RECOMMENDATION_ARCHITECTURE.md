@@ -73,5 +73,28 @@ The current dataset is small, so vector similarity uses exact cosine search. An 
 
 ## Deployment state
 
-The live Phase AI-0 migration succeeded on 2026-08-22. `GEMINI_API_KEY` was not configured during the audit, so Gemini-backed work remains unavailable until the secret is added. Deterministic product behavior remains available.
+All forward migrations through AI-8 were validated against the production Supabase database on 2026-08-23. Content enrichment and all seven recommendation/search Edge endpoints were deployed and verified `ACTIVE` with JWT enforcement. `GEMINI_API_KEY` was not configured during the audit, so Gemini-backed work remains unavailable until the secret is added. Deterministic fallbacks remain available.
 
+## Surface rankers
+
+Home uses separate For You, Following, and Nearby rankers. Stories, Videos, People, local Communities, global Communities, Events, Search, and Notifications each have their own algorithm version and scoring contract. Eligibility precedes every ranker. Server-returned reason codes power “Why am I seeing this?” without exposing internal safety or risk values.
+
+## Affinity learning and event retention
+
+Mobile batches a bounded safe event vocabulary. A rate-limited server RPC joins those events only to cached public-content topics, applies a 30-day exponential decay, and writes `source = learned` affinities separately from explicit interests. Private message or community-chat content is never read. Daily metrics aggregate outcomes by surface and algorithm version. Raw recommendation events have a 180-day operational retention target and can only be purged through a service-role function after aggregate metrics are refreshed.
+
+## Search and notifications
+
+Search performs deterministic intent parsing first, rate-limits ambiguous Gemini intent and query embedding calls, combines trigram text retrieval with cached vectors, and falls back to text-only retrieval. Notification ordering is fully deterministic: direct messages, accepted connections, and requests outrank community activity and recommended content. Category preferences, quiet hours, high-priority suppression, and daily fatigue caps are applied server-side; no LLM is called per notification.
+
+## Monitoring and failure behavior
+
+`ai_usage_daily` stores provider/model/task counts without prompts. `recommendation_metrics_daily` stores surface/version outcomes. AI provider errors use bounded, non-secret codes; the provider has timeouts, retry/backoff, and a circuit breaker. If Gemini is disabled, missing, rate-limited, malformed, or unavailable, publishing continues, Home/People/Community/Event rankers remain deterministic, explanations use structured reasons, and Search falls back to text.
+
+## Rollback considerations
+
+Migrations are forward-only. A ranker rollback activates the prior algorithm implementation/version rather than rewriting historical weights. Edge Functions can be redeployed to a prior commit independently. Newly added nullable or defaulted columns can remain during rollback. Do not drop recommendation tables while metrics or account-deletion jobs depend on them; retire versions and stop writers first.
+
+## Future ML path
+
+No custom model is trained in V1. When ACC has sufficient consented beta outcomes, the stable event, feature, ranker, and algorithm-version interfaces can support offline models for meaningful actions. Redis, feature stores, event streaming, and dedicated model serving are intentionally deferred until measured scale requires them.

@@ -1,6 +1,7 @@
 import { AI_CONFIG, type AiConfig } from './config.ts'
 import { AiError } from './errors.ts'
 import type { AiProvider, EmbeddingResult, StructuredGenerationRequest, StructuredGenerationResult } from './provider.ts'
+import { AiCircuitBreaker, geminiCircuitBreaker } from './circuitBreaker.ts'
 
 type Fetcher = typeof fetch
 
@@ -13,6 +14,7 @@ export class GeminiProvider implements AiProvider {
     private readonly apiKey: string,
     private readonly config: AiConfig = AI_CONFIG,
     private readonly fetcher: Fetcher = fetch,
+    private readonly circuitBreaker: AiCircuitBreaker = geminiCircuitBreaker,
   ) {
     if (!apiKey) throw new AiError('AI_NOT_CONFIGURED', 'Gemini API key is missing.')
     this.generativeModel = config.generativeModel
@@ -71,6 +73,7 @@ export class GeminiProvider implements AiProvider {
   }
 
   private async requestWithRetry(endpoint: string, body: unknown): Promise<Response> {
+    this.circuitBreaker.assertCanRequest()
     let lastError: unknown
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt += 1) {
       const controller = new AbortController()
@@ -82,7 +85,10 @@ export class GeminiProvider implements AiProvider {
           body: JSON.stringify(body),
           signal: controller.signal,
         })
-        if (response.ok) return response
+        if (response.ok) {
+          this.circuitBreaker.recordSuccess()
+          return response
+        }
         if (response.status === 429) {
           lastError = new AiError('AI_RATE_LIMITED', 'Gemini rate limit reached.', true)
         } else if (response.status >= 500) {
@@ -100,8 +106,8 @@ export class GeminiProvider implements AiProvider {
       }
       if (attempt < this.config.maxRetries) await new Promise((resolve) => setTimeout(resolve, 200 * (2 ** attempt)))
     }
+    this.circuitBreaker.recordFailure()
     if (lastError instanceof AiError) throw lastError
     throw new AiError('AI_PROVIDER_ERROR', 'Gemini request failed.', true)
   }
 }
-
